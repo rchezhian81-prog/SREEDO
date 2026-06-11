@@ -1,0 +1,77 @@
+import cors from "cors";
+import express from "express";
+import helmet from "helmet";
+import morgan from "morgan";
+import swaggerUi from "swagger-ui-express";
+import { env } from "./config/env";
+import { swaggerSpec } from "./config/swagger";
+import { getMongoDb } from "./db/mongo";
+import { pool } from "./db/postgres";
+import { auditLog } from "./middleware/audit";
+import { errorHandler, notFoundHandler } from "./middleware/error";
+import { apiRateLimiter } from "./middleware/rate-limit";
+import { academicsRouter } from "./modules/academics/academics.routes";
+import { aiRouter } from "./modules/ai/ai.routes";
+import { announcementsRouter } from "./modules/announcements/announcements.routes";
+import { attendanceRouter } from "./modules/attendance/attendance.routes";
+import { authRouter } from "./modules/auth/auth.routes";
+import { dashboardRouter } from "./modules/dashboard/dashboard.routes";
+import { examsRouter } from "./modules/exams/exams.routes";
+import { feesRouter } from "./modules/fees/fees.routes";
+import { studentsRouter } from "./modules/students/students.routes";
+import { teachersRouter } from "./modules/teachers/teachers.routes";
+import { usersRouter } from "./modules/users/users.routes";
+
+export function createApp(): express.Express {
+  const app = express();
+
+  // Behind nginx in production; needed for correct client IPs in rate limiting.
+  app.set("trust proxy", 1);
+
+  app.use(helmet());
+  app.use(cors({ origin: env.corsOrigin, credentials: true }));
+  app.use(express.json({ limit: "1mb" }));
+  app.use(morgan(env.isProduction ? "combined" : "dev"));
+
+  app.get("/health", async (_req, res) => {
+    let postgres = false;
+    try {
+      await pool.query("SELECT 1");
+      postgres = true;
+    } catch {
+      // reported in the response body below
+    }
+    res.status(postgres ? 200 : 503).json({
+      status: postgres ? "ok" : "degraded",
+      postgres,
+      mongo: getMongoDb() !== null,
+      uptime: process.uptime(),
+    });
+  });
+
+  app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+  app.get("/api/docs.json", (_req, res) => {
+    res.json(swaggerSpec);
+  });
+
+  const api = express.Router();
+  api.use(apiRateLimiter);
+  api.use(auditLog);
+  api.use("/auth", authRouter);
+  api.use("/users", usersRouter);
+  api.use("/students", studentsRouter);
+  api.use("/teachers", teachersRouter);
+  api.use("/", academicsRouter); // /academic-years, /classes, /sections, /subjects
+  api.use("/attendance", attendanceRouter);
+  api.use("/exams", examsRouter);
+  api.use("/fees", feesRouter);
+  api.use("/announcements", announcementsRouter);
+  api.use("/dashboard", dashboardRouter);
+  api.use("/ai", aiRouter);
+  app.use("/api/v1", api);
+
+  app.use(notFoundHandler);
+  app.use(errorHandler);
+
+  return app;
+}

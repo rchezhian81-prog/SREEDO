@@ -1,0 +1,135 @@
+import { pool, query } from "./postgres";
+import { runMigrations } from "./migrate";
+import { hashPassword } from "../utils/password";
+
+const ADMIN_EMAIL = "admin@sreedo.edu";
+const ADMIN_PASSWORD = "Admin@12345";
+
+/** Seeds demo data only when the database has no users yet (idempotent). */
+export async function seedIfEmpty(): Promise<void> {
+  const { rows } = await query<{ count: string }>("SELECT count(*) FROM users");
+  if (Number(rows[0].count) > 0) {
+    console.log("Seed skipped — users already exist");
+    return;
+  }
+  await seed();
+}
+
+export async function seed(): Promise<void> {
+  console.log("Seeding demo data…");
+
+  const adminHash = await hashPassword(ADMIN_PASSWORD);
+  await query(
+    `INSERT INTO users (email, password_hash, full_name, role)
+     VALUES ($1, $2, 'School Administrator', 'admin')`,
+    [ADMIN_EMAIL, adminHash]
+  );
+
+  const year = new Date().getFullYear();
+  const { rows: yearRows } = await query<{ id: string }>(
+    `INSERT INTO academic_years (name, start_date, end_date, is_current)
+     VALUES ($1, $2, $3, true) RETURNING id`,
+    [`${year}-${year + 1}`, `${year}-06-01`, `${year + 1}-04-30`]
+  );
+  const academicYearId = yearRows[0].id;
+
+  const teacherSeed = [
+    ["EMP-0001", "Asha", "Krishnan", "asha.krishnan@sreedo.edu", "Mathematics"],
+    ["EMP-0002", "Ravi", "Sharma", "ravi.sharma@sreedo.edu", "Science"],
+  ];
+  const teacherIds: string[] = [];
+  for (const [no, first, last, email, specialization] of teacherSeed) {
+    const { rows: teacherRows } = await query<{ id: string }>(
+      `INSERT INTO teachers (employee_no, first_name, last_name, email, specialization, joining_date)
+       VALUES ($1, $2, $3, $4, $5, CURRENT_DATE) RETURNING id`,
+      [no, first, last, email, specialization]
+    );
+    teacherIds.push(teacherRows[0].id);
+  }
+
+  const sectionIds: string[] = [];
+  for (const grade of [1, 2]) {
+    const { rows: classRows } = await query<{ id: string }>(
+      `INSERT INTO classes (name, grade_level) VALUES ($1, $2) RETURNING id`,
+      [`Grade ${grade}`, grade]
+    );
+    for (const sectionName of ["A", "B"]) {
+      const { rows: sectionRows } = await query<{ id: string }>(
+        `INSERT INTO sections (class_id, name, homeroom_teacher_id)
+         VALUES ($1, $2, $3) RETURNING id`,
+        [classRows[0].id, sectionName, teacherIds[grade - 1]]
+      );
+      sectionIds.push(sectionRows[0].id);
+    }
+  }
+
+  for (const [name, code] of [
+    ["Mathematics", "MATH"],
+    ["English", "ENG"],
+    ["Science", "SCI"],
+    ["Social Studies", "SOC"],
+  ]) {
+    await query(`INSERT INTO subjects (name, code) VALUES ($1, $2)`, [
+      name,
+      code,
+    ]);
+  }
+
+  const studentSeed: Array<[string, string, string, string]> = [
+    ["Aarav", "Patel", "male", "Meera Patel"],
+    ["Diya", "Nair", "female", "Suresh Nair"],
+    ["Ishaan", "Reddy", "male", "Lakshmi Reddy"],
+    ["Ananya", "Iyer", "female", "Raghav Iyer"],
+    ["Vihaan", "Das", "male", "Priya Das"],
+    ["Sara", "Khan", "female", "Imran Khan"],
+  ];
+  let admission = 1;
+  for (const [first, last, gender, guardian] of studentSeed) {
+    await query(
+      `INSERT INTO students (
+         admission_no, first_name, last_name, gender, section_id,
+         guardian_name, guardian_phone
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        `ADM-${year}-${String(admission).padStart(4, "0")}`,
+        first,
+        last,
+        gender,
+        sectionIds[(admission - 1) % sectionIds.length],
+        guardian,
+        `+91-90000-000${String(admission).padStart(2, "0")}`,
+      ]
+    );
+    admission += 1;
+  }
+
+  await query(
+    `INSERT INTO fee_structures (name, academic_year_id, amount, frequency)
+     VALUES ('Term 1 Tuition', $1, 15000, 'term')`,
+    [academicYearId]
+  );
+
+  await query(
+    `INSERT INTO announcements (title, body, audience, is_pinned, created_by)
+     VALUES (
+       'Welcome to SRE EDU OS',
+       'The school ERP is now live. Staff can sign in to manage students, attendance, exams and fees.',
+       'all',
+       true,
+       (SELECT id FROM users WHERE email = $1)
+     )`,
+    [ADMIN_EMAIL]
+  );
+
+  console.log(`Seed complete — admin login: ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
+}
+
+if (require.main === module) {
+  runMigrations()
+    .then(() => seedIfEmpty())
+    .then(() => pool.end())
+    .catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
+}

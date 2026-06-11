@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Builds
+dist/
+.next/
+out/
+build/
+coverage/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+mobile/android/
+mobile/ios/
+mobile/web/
+mobile/linux/
+mobile/macos/
+mobile/windows/
+*.g.dart
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.log
