@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SRE EDU OS — Project Completion Roadmap</title>
+<style>
+  :root {
+    --brand: #2748db;
+    --brand-light: #eef4ff;
+    --ink: #1e293b;
+    --muted: #64748b;
+    --border: #e2e8f0;
+    --bg: #f8fafc;
+    --green: #059669;
+    --amber: #d97706;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.6;
+  }
+  .hero {
+    background: linear-gradient(135deg, #1a2c70 0%, var(--brand) 100%);
+    color: #fff;
+    padding: 48px 24px 40px;
+    text-align: center;
+  }
+  .hero .logo {
+    width: 56px; height: 56px;
+    background: rgba(255,255,255,.15);
+    border: 2px solid rgba(255,255,255,.4);
+    border-radius: 14px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 28px; font-weight: 800;
+    margin-bottom: 14px;
+  }
+  .hero h1 { margin: 0 0 6px; font-size: 30px; }
+  .hero p { margin: 0; opacity: .85; font-size: 15px; }
+  .container { max-width: 880px; margin: 0 auto; padding: 32px 20px 64px; }
+
+  .status-banner {
+    background: #ecfdf5;
+    border: 1px solid #a7f3d0;
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 28px;
+    font-size: 14.5px;
+  }
+  .status-banner strong { color: var(--green); }
+
+  .phase {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    margin-bottom: 22px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(15,23,42,.05);
+  }
+  .phase-header {
+    display: flex; align-items: center; gap: 14px;
+    padding: 18px 22px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(to right, var(--brand-light), #fff);
+  }
+  .phase-num {
+    flex-shrink: 0;
+    width: 38px; height: 38px;
+    background: var(--brand);
+    color: #fff;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 17px;
+  }
+  .phase-header h2 { margin: 0; font-size: 19px; }
+  .phase-header .time {
+    margin-left: auto;
+    font-size: 12.5px;
+    color: var(--muted);
+    background: #fff;
+    border: 1px solid var(--border);
+    padding: 3px 10px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .phase-body { padding: 8px 22px 20px; }
+
+  .step {
+    display: flex; gap: 12px;
+    padding: 13px 0;
+    border-bottom: 1px dashed var(--border);
+  }
+  .step:last-child { border-bottom: none; }
+  .step input[type="checkbox"] {
+    flex-shrink: 0;
+    width: 19px; height: 19px;
+    margin-top: 3px;
+    accent-color: var(--brand);
+    cursor: pointer;
+  }
+  .step .content { flex: 1; min-width: 0; }
+  .step .title { font-weight: 600; font-size: 15px; }
+  .step .detail { font-size: 14px; color: var(--muted); margin-top: 2px; }
+  .step.done .title, .step.done .detail { text-decoration: line-through; opacity: .55; }
+
+  pre {
+    background: #0f172a;
+    color: #e2e8f0;
+    border-radius: 10px;
+    padding: 14px 16px;
+    font-size: 13px;
+    overflow-x: auto;
+    margin: 10px 0 4px;
+    line-height: 1.55;
+  }
+  code.inline {
+    background: #eef2f7;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 1px 6px;
+    font-size: 13px;
+    color: #0f172a;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  pre code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .comment { color: #64748b; }
+
+  .warn {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-left: 4px solid var(--amber);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 13.5px;
+    margin-top: 10px;
+  }
+  .tip {
+    background: var(--brand-light);
+    border: 1px solid #c7d6fd;
+    border-left: 4px solid var(--brand);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 13.5px;
+    margin-top: 10px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    margin-top: 12px;
+  }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); }
+  th { background: var(--bg); font-size: 12.5px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); }
+
+  .creds {
+    display: inline-block;
+    background: #0f172a; color: #a5f3fc;
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 13px;
+  }
+  .progress-wrap {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(248,250,252,.95);
+    backdrop-filter: blur(4px);
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .progress-inner { max-width: 880px; margin: 0 auto; display: flex; align-items: center; gap: 14px; }
+  .progress-bar { flex: 1; height: 10px; background: var(--border); border-radius: 999px; overflow: hidden; }
+  .progress-fill { height: 100%; width: 0%; background: linear-gradient(to right, var(--brand), var(--green)); transition: width .3s; }
+  .progress-label { font-size: 13px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+  footer { text-align: center; color: var(--muted); font-size: 13px; padding: 24px; }
+  @media print {
+    .progress-wrap { display: none; }
+    .phase { break-inside: avoid; box-shadow: none; }
+    pre { white-space: pre-wrap; }
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="logo">S</div>
+  <h1>SRE EDU OS — Completion Roadmap</h1>
+  <p>Step-by-step guide from the scaffolded codebase to a school running in production</p>
+</div>
+
+<div class="progress-wrap">
+  <div class="progress-inner">
+    <div class="progress-bar"><div class="progress-fill" id="fill"></div></div>
+    <span class="progress-label" id="label">0 / 0 done</span>
+  </div>
+</div>
+
+<div class="container">
+
+  <div class="status-banner">
+    <strong>✔ Where you are now:</strong> the full monorepo (Express&nbsp;+&nbsp;TypeScript API, Next.js admin app, Flutter mobile app, Docker/Nginx/CI) is built, tested and pushed to the branch
+    <code class="inline">claude/tender-einstein-fdks9c</code> in <code class="inline">rchezhian81-prog/SREEDO</code>.
+    The backend was verified end-to-end: login, attendance, invoicing, payments, Swagger (34 endpoints) and unit tests all pass.
+  </div>
+
+  <!-- PHASE 1 -->
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-num">1</div>
+      <h2>Run it on your own machine</h2>
+      <span class="time">≈ 15 min</span>
+    </div>
+    <div class="phase-body">
+      <div class="step"><input type="checkbox" data-k="p1s1"><div class="content">
+        <div class="title">Install Docker Desktop and Git</div>
+        <div class="detail">Docker Desktop (Windows/Mac) or Docker Engine (Linux), plus Git. That's all you need — Node, PostgreSQL and MongoDB all run inside containers.</div>
+      </div></div>
+      <div class="step"><input type="checkbox" data-k="p1s2"><div class="content">
+        <div class="title">Clone the repository and switch to the project branch</div>
+<pre><code>git clone https://github.com/rchezhian81-prog/SREEDO.git
+cd SREEDO
+git checkout claude/tender-einstein-fdks9c</code></pre>
+      </div></div>
+      <div class="step"><input type="checkbox" data-k="p1s3"><div class="content">
+        <div class="title">Configure environment and start everything</div>
+<pre><code>cp .env.example .env   <span class="comment"># edit: set POSTGRES_PASSWORD + both JWT secrets</span>
+docker compose up --build</code></pre>
+        <div class="detail">First build takes a few minutes. Postgres, MongoDB, the API, the web app and nginx all start together.</div>
+      </div></div>
+      <div class="step"><input type="checkbox" data-k="p1s4"><div class="content">
+        <div class="title">Log in and click through every page</div>
+        <div class="detail">Open <code class="inline">http://localhost</code> and sign in with <span class="creds">admin@sreedo.edu / Admin@12345</span>. Try students, attendance marking, fee invoicing, announcements. API docs live at <code class="inline">http://localhost/api/docs</code>.</div>
+        <div class="tip">💡 This step matters most — anything you want changed is far cheaper to fix now than after deployment.</div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- PHASE 2 -->
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-num">2</div>
+      <h2>Merge to main so CI protects you</h2>
+      <span class="time">≈ 10 min</span>
+    </div>
+    <div class="phase-body">
+      <div class="step"><input type="checkbox" data-k="p2s1"><div class="content">
+        <div class="title">Open a pull request and merge the branch into main</div>
+        <div class="detail">On GitHub: <em>Compare &amp; pull request</em> from <code class="inline">claude/tender-einstein-fdks9c</code> → <code class="inline">main</code>, then merge. (Or ask Claude to open the PR for you.)</div>
+      </div></div>
+      <div class="step"><input type="checkbox" data-k="p2s2"><div class="content">
+        <div class="title">Watch the first GitHub Actions run go green</div>
+        <div class="detail">CI runs on every push: backend typecheck + tests + build, frontend build, <code class="inline">flutter analyze</code>, Docker image builds. The Flutter job is the one piece not yet verified locally — if it flags anything, it's a quick fix.</div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- PHASE 3 -->
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-num">3</div>
+      <h2>Enable the optional integrations</h2>
+      <span class="time">≈ 20 min</span>
+    </div>
+    <div class="phase-body">
+      <div class="step"><input type="checkbox" data-k="p3s1"><div class="content">
+        <div class="title">AI assistant — set OPENAI_API_KEY</div>
+        <div class="detail">Get a key at platform.openai.com, add <code class="inline">OPENAI_API_KEY=sk-…</code> to <code class="inline">.env</code>, restart. The Assistant page starts answering with live school data instantly — no code changes.</div>
+      </div></div>
+      <div class="step"><input type="checkbox" data-k="p3s2"><div class="content">
+        <div class="title">Email receipts — set SMTP credentials</div>
+        <div class="detail">Hostinger email hosting gives you SMTP. Set <code class="inline">SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS</code> in <code class="inline">.env</code>; payment receipts to guardians then send automatically.</div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- PHASE 4 -->
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-num">4</div>
+      <h2>Mobile app</h2>
+      <span class="time">≈ 1–2 hrs</span>
+    </div>
+    <div class="phase-body">
+      <div class="step"><input type="checkbox" data-k="p4s1"><div class="content">
+        <div class="title">Install Flutter and generate platform folders</div>
+<pre><code>cd mobile
+flutter create . --platforms android,ios --project-name sreedo_mobile
+flutter pub get
+flutter run --dart-define=API_URL=http://10.0.2.2:4000/api/v1</code></pre>
+        <div class="detail"><code class="inline">10.0.2.2</code> is how the Android emulator reaches your computer's localhost.</div>
+      </div></div>
+      <div class="step"><input type="checkbox" data-k="p4s2"><div class="content">
+        <div class="title">Optional: enable push notifications</div>
+        <div class="detail">Create a Firebase project, then run <code class="inline">flutterfire configure</code>. The app already handles both configured and unconfigured states.</div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- PHASE 5 -->
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-num">5</div>
+      <h2>Deploy to your Hostinger VPS</h2>
+      <span class="time">≈ 1–2 hrs</span>
+    </div>
+    <div class="phase-body">
+      <div class="step"><input type="checkbox" data-k="p5s1"><div class="content">
+        <div class="title">Point a domain at the VPS</div>
+        <div class="detail">Add an <code class="inline">A</code> record for your domain → the VPS IP address.</div>
+      </div></div>
+      <div class="step"><input type="checkbox" data-k="p5s2"><div class="content">
+        <div class="title">SSH in, install Docker, clone the repo, create the production .env</div>
+<pre><code>openssl rand -hex 64   <span class="comment"># run twice — one for each JWT secret</span></code></pre>
+        <div class="detail">Also set a strong <code class="inline">POSTGRES_PASSWORD</code>, <code class="inline">NEXT_PUBLIC_API_URL=https://yourdomain.com/api/v1</code> and <code class="inline">CORS_ORIGIN=https://yourdomain.com</code>.</div>
+      </div></div>
+      <div class="step"><input type="checkbox" data-k="p5s3"><div class="content">
+        <div class="title">Launch and add TLS</div>
+<pre><code>docker compose up -d --build</code></pre>
+        <div class="detail">Confirm the site loads over HTTP, then issue certificates with certbot (<code class="inline">certbot --nginx</code>) — the TLS path is documented in <code class="inline">infra/nginx/default.conf</code>.</div>
+      </div></div>
+      <div class="step"><input type="checkbox" data-k="p5s4"><div class="content">
+        <div class="title">Lock down the seeded admin account</div>
+        <div class="detail">Immediately after the first boot: log in, change the admin password, set <code class="inline">SEED_ON_START=false</code> in <code class="inline">.env</code>, restart.</div>
+        <div class="warn">⚠️ Never leave <span class="creds">Admin@12345</span> live on a public server — change it within minutes of deploying.</div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- PHASE 6 -->
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-num">6</div>
+      <h2>Go-live checklist — don't skip</h2>
+      <span class="time">≈ half a day</span>
+    </div>
+    <div class="phase-body">
+      <div class="step"><input type="checkbox" data-k="p6s1"><div class="content">
+        <div class="title">Set up nightly database backups</div>
+<pre><code><span class="comment"># example cron entry (2:00 AM daily, keep 14 days)</span>
+0 2 * * * docker exec sreedo-postgres-1 pg_dump -U sreedo sreedo | gzip > /backups/sreedo-$(date +\%F).sql.gz</code></pre>
+        <div class="detail">Ship copies off the VPS (e.g. Hostinger object storage). This is the single most important operational task — fee records are money.</div>
+      </div></div>
+      <div class="step"><input type="checkbox" data-k="p6s2"><div class="content">
+        <div class="title">Load real school data</div>
+        <div class="detail">Create your academic year, classes &amp; sections, subjects, teachers, then students — the web UI covers all of it.</div>
+      </div></div>
+      <div class="step"><input type="checkbox" data-k="p6s3"><div class="content">
+        <div class="title">Create real staff accounts with proper roles</div>
+        <div class="detail">Use the Users page to create <code class="inline">teacher</code> and <code class="inline">accountant</code> accounts instead of sharing the admin login.</div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- PHASE 7 -->
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-num">7</div>
+      <h2>What to build next</h2>
+      <span class="time">ongoing</span>
+    </div>
+    <div class="phase-body">
+      <table>
+        <tr><th>Priority</th><th>Feature</th><th>Why</th></tr>
+        <tr><td>1</td><td>CSV bulk import of students</td><td>Fastest way to onboard an existing school roster</td></tr>
+        <tr><td>2</td><td>Timetable / period scheduling</td><td>Daily teacher &amp; class planning</td></tr>
+        <tr><td>3</td><td>Parent / student self-service portal</td><td>Role model &amp; read endpoints already anticipate it</td></tr>
+        <tr><td>4</td><td>Report-card PDF generation</td><td>Builds on the existing exam results module</td></tr>
+        <tr><td>5</td><td>Fee reminders (SMTP + FCM push)</td><td>Improves collections automatically</td></tr>
+        <tr><td>6</td><td>Document / photo uploads</td><td>Object storage is already in the planned stack</td></tr>
+        <tr><td>7</td><td>Semantic search (OpenAI embeddings)</td><td>Search across all school records in plain language</td></tr>
+      </table>
+      <div class="tip">💡 Tell Claude which feature you want next and it will be implemented on a fresh branch, tested, and pushed — the same way this scaffold was built.</div>
+    </div>
+  </div>
+
+  <footer>SRE EDU OS · Roadmap generated June 2026 · Progress is saved in this browser</footer>
+</div>
+
+<script>
+  const boxes = document.querySelectorAll('input[type="checkbox"]');
+  const fill = document.getElementById('fill');
+  const label = document.getElementById('label');
+  function refresh() {
+    let done = 0;
+    boxes.forEach(b => {
+      b.closest('.step').classList.toggle('done', b.checked);
+      if (b.checked) done++;
+    });
+    fill.style.width = (100 * done / boxes.length) + '%';
+    label.textContent = done + ' / ' + boxes.length + ' done';
+  }
+  boxes.forEach(b => {
+    try { b.checked = localStorage.getItem('sreedo-' + b.dataset.k) === '1'; } catch (e) {}
+    b.addEventListener('change', () => {
+      try { localStorage.setItem('sreedo-' + b.dataset.k, b.checked ? '1' : '0'); } catch (e) {}
+      refresh();
+    });
+  });
+  refresh();
+</script>
+</body>
+</html>
