@@ -23,6 +23,7 @@ import { examsRouter } from "./modules/exams/exams.routes";
 import { feesRouter } from "./modules/fees/fees.routes";
 import { homeworkRouter } from "./modules/homework/homework.routes";
 import { libraryRouter } from "./modules/library/library.routes";
+import { transportRouter } from "./modules/transport/transport.routes";
 import { feeReceiptsRouter, idCardsRouter } from "./modules/pdfs/pdfs.routes";
 import { portalRouter } from "./modules/portal/portal.routes";
 import { reportCenterRouter } from "./modules/reportcenter/reportcenter.routes";
@@ -83,6 +84,7 @@ export function createApp(): express.Express {
   api.use("/fees", feesRouter);
   api.use("/college", collegeRouter);
   api.use("/library", libraryRouter);
+  api.use("/transport", transportRouter);
   api.use("/announcements", announcementsRouter);
   api.use("/dashboard", dashboardRouter);
   api.use("/portal", portalRouter);

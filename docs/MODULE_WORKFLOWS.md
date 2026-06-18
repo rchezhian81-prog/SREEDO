@@ -127,10 +127,20 @@ Deliverable **#5 Module-wise workflow**. Step-by-step flows for each module.
    return|fines|reports` — admin full; teacher read+reports; accountant
    read+fines+reports. All tenant-scoped.
 
-## N. Transport ⬜ (Phase D)
-1. Add **vehicles**, **drivers**, **routes** + stops.
-2. Allocate students to routes; **map transport fee → invoices**.
-3. Route-wise reports; optional live location feed to parent app.
+## N. Transport ✅ (Phase D)
+1. Add **vehicles** (insurance/fitness/permit expiry, capacity) and **drivers**
+   (license + expiry + helper); build **routes** (assign a vehicle + driver) and
+   ordered **stops** (pickup/drop times, zone, distance).
+2. **Allocate** students to a route + stop (school + college students). Map a
+   **route- or stop-level transport fee** (stop overrides route) and **generate
+   transport invoices** into the Fees module — idempotent per student/period.
+3. Optional **trip log** (one pickup + one drop per route/day:
+   scheduled/completed/cancelled). Reports (Reports Center): route-/stop-wise
+   students, vehicle & driver lists, transport fee dues, route occupancy/capacity,
+   and document **expiry** (insurance/fitness/permit/license). Permissions:
+   `transport:read|create|update|delete|allocate|fees|reports` — admin full;
+   teacher read+reports; accountant read+fees+reports. Tenant-scoped; the portal
+   exposes a student's own allocation (owner-scoped). ⬜ live location feed.
 
 ## O. Hostel ⬜ (Phase D)
 1. Define **hostels** + **rooms** (capacity).
@@ -147,11 +157,11 @@ Deliverable **#5 Module-wise workflow**. Step-by-step flows for each module.
 
 ## R. Reports 🟡
 1. Each module exposes list/summary views ✅ where built.
-2. ✅ A **Reports Center** offers 22 cross-module reports with filters and
+2. ✅ A **Reports Center** offers 29 cross-module reports with filters and
    **CSV/PDF export + print** (`/report-center`), permission-gated + tenant-scoped
-   — incl. 6 **college** reports (departments, programs, semester students,
-   semester attendance, semester results, program fee dues) and 6 **library**
-   reports (stock, issued, overdue, member history, lost/damaged, fines).
+   — incl. 6 **college**, 6 **library** (stock, issued, overdue, member history,
+   lost/damaged, fines), and 7 **transport** reports (route-/stop-wise students,
+   vehicles, drivers, fee dues, occupancy, document expiry).
    *(⬜)* Scheduled reports + a **custom report builder** (saved definitions).
 
 ## S. College mode ✅ (Phase B)

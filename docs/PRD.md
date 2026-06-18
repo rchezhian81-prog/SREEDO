@@ -204,9 +204,17 @@ module). 6 reports (stock, issued, overdue, member history, lost/damaged, fines)
 `library:*` permissions, tenant-scoped, with an owner-scoped portal history
 endpoint (migration `0024`).
 
-### 4.14 Transport Management — ⬜ Planned (Phase D)
-Vehicles, drivers, routes, student allocation, fee mapping (→ Fees), route-wise
-reports, optional live tracking feed for parent app.
+### 4.14 Transport Management — ✅ Built (Phase D)
+Vehicle master (with insurance/fitness/permit expiry + capacity) and driver
+master (license + expiry + helper); routes with assigned vehicle/driver; ordered
+stops (pickup/drop times, zone, distance); student route/stop allocation
+(school + college students). **Route- or stop-level fee mapping** with idempotent
+**transport invoice generation** into the Fees module (stop fee overrides route
+fee) and a transport-fee dues report. Daily **trip-log** foundation
+(scheduled/completed/cancelled). 7 reports (route-/stop-wise students, vehicles,
+drivers, fee dues, occupancy, document expiry). `transport:*` permissions,
+tenant-scoped, with an owner-scoped portal allocation endpoint (migration `0025`).
+Optional live tracking feed for the parent app remains ⬜.
 
 ### 4.15 Hostel Management — ⬜ Planned (Phase D)
 Hostels, rooms, student allocation, hostel fee (→ Fees), occupancy report.
