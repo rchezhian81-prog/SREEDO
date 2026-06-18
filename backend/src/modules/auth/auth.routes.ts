@@ -2,6 +2,13 @@ import { Router } from "express";
 import { authenticate } from "../../middleware/auth";
 import { permissionsForRole } from "../../middleware/permissions";
 import { authRateLimiter } from "../../middleware/rate-limit";
+import { ApiError } from "../../utils/api-error";
+import {
+  REFRESH_COOKIE,
+  clearAuthCookies,
+  getCookie,
+  setAuthCookies,
+} from "../../utils/cookies";
 import {
   changePasswordSchema,
   loginSchema,
@@ -85,6 +92,79 @@ authRouter.post("/refresh", async (req, res) => {
 authRouter.post("/logout", async (req, res) => {
   const { refreshToken } = refreshSchema.parse(req.body);
   await authService.logout(refreshToken);
+  res.status(204).end();
+});
+
+/**
+ * @openapi
+ * /auth/portal/login:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Portal login for students/parents — sets httpOnly auth cookies
+ *     description: Tokens are returned as httpOnly cookies (not in the body). Staff must use /auth/login.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, password]
+ *             properties:
+ *               email: { type: string, format: email }
+ *               password: { type: string }
+ *     responses:
+ *       200: { description: "{ user } with Set-Cookie access/refresh tokens" }
+ *       401: { description: Invalid credentials }
+ *       403: { description: Not a student/parent account }
+ */
+authRouter.post("/portal/login", authRateLimiter, async (req, res) => {
+  const { email, password } = loginSchema.parse(req.body);
+  const result = await authService.login(email, password);
+  if (result.user.role !== "student" && result.user.role !== "parent") {
+    // Staff accounts must use the Bearer flow at /auth/login.
+    await authService.logout(result.refreshToken);
+    throw ApiError.forbidden("Use the staff sign-in for this account");
+  }
+  setAuthCookies(res, result.accessToken, result.refreshToken);
+  res.json({ user: result.user });
+});
+
+/**
+ * @openapi
+ * /auth/portal/refresh:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Rotate the portal session from the refresh cookie
+ *     responses:
+ *       200: { description: "{ user } with refreshed cookies" }
+ *       401: { description: Missing/invalid refresh cookie }
+ */
+authRouter.post("/portal/refresh", async (req, res) => {
+  const token = getCookie(req, REFRESH_COOKIE);
+  if (!token) throw ApiError.unauthorized();
+  try {
+    const result = await authService.refresh(token);
+    setAuthCookies(res, result.accessToken, result.refreshToken);
+    res.json({ user: result.user });
+  } catch (err) {
+    clearAuthCookies(res);
+    throw err;
+  }
+});
+
+/**
+ * @openapi
+ * /auth/portal/logout:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Revoke the portal session and clear cookies
+ *     responses:
+ *       204: { description: Logged out }
+ */
+authRouter.post("/portal/logout", async (req, res) => {
+  const token = getCookie(req, REFRESH_COOKIE);
+  if (token) await authService.logout(token);
+  clearAuthCookies(res);
   res.status(204).end();
 });
 

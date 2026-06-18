@@ -83,9 +83,10 @@ router in `app.ts`. Swagger picks it up automatically.
 - **Refresh token:** opaque random string, stored **SHA-256-hashed** in
   `refresh_tokens`, **rotated on every use**, revoked by row deletion.
 - **Password change** revokes all of a user's refresh tokens.
-- **Web** stores tokens in localStorage today (migrate to httpOnly cookies before
-  exposing public portals — handover §8). **Mobile** persists via Shared
-  Preferences with the same refresh flow.
+- **Web (staff)** uses Bearer tokens in localStorage. **The parent/student portal**
+  uses **httpOnly cookies** (`/auth/portal/*`) so portal tokens are not JS-readable;
+  `authenticate` accepts either (Bearer header first, else the cookie). **Mobile**
+  persists via Shared Preferences with the same refresh flow.
 
 ## 4. Authorization model
 

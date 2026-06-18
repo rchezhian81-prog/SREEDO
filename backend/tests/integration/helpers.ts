@@ -10,6 +10,7 @@ export { query };
 export const app = createApp();
 
 const TABLES = [
+  "guardians",
   "timetable_entries",
   "periods",
   "rooms",

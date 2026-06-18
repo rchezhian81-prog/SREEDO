@@ -6,8 +6,9 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { api, ApiError } from "@/lib/api";
-import { useAuthStore } from "@/stores/auth-store";
+import { ApiError } from "@/lib/api";
+import { portalApi } from "@/lib/portal-api";
+import { usePortalStore } from "@/stores/portal-store";
 import { Button, Card, ErrorNote, Field, Input } from "@/components/ui";
 import type { User } from "@/types";
 
@@ -18,15 +19,9 @@ const loginSchema = z.object({
 
 type LoginForm = z.infer<typeof loginSchema>;
 
-interface LoginResponse {
-  accessToken: string;
-  refreshToken: string;
-  user: User;
-}
-
-export default function LoginPage() {
+export default function PortalLoginPage() {
   const router = useRouter();
-  const setSession = useAuthStore((state) => state.setSession);
+  const setUser = usePortalStore((state) => state.setUser);
   const [serverError, setServerError] = useState<string | null>(null);
   const {
     register,
@@ -37,9 +32,12 @@ export default function LoginPage() {
   const onSubmit = async (values: LoginForm) => {
     setServerError(null);
     try {
-      const session = await api.post<LoginResponse>("/auth/login", values);
-      setSession(session);
-      router.replace("/dashboard");
+      const res = await portalApi.post<{ user: User }>(
+        "/auth/portal/login",
+        values
+      );
+      setUser(res.user);
+      router.push("/portal");
     } catch (err) {
       setServerError(
         err instanceof ApiError ? err.message : "Unable to reach the server"
@@ -54,16 +52,16 @@ export default function LoginPage() {
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-brand-600 text-xl font-bold text-white">
             S
           </div>
-          <h1 className="text-xl font-semibold">SRE EDU OS</h1>
+          <h1 className="text-xl font-semibold">SRE EDU OS · Portal</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Sign in to the school ERP
+            Sign in to the parent &amp; student portal
           </p>
         </div>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <Field label="Email" error={errors.email?.message}>
             <Input
               type="email"
-              placeholder="admin@sreedo.edu"
+              placeholder="you@example.com"
               autoComplete="email"
               {...register("email")}
             />
@@ -82,12 +80,9 @@ export default function LoginPage() {
           </Button>
         </form>
         <p className="mt-4 text-center text-xs text-slate-500">
-          Student or parent?{" "}
-          <Link
-            href="/portal/login"
-            className="font-medium text-brand-600 hover:underline"
-          >
-            Use the portal →
+          Staff member?{" "}
+          <Link href="/login" className="font-medium text-brand-600 hover:underline">
+            Staff sign-in →
           </Link>
         </p>
       </Card>

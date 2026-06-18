@@ -193,3 +193,15 @@ export async function studentIdForUser(userId: string): Promise<string | null> {
   );
   return rows[0]?.id ?? null;
 }
+
+/** Student ids a guardian (parent) account is linked to, within their tenant. */
+export async function childStudentIdsForUser(
+  userId: string,
+  institutionId: string
+): Promise<string[]> {
+  const { rows } = await query<{ student_id: string }>(
+    "SELECT student_id FROM guardians WHERE user_id = $1 AND institution_id = $2",
+    [userId, institutionId]
+  );
+  return rows.map((r) => r.student_id);
+}

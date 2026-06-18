@@ -11,6 +11,37 @@ export interface User {
   email: string;
   fullName: string;
   role: UserRole;
+  phone?: string | null;
+  institutionId?: string | null;
+}
+
+export interface PortalChild {
+  id: string;
+  admissionNo: string;
+  firstName: string;
+  lastName: string;
+  sectionId: string | null;
+  sectionName: string | null;
+  className: string | null;
+  relationship: string | null;
+}
+
+export interface StudentSummary {
+  profile: Student & { sectionName: string | null; className: string | null };
+  attendance: {
+    total: number;
+    present: number;
+    absent: number;
+    late: number;
+    excused: number;
+    rate: number | null;
+  };
+  fees: {
+    totalDue: number;
+    totalPaid: number;
+    outstanding: number;
+    pendingInvoices: number;
+  };
 }
 
 export interface Paginated<T> {

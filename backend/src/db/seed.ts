@@ -6,6 +6,10 @@ const ADMIN_EMAIL = "admin@sreedo.edu";
 const ADMIN_PASSWORD = "Admin@12345";
 const SUPER_ADMIN_EMAIL = "super@sreedo.edu";
 const SUPER_ADMIN_PASSWORD = "Super@12345";
+const STUDENT_EMAIL = "student@sreedo.edu";
+const STUDENT_PASSWORD = "Student@12345";
+const PARENT_EMAIL = "parent@sreedo.edu";
+const PARENT_PASSWORD = "Parent@12345";
 
 /** Seeds demo data only when the database has no users yet (idempotent). */
 export async function seedIfEmpty(): Promise<void> {
@@ -114,13 +118,14 @@ export async function seed(): Promise<void> {
     ["Vihaan", "Das", "male", "Priya Das"],
     ["Sara", "Khan", "female", "Imran Khan"],
   ];
+  const studentIds: string[] = [];
   let admission = 1;
   for (const [first, last, gender, guardian] of studentSeed) {
-    await query(
+    const { rows: studentRows } = await query<{ id: string }>(
       `INSERT INTO students (
          institution_id, admission_no, first_name, last_name, gender, section_id,
          guardian_name, guardian_phone
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
       [
         institutionId,
         `ADM-${year}-${String(admission).padStart(4, "0")}`,
@@ -132,6 +137,7 @@ export async function seed(): Promise<void> {
         `+91-90000-000${String(admission).padStart(2, "0")}`,
       ]
     );
+    studentIds.push(studentRows[0].id);
     admission += 1;
   }
 
@@ -193,6 +199,31 @@ export async function seed(): Promise<void> {
     );
   }
 
+  // Portal demo logins: a student account + a parent linked to two children.
+  const studentUserHash = await hashPassword(STUDENT_PASSWORD);
+  const { rows: studentUserRows } = await query<{ id: string }>(
+    `INSERT INTO users (institution_id, email, password_hash, full_name, role)
+     VALUES ($1, $2, $3, 'Aarav Patel', 'student') RETURNING id`,
+    [institutionId, STUDENT_EMAIL, studentUserHash]
+  );
+  await query(`UPDATE students SET user_id = $1 WHERE id = $2`, [
+    studentUserRows[0].id,
+    studentIds[0],
+  ]);
+  const parentUserHash = await hashPassword(PARENT_PASSWORD);
+  const { rows: parentUserRows } = await query<{ id: string }>(
+    `INSERT INTO users (institution_id, email, password_hash, full_name, role)
+     VALUES ($1, $2, $3, 'Meera Patel', 'parent') RETURNING id`,
+    [institutionId, PARENT_EMAIL, parentUserHash]
+  );
+  for (const sid of [studentIds[0], studentIds[1]]) {
+    await query(
+      `INSERT INTO guardians (institution_id, user_id, student_id, relationship)
+       VALUES ($1, $2, $3, 'mother')`,
+      [institutionId, parentUserRows[0].id, sid]
+    );
+  }
+
   // Tag all seeded school data with the demo institution (multi-tenancy).
   const tenantTables = [
     "students",
@@ -236,7 +267,9 @@ export async function seed(): Promise<void> {
 
   console.log(
     `Seed complete — admin: ${ADMIN_EMAIL} / ${ADMIN_PASSWORD} · ` +
-      `super admin: ${SUPER_ADMIN_EMAIL} / ${SUPER_ADMIN_PASSWORD}`
+      `super admin: ${SUPER_ADMIN_EMAIL} / ${SUPER_ADMIN_PASSWORD} · ` +
+      `student: ${STUDENT_EMAIL} / ${STUDENT_PASSWORD} · ` +
+      `parent: ${PARENT_EMAIL} / ${PARENT_PASSWORD}`
   );
 }
 

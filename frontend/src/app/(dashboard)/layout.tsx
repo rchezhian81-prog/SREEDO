@@ -45,6 +45,12 @@ export default function DashboardLayout({
       router.replace("/login");
       return;
     }
+    // Students and parents belong to the cookie-based portal, not the staff
+    // dashboard — send them there.
+    if (user?.role === "student" || user?.role === "parent") {
+      router.replace("/portal/login");
+      return;
+    }
     // Super admins live in the /super-admin console; everyone else in the
     // school dashboard. Keep each role on its own side.
     const inSuperArea = pathname.startsWith("/super-admin");

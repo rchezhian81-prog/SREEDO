@@ -1,19 +1,27 @@
 import type { NextFunction, Request, Response } from "express";
 import { ApiError } from "../utils/api-error";
+import { ACCESS_COOKIE, getCookie } from "../utils/cookies";
 import { verifyAccessToken } from "../utils/jwt";
 import type { UserRole } from "../types";
+
+/** Bearer header (staff) takes precedence; falls back to the portal's httpOnly cookie. */
+function readAccessToken(req: Request): string | null {
+  const header = req.headers.authorization;
+  if (header?.startsWith("Bearer ")) return header.slice("Bearer ".length);
+  return getCookie(req, ACCESS_COOKIE);
+}
 
 export function authenticate(
   req: Request,
   _res: Response,
   next: NextFunction
 ): void {
-  const header = req.headers.authorization;
-  if (!header?.startsWith("Bearer ")) {
+  const token = readAccessToken(req);
+  if (!token) {
     throw ApiError.unauthorized();
   }
   try {
-    const payload = verifyAccessToken(header.slice("Bearer ".length));
+    const payload = verifyAccessToken(token);
     req.user = {
       id: payload.sub,
       email: payload.email,
