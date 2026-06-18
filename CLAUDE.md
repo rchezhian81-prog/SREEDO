@@ -5,6 +5,8 @@ SRE EDU OS school ERP monorepo: `backend/` (Express 5 + TS + PostgreSQL),
 `infra/` (nginx), Docker Compose at root.
 
 Full orientation: `docs/DEVELOPER_HANDOVER.md`. Backlog lives there too (§8).
+Planning suite (PRD, architecture, schema, API, roles, workflows, UI, roadmap)
+is indexed in `docs/PLANNING_INDEX.md`.
 
 ## Commands
 

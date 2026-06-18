@@ -1,0 +1,127 @@
+# Module Workflows — SRE EDU OS
+
+Deliverable **#5 Module-wise workflow**. Step-by-step flows for each module.
+✅ flows are live today; 🟡/⬜ describe the target behavior. Actors map to
+[`ROLES_AND_PERMISSIONS.md`](./ROLES_AND_PERMISSIONS.md).
+
+---
+
+## A. Authentication & sessions ✅
+1. User submits email + password → `POST /auth/login` (rate-limited).
+2. Server verifies bcrypt hash, issues 15-min access JWT + opaque refresh token
+   (stored SHA-256-hashed).
+3. Client stores tokens; sends `Authorization: Bearer` on each call.
+4. On 401, client calls `POST /auth/refresh` (single-flight) → rotated tokens.
+5. `POST /auth/change-password` re-hashes and **revokes all** refresh tokens.
+6. `POST /auth/logout` deletes the presented refresh token.
+
+## B. Super Admin onboarding ⬜
+1. Super Admin creates an **institution** (school|college) + first **branch**.
+2. Assigns a **subscription package** (limits/features).
+3. Creates the institution's first **admin** user.
+4. Institution Admin logs in → scoped entirely to that `institution_id`.
+5. Super Admin can view global **audit logs**, trigger **backups**, switch tenant.
+
+## C. Academic setup ✅ (school) / ⬜ (college extensions)
+1. Admin creates an **academic year** (marks one `is_current`).
+2. Creates **classes** (grade levels) → **sections** (with capacity + homeroom
+   teacher) → **subjects**.
+3. Maps subject ↔ section ↔ teacher via **class_subjects** (🟡 API pending).
+4. *College:* create **departments → courses → semesters**, attach subjects per
+   semester (⬜).
+
+## D. Student admission & lifecycle 🟡
+1. Office/Admin opens **New Student**, fills profile + guardian + section.
+2. `POST /students` → server assigns next **admission number**, status `active`.
+3. *(⬜)* Upload documents/photo (object storage), generate **ID card**.
+4. Ongoing: attendance, fees, exams link automatically by `student_id`.
+5. Status transitions: `active → inactive | graduated | transferred`.
+6. *(⬜)* On transfer, generate a **Transfer Certificate** PDF; switch to
+   soft-delete (handover §8) so history is retained.
+
+## E. Staff / teacher management 🟡
+1. Admin creates a teacher → auto **employee number**; optionally link a `user`
+   login.
+2. Record qualification/specialization/joining date.
+3. Assign subjects/sections (class_subjects).
+4. *(⬜)* Staff attendance, leave requests/approval, timetable, payroll, reviews.
+
+## F. Daily attendance ✅ (student) / ⬜ (staff)
+1. Teacher selects **section + date** → `GET /attendance?...` returns roster with
+   any existing marks.
+2. Marks each student present/absent/late/excused (+ remarks).
+3. `POST /attendance` **bulk upserts** (unique on student+date) → idempotent
+   re-saves.
+4. Dashboard shows today's present/absent counts; per-student history via
+   `GET /attendance/students/:id`.
+5. *(⬜)* Monthly/yearly export; **SMS/push** to guardians on absence; staff
+   attendance + period-wise.
+
+## G. Exams & results 🟡
+1. Admin creates an **exam** (name, academic year, dates).
+2. Teacher opens exam → enters marks per student/subject (max marks default 100).
+3. `POST /exams/:id/results` **bulk upserts** (unique exam+student+subject).
+4. *(⬜)* **Grade bands** auto-compute grade/points; **report-card PDF**;
+   subject-wise analytics; per-student report via `GET /exams/students/:id/report` ✅.
+
+## H. Fee management 🟡
+1. Accountant defines **fee structures** (class/year, amount, frequency).
+2. Generates **invoices** per student → unique invoice number, status `pending`.
+3. Records **payments** → server **rejects overpayment**, advances status
+   `pending → partially_paid → paid`.
+4. `GET /fees/summary` → collected vs pending KPIs.
+5. *(⬜)* Fee categories, term schedules, **fines**, **discounts/scholarships**,
+   **receipt PDF**, **online gateway** adapter, class/student dues reports.
+
+## I. Communication 🟡
+1. Admin/Teacher posts an **announcement** with **audience** + optional **pin**.
+2. Clients list audience-filtered, pinned-first.
+3. *(⬜)* Circulars, **email/SMS/FCM push** fan-out, **internal messaging**
+   threads, read receipts.
+
+## J. AI assistant ✅ / ⬜ advanced
+1. Staff asks a question → `POST /ai/assistant`.
+2. Service injects **live KPIs** into the system prompt, calls **GPT-4o**, saves
+   the turn to Mongo; returns the answer (history via `/ai/conversations`).
+3. *(⬜)* Report summaries, **attendance-risk alerts**, fee-pending summaries,
+   **embeddings document search**, workflow suggestions.
+
+## K. Timetable ⬜ (Phase B)
+1. Admin defines **periods** and **rooms**.
+2. Builds per-section timetable: assign subject + teacher + room per day/period.
+3. On save, server runs **conflict checks** (teacher/room double-booking).
+4. Teacher timetable is the same data sliced by teacher.
+
+## L. Homework / assignment ⬜ (Phase C)
+1. Teacher creates homework (section, subject, due date, attachment).
+2. Student views in portal, uploads submission before due date.
+3. Teacher marks status/grade; parent monitors; notifications on assign/submit.
+
+## M. Library ⬜ (Phase D)
+1. Librarian adds **books** + copies (catalogue).
+2. **Issue** to member (student/staff) with due date → **return** → auto **fine**
+   if late.
+3. Member history + stock report.
+
+## N. Transport ⬜ (Phase D)
+1. Add **vehicles**, **drivers**, **routes** + stops.
+2. Allocate students to routes; **map transport fee → invoices**.
+3. Route-wise reports; optional live location feed to parent app.
+
+## O. Hostel ⬜ (Phase D)
+1. Define **hostels** + **rooms** (capacity).
+2. Allocate students; **map hostel fee → invoices**; occupancy report.
+
+## P. Inventory ⬜ (Phase D)
+1. Add **items** + **vendors**; record **purchases** (stock in).
+2. Record **issues** (stock out); stock-level report.
+
+## Q. Payroll ⬜ (Phase D)
+1. Define **salary structures** (allowances/deductions).
+2. Run monthly **payroll** (factor staff attendance/leave) → **payslip PDF**.
+3. Salary register / reports.
+
+## R. Reports 🟡
+1. Each module exposes list/summary views ✅ where built.
+2. *(⬜)* A **Report Center** offers cross-module reports with **CSV/PDF export +
+   print**, plus a **custom report builder** (saved definitions).
