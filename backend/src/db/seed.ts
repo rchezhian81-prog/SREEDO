@@ -92,16 +92,18 @@ export async function seed(): Promise<void> {
     }
   }
 
+  const subjectIds: Record<string, string> = {};
   for (const [name, code] of [
     ["Mathematics", "MATH"],
     ["English", "ENG"],
     ["Science", "SCI"],
     ["Social Studies", "SOC"],
   ]) {
-    await query(
-      `INSERT INTO subjects (institution_id, name, code) VALUES ($1, $2, $3)`,
+    const { rows: subjectRows } = await query<{ id: string }>(
+      `INSERT INTO subjects (institution_id, name, code) VALUES ($1, $2, $3) RETURNING id`,
       [institutionId, name, code]
     );
+    subjectIds[code] = subjectRows[0].id;
   }
 
   const studentSeed: Array<[string, string, string, string]> = [
@@ -151,6 +153,45 @@ export async function seed(): Promise<void> {
      )`,
     [institutionId, ADMIN_EMAIL]
   );
+
+  // Timetable: period & room masters + a conflict-free Monday grid for two sections.
+  const periodIds: string[] = [];
+  for (const [name, start, end, order] of [
+    ["Period 1", "08:00", "08:45", 1],
+    ["Period 2", "08:45", "09:30", 2],
+  ] as const) {
+    const { rows: periodRows } = await query<{ id: string }>(
+      `INSERT INTO periods (institution_id, name, start_time, end_time, sort_order)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [institutionId, name, start, end, order]
+    );
+    periodIds.push(periodRows[0].id);
+  }
+  const roomIds: string[] = [];
+  for (const [name, code] of [
+    ["Room 101", "R101"],
+    ["Room 102", "R102"],
+  ] as const) {
+    const { rows: roomRows } = await query<{ id: string }>(
+      `INSERT INTO rooms (institution_id, name, code) VALUES ($1, $2, $3) RETURNING id`,
+      [institutionId, name, code]
+    );
+    roomIds.push(roomRows[0].id);
+  }
+  const timetablePlan: Array<[string, string, string, string, string]> = [
+    [sectionIds[0], periodIds[0], subjectIds.MATH, teacherIds[0], roomIds[0]],
+    [sectionIds[0], periodIds[1], subjectIds.ENG, teacherIds[1], roomIds[0]],
+    [sectionIds[1], periodIds[0], subjectIds.SCI, teacherIds[1], roomIds[1]],
+    [sectionIds[1], periodIds[1], subjectIds.MATH, teacherIds[0], roomIds[1]],
+  ];
+  for (const [sectionId, periodId, subjectId, teacherId, roomId] of timetablePlan) {
+    await query(
+      `INSERT INTO timetable_entries
+         (institution_id, section_id, day_of_week, period_id, subject_id, teacher_id, room_id)
+       VALUES ($1, $2, 1, $3, $4, $5, $6)`,
+      [institutionId, sectionId, periodId, subjectId, teacherId, roomId]
+    );
+  }
 
   // Tag all seeded school data with the demo institution (multi-tenancy).
   const tenantTables = [

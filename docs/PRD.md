@@ -155,9 +155,12 @@ study materials. *Role exists; needs scoped endpoints + portal UI/app.*
 - ⬜ Grade-band setup table, weighted/total computation, **report-card PDF**,
   printable mark sheets, subject-wise analytics screens.
 
-### 4.10 Timetable Management — ⬜ Planned (Phase B)
-Class & teacher timetables, room allocation, period management, **conflict
-checking** (teacher/room double-booking).
+### 4.10 Timetable Management — ✅ Built (Phase B)
+Period & room masters, per-section timetable entries (subject/teacher/room per
+day & period), class and teacher timetable views, CSV export, and **conflict
+checking** that prevents teacher, room and section double-booking (enforced in
+the service and by race-safe partial unique indexes). Tenant-scoped, with
+`timetable:read|create|update|delete|export` permissions.
 
 ### 4.11 Homework / Assignment — ⬜ Planned (Phase C)
 Teacher assigns; student views/submits; parent monitors; attachment upload;

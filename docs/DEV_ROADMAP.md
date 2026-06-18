@@ -43,8 +43,10 @@ exams (API), announcements, AI assistant, Swagger, seed, Docker, CI, unit tests.
 ### Phase B — Academic depth (college mode + timetables) ⬜
 1. **College mode:** departments, courses/programs, semesters; make
    term/semester configurable per institution `type`.
-2. **Timetable:** rooms, periods, slots, **conflict checking**; teacher
-   timetable view.
+2. **Timetable:** ✅ period & room masters, per-section timetable entries,
+   teacher/room/section **conflict checking** (service 409s + race-safe partial
+   unique indexes, migration `0015`), teacher-timetable view, CSV export, and
+   `timetable:*` permissions. Tenant-scoped; web UI shipped (`/timetable`).
 3. **Grading:** grade bands + report-card computation (sets up PDF in Phase C).
 
 ### Phase C — Engagement (portals, homework, comms, AI+) ⬜
