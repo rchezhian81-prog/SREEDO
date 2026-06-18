@@ -10,6 +10,10 @@ export { query };
 export const app = createApp();
 
 const TABLES = [
+  "staff_attendance",
+  "leave_requests",
+  "leave_balances",
+  "leave_types",
   "stock_movements",
   "stock_adjustments",
   "stock_issues",

@@ -33,6 +33,8 @@ export interface Filters {
   roomId?: string;
   itemId?: string;
   vendorId?: string;
+  teacherId?: string;
+  month?: string;
 }
 
 interface Report {
@@ -1579,6 +1581,243 @@ export const REPORTS: Record<string, Report> = {
         ],
         rows,
       };
+    },
+  },
+
+  // --- Staff attendance & leave (Phase D) reports. ---
+
+  staff_attendance_daily: {
+    title: "Daily Staff Attendance",
+    category: "Staff Attendance",
+    permission: "leave:reports",
+    run: async (f, inst) => {
+      const columns: Col[] = [
+        { key: "employeeNo", label: "Employee No" },
+        { key: "name", label: "Staff" },
+        { key: "status", label: "Status" },
+        { key: "checkIn", label: "In" },
+        { key: "checkOut", label: "Out" },
+        { key: "late", label: "Late" },
+      ];
+      if (!f.dateFrom) return { title: "Daily Staff Attendance", columns, rows: [] };
+      const rows = await rowsOf(
+        `SELECT t.employee_no AS "employeeNo", t.first_name || ' ' || t.last_name AS name,
+                sa.status, sa.check_in AS "checkIn", sa.check_out AS "checkOut", sa.late
+         FROM staff_attendance sa JOIN teachers t ON t.id = sa.teacher_id
+         WHERE sa.institution_id = $1 AND sa.date = $2 ORDER BY name`,
+        [inst, f.dateFrom]
+      );
+      return { title: "Daily Staff Attendance", columns, rows };
+    },
+  },
+
+  staff_attendance_monthly: {
+    title: "Monthly Staff Attendance",
+    category: "Staff Attendance",
+    permission: "leave:reports",
+    run: async (f, inst) => {
+      const columns: Col[] = [
+        { key: "employeeNo", label: "Employee No" },
+        { key: "name", label: "Staff" },
+        { key: "present", label: "Present" },
+        { key: "absent", label: "Absent" },
+        { key: "halfDay", label: "Half-day" },
+        { key: "leave", label: "Leave" },
+        { key: "holiday", label: "Holiday" },
+        { key: "lateCount", label: "Late" },
+      ];
+      if (!f.month) return { title: "Monthly Staff Attendance", columns, rows: [] };
+      const rows = await rowsOf(
+        `SELECT t.employee_no AS "employeeNo", t.first_name || ' ' || t.last_name AS name,
+                count(sa.id) FILTER (WHERE sa.status='present')::int AS present,
+                count(sa.id) FILTER (WHERE sa.status='absent')::int AS absent,
+                count(sa.id) FILTER (WHERE sa.status='half_day')::int AS "halfDay",
+                count(sa.id) FILTER (WHERE sa.status='leave')::int AS leave,
+                count(sa.id) FILTER (WHERE sa.status='holiday')::int AS holiday,
+                count(sa.id) FILTER (WHERE sa.late)::int AS "lateCount"
+         FROM teachers t
+         LEFT JOIN staff_attendance sa ON sa.teacher_id = t.id AND sa.institution_id = $1
+           AND sa.date >= $2::date AND sa.date < ($2::date + interval '1 month')
+         WHERE t.institution_id = $1 GROUP BY t.id ORDER BY name`,
+        [inst, `${f.month}-01`]
+      );
+      return { title: "Monthly Staff Attendance", columns, rows };
+    },
+  },
+
+  staff_attendance_summary: {
+    title: "Staff Attendance Summary",
+    category: "Staff Attendance",
+    permission: "leave:reports",
+    run: async (f, inst) => {
+      const params: unknown[] = [inst];
+      const joinConds = ["sa.teacher_id = t.id", "sa.institution_id = $1"];
+      if (f.dateFrom) {
+        params.push(f.dateFrom);
+        joinConds.push(`sa.date >= $${params.length}`);
+      }
+      if (f.dateTo) {
+        params.push(f.dateTo);
+        joinConds.push(`sa.date <= $${params.length}`);
+      }
+      const rows = await rowsOf(
+        `SELECT t.employee_no AS "employeeNo", t.first_name || ' ' || t.last_name AS name,
+                count(sa.id) FILTER (WHERE sa.status='present')::int AS present,
+                count(sa.id) FILTER (WHERE sa.status='absent')::int AS absent,
+                count(sa.id) FILTER (WHERE sa.status='half_day')::int AS "halfDay",
+                count(sa.id) FILTER (WHERE sa.status='leave')::int AS leave,
+                count(sa.id)::int AS total
+         FROM teachers t
+         LEFT JOIN staff_attendance sa ON ${joinConds.join(" AND ")}
+         WHERE t.institution_id = $1 GROUP BY t.id ORDER BY name`,
+        params
+      );
+      return {
+        title: "Staff Attendance Summary",
+        columns: [
+          { key: "employeeNo", label: "Employee No" },
+          { key: "name", label: "Staff" },
+          { key: "present", label: "Present" },
+          { key: "absent", label: "Absent" },
+          { key: "halfDay", label: "Half-day" },
+          { key: "leave", label: "Leave" },
+          { key: "total", label: "Total Marked" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  leave_register: {
+    title: "Leave Register",
+    category: "Staff Attendance",
+    permission: "leave:reports",
+    run: async (f, inst) => {
+      const params: unknown[] = [inst];
+      const where = ["r.institution_id = $1"];
+      if (f.status) {
+        params.push(f.status);
+        where.push(`r.status = $${params.length}`);
+      }
+      const rows = await rowsOf(
+        `SELECT t.employee_no AS "employeeNo", t.first_name || ' ' || t.last_name AS name,
+                lt.name AS "leaveType", r.start_date AS "startDate", r.end_date AS "endDate",
+                r.days, r.status
+         FROM leave_requests r
+         JOIN teachers t ON t.id = r.teacher_id
+         LEFT JOIN leave_types lt ON lt.id = r.leave_type_id
+         WHERE ${where.join(" AND ")} ORDER BY r.start_date DESC`,
+        params
+      );
+      return {
+        title: "Leave Register",
+        columns: [
+          { key: "employeeNo", label: "Employee No" },
+          { key: "name", label: "Staff" },
+          { key: "leaveType", label: "Leave Type" },
+          { key: "startDate", label: "From" },
+          { key: "endDate", label: "To" },
+          { key: "days", label: "Days" },
+          { key: "status", label: "Status" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  leave_balance: {
+    title: "Leave Balance",
+    category: "Staff Attendance",
+    permission: "leave:reports",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT t.employee_no AS "employeeNo", t.first_name || ' ' || t.last_name AS name,
+                lt.name AS "leaveType", lt.is_paid AS "isPaid", b.balance
+         FROM leave_balances b
+         JOIN teachers t ON t.id = b.teacher_id
+         JOIN leave_types lt ON lt.id = b.leave_type_id
+         WHERE b.institution_id = $1 ORDER BY name, lt.name`,
+        [inst]
+      );
+      return {
+        title: "Leave Balance",
+        columns: [
+          { key: "employeeNo", label: "Employee No" },
+          { key: "name", label: "Staff" },
+          { key: "leaveType", label: "Leave Type" },
+          { key: "isPaid", label: "Paid" },
+          { key: "balance", label: "Balance" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  leave_pending: {
+    title: "Pending Leave Approvals",
+    category: "Staff Attendance",
+    permission: "leave:reports",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT t.employee_no AS "employeeNo", t.first_name || ' ' || t.last_name AS name,
+                lt.name AS "leaveType", r.start_date AS "startDate", r.end_date AS "endDate",
+                r.days, r.reason
+         FROM leave_requests r
+         JOIN teachers t ON t.id = r.teacher_id
+         LEFT JOIN leave_types lt ON lt.id = r.leave_type_id
+         WHERE r.institution_id = $1 AND r.status = 'pending' ORDER BY r.created_at`,
+        [inst]
+      );
+      return {
+        title: "Pending Leave Approvals",
+        columns: [
+          { key: "employeeNo", label: "Employee No" },
+          { key: "name", label: "Staff" },
+          { key: "leaveType", label: "Leave Type" },
+          { key: "startDate", label: "From" },
+          { key: "endDate", label: "To" },
+          { key: "days", label: "Days" },
+          { key: "reason", label: "Reason" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  payroll_attendance_summary: {
+    title: "Payroll Attendance Summary",
+    category: "Staff Attendance",
+    permission: "leave:reports",
+    run: async (f, inst) => {
+      const columns: Col[] = [
+        { key: "employeeNo", label: "Employee No" },
+        { key: "name", label: "Staff" },
+        { key: "workingDays", label: "Working" },
+        { key: "presentDays", label: "Present" },
+        { key: "absentDays", label: "Absent" },
+        { key: "halfDays", label: "Half-day" },
+        { key: "paidLeave", label: "Paid Leave" },
+        { key: "unpaidLeave", label: "Unpaid Leave" },
+        { key: "lateCount", label: "Late" },
+      ];
+      if (!f.month) return { title: "Payroll Attendance Summary", columns, rows: [] };
+      const rows = await rowsOf(
+        `SELECT t.employee_no AS "employeeNo", t.first_name || ' ' || t.last_name AS name,
+                count(sa.id) FILTER (WHERE sa.status IN ('present','absent','half_day','leave'))::int AS "workingDays",
+                count(sa.id) FILTER (WHERE sa.status='present')::int AS "presentDays",
+                count(sa.id) FILTER (WHERE sa.status='absent')::int AS "absentDays",
+                count(sa.id) FILTER (WHERE sa.status='half_day')::int AS "halfDays",
+                count(sa.id) FILTER (WHERE sa.status='leave' AND lt.is_paid)::int AS "paidLeave",
+                count(sa.id) FILTER (WHERE sa.status='leave' AND (lt.is_paid IS NULL OR lt.is_paid=false))::int AS "unpaidLeave",
+                count(sa.id) FILTER (WHERE sa.late)::int AS "lateCount"
+         FROM teachers t
+         LEFT JOIN staff_attendance sa ON sa.teacher_id = t.id AND sa.institution_id = $1
+           AND sa.date >= $2::date AND sa.date < ($2::date + interval '1 month')
+         LEFT JOIN leave_types lt ON lt.id = sa.leave_type_id
+         WHERE t.institution_id = $1 GROUP BY t.id ORDER BY name`,
+        [inst, `${f.month}-01`]
+      );
+      return { title: "Payroll Attendance Summary", columns, rows };
     },
   },
 };

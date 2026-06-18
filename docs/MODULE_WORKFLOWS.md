@@ -46,7 +46,15 @@ Deliverable **#5 Module-wise workflow**. Step-by-step flows for each module.
    login.
 2. Record qualification/specialization/joining date.
 3. Assign subjects/sections (class_subjects).
-4. *(⬜)* Staff attendance, leave requests/approval, timetable, payroll, reviews.
+4. ✅ **Staff attendance** — daily/bulk marking (present/absent/half-day/leave/
+   holiday, check-in/out, late/early-out, remarks) + staff-wise monthly summary.
+5. ✅ **Leave** — leave types (paid/unpaid) + balances; staff **request** →
+   admin **approve/reject/cancel**; approval deducts the balance and **auto-marks
+   attendance** as leave; leave register + balance reports. Staff see only their
+   own; admins/HR manage all (`staff_attendance:*` / `leave:*`, tenant-scoped).
+6. ✅ **Payroll-attendance summary** foundation (working/present/absent/half/paid+
+   unpaid-leave/late per month) — input for the upcoming Payroll module.
+7. *(⬜)* Timetable allocation, payroll run, performance reviews.
 
 ## F. Daily attendance ✅ (student) / ⬜ (staff)
 1. Teacher selects **section + date** → `GET /attendance?...` returns roster with
@@ -178,11 +186,11 @@ Deliverable **#5 Module-wise workflow**. Step-by-step flows for each module.
 
 ## R. Reports 🟡
 1. Each module exposes list/summary views ✅ where built.
-2. ✅ A **Reports Center** offers 42 cross-module reports with filters and
+2. ✅ A **Reports Center** offers 49 cross-module reports with filters and
    **CSV/PDF export + print** (`/report-center`), permission-gated + tenant-scoped
-   — incl. 6 **college**, 6 **library**, 7 **transport**, 6 **hostel**, and 7
-   **inventory** reports (stock register, low stock, purchases, issues, vendor-wise
-   purchases, item movement history, damaged/lost).
+   — incl. 6 **college**, 6 **library**, 7 **transport**, 6 **hostel**, 7
+   **inventory**, and 7 **staff-attendance/leave** reports (daily/monthly/summary
+   attendance, leave register, leave balance, pending approvals, payroll summary).
    *(⬜)* Scheduled reports + a **custom report builder** (saved definitions).
 
 ## S. College mode ✅ (Phase B)
