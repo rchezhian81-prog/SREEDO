@@ -34,6 +34,7 @@ const SCHOOL_NAV: NavItem[] = [
   { href: "/announcements", label: "Announcements", icon: "📣" },
   { href: "/communication", label: "Communication", icon: "📨" },
   { href: "/assistant", label: "AI Assistant", icon: "✨" },
+  { href: "/ai-insights", label: "AI Insights", icon: "🧠" },
   { href: "/users", label: "Users", icon: "👥", adminOnly: true },
 ];
 
