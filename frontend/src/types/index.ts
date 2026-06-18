@@ -709,3 +709,99 @@ export interface HostelFee {
   amount: number | string;
   frequency: string;
 }
+
+// --- Inventory ---
+
+export interface ItemCategory {
+  id: string;
+  name: string;
+  code: string | null;
+  itemCount: number;
+}
+
+export interface Vendor {
+  id: string;
+  name: string;
+  contactPerson: string | null;
+  phone: string | null;
+  email: string | null;
+  gstNumber: string | null;
+  address: string | null;
+  paymentTerms: string | null;
+  isActive: boolean;
+}
+
+export interface InventoryItem {
+  id: string;
+  name: string;
+  code: string;
+  unit: string | null;
+  categoryId: string | null;
+  categoryName: string | null;
+  openingStock: number;
+  currentStock: number;
+  minStockLevel: number;
+  location: string | null;
+  isActive: boolean;
+  lowStock: boolean;
+}
+
+export interface StockMovement {
+  id: string;
+  type: string;
+  change: number;
+  balanceAfter: number;
+  refTable: string | null;
+  note: string | null;
+  createdAt: string;
+}
+
+export interface Purchase {
+  id: string;
+  vendorId: string | null;
+  vendorName: string | null;
+  purchaseDate: string;
+  billNo: string | null;
+  totalAmount: number | string;
+  documentId: string | null;
+  notes: string | null;
+  lineCount: number;
+}
+
+export interface PurchaseItem {
+  id: string;
+  itemId: string;
+  itemName: string;
+  unit: string | null;
+  quantity: number | string;
+  rate: number | string | null;
+  amount: number | string;
+}
+
+export interface PurchaseDetail extends Purchase {
+  items: PurchaseItem[];
+}
+
+export interface StockIssue {
+  id: string;
+  itemId: string;
+  itemName: string;
+  unit: string | null;
+  quantity: number | string;
+  issuedToType: string | null;
+  issuedTo: string | null;
+  purpose: string | null;
+  issueDate: string;
+  receivedBy: string | null;
+}
+
+export interface StockAdjustment {
+  id: string;
+  itemId: string;
+  itemName: string;
+  quantity: number | string;
+  reason: string | null;
+  note: string | null;
+  approvedBy: string | null;
+  createdAt: string;
+}
