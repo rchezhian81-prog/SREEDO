@@ -10,6 +10,10 @@ export { query };
 export const app = createApp();
 
 const TABLES = [
+  "institution_subscriptions",
+  "branches",
+  "subscription_packages",
+  "institutions",
   "refresh_tokens",
   "payments",
   "invoices",

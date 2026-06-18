@@ -4,6 +4,8 @@ import { hashPassword } from "../utils/password";
 
 const ADMIN_EMAIL = "admin@sreedo.edu";
 const ADMIN_PASSWORD = "Admin@12345";
+const SUPER_ADMIN_EMAIL = "super@sreedo.edu";
+const SUPER_ADMIN_PASSWORD = "Super@12345";
 
 /** Seeds demo data only when the database has no users yet (idempotent). */
 export async function seedIfEmpty(): Promise<void> {
@@ -23,6 +25,33 @@ export async function seed(): Promise<void> {
     `INSERT INTO users (email, password_hash, full_name, role)
      VALUES ($1, $2, 'School Administrator', 'admin')`,
     [ADMIN_EMAIL, adminHash]
+  );
+
+  // Super admin + a demo tenant (institution, branch, package, subscription).
+  const superHash = await hashPassword(SUPER_ADMIN_PASSWORD);
+  await query(
+    `INSERT INTO users (email, password_hash, full_name, role)
+     VALUES ($1, $2, 'Platform Super Admin', 'super_admin')`,
+    [SUPER_ADMIN_EMAIL, superHash]
+  );
+  const { rows: instRows } = await query<{ id: string }>(
+    `INSERT INTO institutions (name, code, type)
+     VALUES ('SRE Demo School', 'SREDEMO', 'school') RETURNING id`
+  );
+  const institutionId = instRows[0].id;
+  await query(
+    `INSERT INTO branches (institution_id, name, address)
+     VALUES ($1, 'Main Campus', '1 School Road')`,
+    [institutionId]
+  );
+  const { rows: pkgRows } = await query<{ id: string }>(
+    `INSERT INTO subscription_packages (name, max_students, max_staff, price, billing_cycle)
+     VALUES ('Standard', 1000, 200, 50000, 'annual') RETURNING id`
+  );
+  await query(
+    `INSERT INTO institution_subscriptions (institution_id, package_id, status)
+     VALUES ($1, $2, 'active')`,
+    [institutionId, pkgRows[0].id]
   );
 
   const year = new Date().getFullYear();
@@ -134,7 +163,10 @@ export async function seed(): Promise<void> {
         FROM teachers), true)`
   );
 
-  console.log(`Seed complete — admin login: ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
+  console.log(
+    `Seed complete — admin: ${ADMIN_EMAIL} / ${ADMIN_PASSWORD} · ` +
+      `super admin: ${SUPER_ADMIN_EMAIL} / ${SUPER_ADMIN_PASSWORD}`
+  );
 }
 
 if (require.main === module) {

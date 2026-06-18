@@ -103,7 +103,9 @@ export default function UsersPage() {
     editForm.reset({
       fullName: user.fullName,
       phone: user.phone ?? "",
-      role: user.role,
+      // The Users page manages school-level roles; super_admin is handled in the
+      // Super Admin console, so fall back to the current value's narrowed type.
+      role: user.role as EditForm["role"],
       isActive: user.isActive,
     });
   };
