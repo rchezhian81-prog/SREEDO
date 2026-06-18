@@ -20,8 +20,9 @@ exams (API), announcements, AI assistant, Swagger, seed, Docker, CI, unit tests.
 **Goal:** make the platform truly multi-institution and production-safe.
 1. **Security backlog (handover §8):** ✅ owner-scoped reads, ✅ soft-delete
    students, ✅ invoice `amount_paid`, ✅ sequence-based numbering, ✅ Swagger
-   off in production — all done. Remaining: httpOnly-cookie token storage
-   (deferred to the public-portal phase).
+   off in production, ✅ **httpOnly-cookie tokens** (shipped with the portal —
+   `authenticate` reads a Bearer header for staff or the cookie for the portal) —
+   all done.
 2. **Permissions layer:** ✅ `permissions` + `role_permissions` (migration
    `0012`), `requirePermission()` middleware with a cached role→permission map,
    seeded role matrix, `GET /auth/permissions`, and `super_admin` bypass. The
@@ -54,7 +55,10 @@ exams (API), announcements, AI assistant, Swagger, seed, Docker, CI, unit tests.
 2. **PDFs:** fee **receipts**, **report cards**, ID cards, transfer certificates.
 3. **Communication:** generalize SMTP email, add **SMS** + **FCM push** adapters,
    internal messaging, notifications + device-token registration.
-4. **Parent & Student portals** (web + mobile) on owner-scoped endpoints.
+4. **Parent & Student portals** — ✅ base shipped (web): cookie auth (`/auth/portal/*`),
+   `guardians` parent⇄child links (migration `0016`), `/portal/*` owner-scoped
+   endpoints, and portal UI (dashboard, profile, attendance, timetable, fees,
+   notices, child selector). Mobile + homework/comms remain.
 5. **Homework/assignments** with submissions.
 6. **AI advanced:** embeddings document search, attendance-risk alerts, fee/
    performance summaries.

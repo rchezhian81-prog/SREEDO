@@ -1,7 +1,10 @@
 import type { Request } from "express";
 import { ApiError } from "./api-error";
 import type { UserRole } from "../types";
-import { studentIdForUser } from "../modules/students/students.service";
+import {
+  childStudentIdsForUser,
+  studentIdForUser,
+} from "../modules/students/students.service";
 
 // Staff roles see all records; student/parent are scoped to their own data.
 // This is the foundation for issuing student/parent logins (see
@@ -24,7 +27,7 @@ export function requireStaff(req: Request): void {
  *
  * - staff   → `null` (no scoping)
  * - student → their own linked student id, or `[]` when no record is linked
- * - parent  → `[]` until the parent⇄student link ships (Phase C)
+ * - parent  → the ids of their linked children (guardians table)
  */
 export async function accessibleStudentIds(
   req: Request
@@ -34,6 +37,10 @@ export async function accessibleStudentIds(
   if (req.user.role === "student") {
     const id = await studentIdForUser(req.user.id);
     return id ? [id] : [];
+  }
+  if (req.user.role === "parent") {
+    if (!req.user.institutionId) return [];
+    return childStudentIdsForUser(req.user.id, req.user.institutionId);
   }
   return [];
 }

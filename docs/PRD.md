@@ -127,14 +127,16 @@ reports 🟡.
 - ⬜ Staff attendance, timetable, salary/payroll, leave management, performance
   records, document upload.
 
-### 4.5 Parent Portal — ⬜ Planned (Phase C)
-View child's attendance, homework, marks, fee status, notices; teacher
-communication; transport tracking (if available). *Role exists; needs
-owner-scoped read endpoints + portal UI/app.*
+### 4.5 Parent Portal — ✅ Built (Phase C, base)
+Cookie-authenticated portal where a parent views **only their linked children**
+(via the `guardians` table): child profile, attendance summary, timetable, fee
+status and notices, with a child selector for multiple children. Homework and
+teacher communication remain ⬜ (later Phase C).
 
-### 4.6 Student Portal — ⬜ Planned (Phase C)
-Profile, timetable, attendance, homework/assignments, results, fees, notices,
-study materials. *Role exists; needs scoped endpoints + portal UI/app.*
+### 4.6 Student Portal — ✅ Built (Phase C, base)
+Cookie-authenticated portal where a student views **only their own** profile,
+attendance summary, timetable, fee status and notices. Owner-scoping enforced
+server-side. Homework/results detail and study materials remain ⬜.
 
 ### 4.7 Attendance — 🟡 Partial
 - ✅ Student daily attendance: bulk upsert per section/date, per-section view,
