@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";
-import { app, createUser, resetDb, tokenFor } from "./helpers";
+import {
+  app,
+  createInstitution,
+  createUser,
+  resetDb,
+  tokenFor,
+} from "./helpers";
 
 const ADMIN = { email: "admin@test.dev", password: "Passw0rd!" };
 const year = new Date().getFullYear();
@@ -10,7 +16,8 @@ describe("sequence-based numbering", () => {
 
   beforeEach(async () => {
     await resetDb();
-    await createUser({ ...ADMIN, role: "admin" });
+    const institutionId = await createInstitution();
+    await createUser({ ...ADMIN, role: "admin", institutionId });
     token = await tokenFor(ADMIN.email, ADMIN.password);
   });
 

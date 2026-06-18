@@ -27,12 +27,13 @@ exams (API), announcements, AI assistant, Swagger, seed, Docker, CI, unit tests.
    seeded role matrix, `GET /auth/permissions`, and `super_admin` bypass. The
    users module is wired to it; remaining routes migrate from `authorize(...)`
    to `requirePermission(...)` incrementally.
-3. **Multi-tenancy:** 🟡 `institutions`/`branches`/`subscription_packages`/
-   `institution_subscriptions` + `super_admin` role (migration `0011`); and the
-   **scoping foundation** — `institution_id` added, backfilled and indexed on all
-   tenant tables (migration `0013`), tenant context carried in the JWT and on
-   `/auth/me`, and seed tagging. Remaining: enforce `institution_id` filtering in
-   each module's queries, then set the columns `NOT NULL`.
+3. **Multi-tenancy:** ✅ `institutions`/`branches`/`subscription_packages`/
+   `institution_subscriptions` + `super_admin` role (migration `0011`);
+   `institution_id` added/backfilled/indexed on all tenant tables (`0013`) and
+   set `NOT NULL` (`0014`); tenant context in the JWT + `/auth/me`; a
+   `requireTenant` middleware; and **per-module query scoping** so every module
+   filters by the caller's `institution_id`. Cross-tenant isolation is proven by
+   integration tests. (Done in a dedicated follow-up PR after Phase A merged.)
 4. **Super Admin panel:** 🟡 backend CRUD **and the web console**
    (`/super-admin`: institutions, branches, packages, subscriptions) shipped.
    Remaining: global settings, backups, global audit-log viewer.

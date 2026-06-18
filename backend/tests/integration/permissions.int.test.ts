@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";
-import { app, createUser, resetDb, tokenFor } from "./helpers";
+import {
+  app,
+  createInstitution,
+  createUser,
+  resetDb,
+  tokenFor,
+} from "./helpers";
 
 const USERS = {
   admin: { email: "admin@test.dev", password: "Passw0rd!" },
@@ -14,9 +20,10 @@ describe("permissions layer", () => {
 
   beforeEach(async () => {
     await resetDb();
-    await createUser({ ...USERS.admin, role: "admin" });
-    await createUser({ ...USERS.teacher, role: "teacher" });
-    await createUser({ ...USERS.accountant, role: "accountant" });
+    const institutionId = await createInstitution();
+    await createUser({ ...USERS.admin, role: "admin", institutionId });
+    await createUser({ ...USERS.teacher, role: "teacher", institutionId });
+    await createUser({ ...USERS.accountant, role: "accountant", institutionId });
     await createUser({ ...USERS.super, role: "super_admin" });
     tok.admin = await tokenFor(USERS.admin.email, USERS.admin.password);
     tok.teacher = await tokenFor(USERS.teacher.email, USERS.teacher.password);

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { uuidParam } from "../../utils/params";
 import { authenticate, authorize } from "../../middleware/auth";
+import { requireTenant, tenantId } from "../../middleware/tenant";
 import { parsePagination } from "../../utils/pagination";
 import {
   createAnnouncementSchema,
@@ -11,7 +12,7 @@ import * as announcementsService from "./announcements.service";
 
 export const announcementsRouter = Router();
 
-announcementsRouter.use(authenticate);
+announcementsRouter.use(authenticate, requireTenant);
 
 const publisher = authorize("admin", "teacher");
 
@@ -51,7 +52,8 @@ announcementsRouter.get("/", async (req, res) => {
   const queryParams = listAnnouncementsQuerySchema.parse(req.query);
   const result = await announcementsService.listAnnouncements(
     parsePagination(queryParams),
-    { audience: queryParams.audience }
+    { audience: queryParams.audience },
+    tenantId(req)
   );
   res.json(result);
 });
@@ -60,7 +62,13 @@ announcementsRouter.post("/", publisher, async (req, res) => {
   const input = createAnnouncementSchema.parse(req.body);
   res
     .status(201)
-    .json(await announcementsService.createAnnouncement(input, req.user!.id));
+    .json(
+      await announcementsService.createAnnouncement(
+        input,
+        req.user!.id,
+        tenantId(req)
+      )
+    );
 });
 
 /**
@@ -92,15 +100,21 @@ announcementsRouter.post("/", publisher, async (req, res) => {
  *       204: { description: Deleted }
  */
 announcementsRouter.get("/:id", async (req, res) => {
-  res.json(await announcementsService.getAnnouncement(uuidParam(req)));
+  res.json(await announcementsService.getAnnouncement(uuidParam(req), tenantId(req)));
 });
 
 announcementsRouter.patch("/:id", publisher, async (req, res) => {
   const input = updateAnnouncementSchema.parse(req.body);
-  res.json(await announcementsService.updateAnnouncement(uuidParam(req), input));
+  res.json(
+    await announcementsService.updateAnnouncement(
+      uuidParam(req),
+      input,
+      tenantId(req)
+    )
+  );
 });
 
 announcementsRouter.delete("/:id", publisher, async (req, res) => {
-  await announcementsService.removeAnnouncement(uuidParam(req));
+  await announcementsService.removeAnnouncement(uuidParam(req), tenantId(req));
   res.status(204).end();
 });

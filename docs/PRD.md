@@ -102,9 +102,11 @@ flows are in [`MODULE_WORKFLOWS.md`](./MODULE_WORKFLOWS.md).
   **package** management and per-institution **subscriptions** — backend
   (`/api/v1/institutions|branches|packages`, migration `0011`) **and** a
   dedicated Super Admin **web console** (`/super-admin`).
+- ✅ Full tenant data isolation: `institution_id` is enforced (`NOT NULL`) and
+  every module scopes its queries to the caller's institution (`requireTenant`
+  middleware), proven by cross-tenant integration tests.
 - ⬜ Global user-role management, system settings, backup & restore, global
-  audit-log viewer, and scoping existing data by `institution_id` (the rest of
-  multi-tenancy).
+  audit-log viewer.
 
 ### 4.2 School / College Admin Panel — 🟡 Partial
 Dashboard ✅; academic-year/class/section/subject setup ✅; **department,

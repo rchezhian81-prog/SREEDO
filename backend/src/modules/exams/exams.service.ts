@@ -3,25 +3,31 @@ import { ApiError } from "../../utils/api-error";
 import type { z } from "zod";
 import type { createExamSchema, upsertResultsSchema } from "./exams.schema";
 
-export async function listExams() {
+export async function listExams(institutionId: string) {
   const { rows } = await query(
     `SELECT e.id, e.name, e.academic_year_id AS "academicYearId",
             ay.name AS "academicYearName",
             e.start_date AS "startDate", e.end_date AS "endDate"
      FROM exams e
      LEFT JOIN academic_years ay ON ay.id = e.academic_year_id
-     ORDER BY e.start_date DESC NULLS LAST, e.created_at DESC`
+     WHERE e.institution_id = $1
+     ORDER BY e.start_date DESC NULLS LAST, e.created_at DESC`,
+    [institutionId]
   );
   return rows;
 }
 
-export async function createExam(input: z.infer<typeof createExamSchema>) {
+export async function createExam(
+  input: z.infer<typeof createExamSchema>,
+  institutionId: string
+) {
   const { rows } = await query(
-    `INSERT INTO exams (name, academic_year_id, start_date, end_date)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO exams (institution_id, name, academic_year_id, start_date, end_date)
+     VALUES ($1, $2, $3, $4, $5)
      RETURNING id, name, academic_year_id AS "academicYearId",
                start_date AS "startDate", end_date AS "endDate"`,
     [
+      institutionId,
       input.name,
       input.academicYearId ?? null,
       input.startDate ?? null,
@@ -33,9 +39,13 @@ export async function createExam(input: z.infer<typeof createExamSchema>) {
 
 export async function upsertResults(
   examId: string,
-  input: z.infer<typeof upsertResultsSchema>
+  input: z.infer<typeof upsertResultsSchema>,
+  institutionId: string
 ) {
-  const { rows } = await query("SELECT id FROM exams WHERE id = $1", [examId]);
+  const { rows } = await query(
+    "SELECT id FROM exams WHERE id = $1 AND institution_id = $2",
+    [examId, institutionId]
+  );
   if (!rows[0]) throw ApiError.notFound("Exam not found");
 
   return withTransaction(async (client) => {
@@ -43,14 +53,15 @@ export async function upsertResults(
     for (const result of input.results) {
       await client.query(
         `INSERT INTO exam_results
-           (exam_id, student_id, subject_id, marks_obtained, max_marks, grade, remarks)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+           (institution_id, exam_id, student_id, subject_id, marks_obtained, max_marks, grade, remarks)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          ON CONFLICT (exam_id, student_id, subject_id)
          DO UPDATE SET marks_obtained = EXCLUDED.marks_obtained,
                        max_marks = EXCLUDED.max_marks,
                        grade = EXCLUDED.grade,
                        remarks = EXCLUDED.remarks`,
         [
+          institutionId,
           examId,
           result.studentId,
           result.subjectId,
@@ -66,12 +77,16 @@ export async function upsertResults(
   });
 }
 
-export async function examResults(examId: string, sectionId?: string) {
-  const params: unknown[] = [examId];
+export async function examResults(
+  examId: string,
+  sectionId: string | undefined,
+  institutionId: string
+) {
+  const params: unknown[] = [examId, institutionId];
   let sectionFilter = "";
   if (sectionId) {
     params.push(sectionId);
-    sectionFilter = "AND s.section_id = $2";
+    sectionFilter = `AND s.section_id = $${params.length}`;
   }
   const { rows } = await query(
     `SELECT er.student_id AS "studentId",
@@ -85,14 +100,14 @@ export async function examResults(examId: string, sectionId?: string) {
      FROM exam_results er
      JOIN students s ON s.id = er.student_id
      JOIN subjects sub ON sub.id = er.subject_id
-     WHERE er.exam_id = $1 ${sectionFilter}
+     WHERE er.exam_id = $1 AND er.institution_id = $2 ${sectionFilter}
      ORDER BY s.first_name, sub.name`,
     params
   );
   return rows;
 }
 
-export async function studentReport(studentId: string) {
+export async function studentReport(studentId: string, institutionId: string) {
   const { rows } = await query(
     `SELECT e.name AS "examName",
             sub.name AS "subjectName",
@@ -103,9 +118,9 @@ export async function studentReport(studentId: string) {
      FROM exam_results er
      JOIN exams e ON e.id = er.exam_id
      JOIN subjects sub ON sub.id = er.subject_id
-     WHERE er.student_id = $1
+     WHERE er.student_id = $1 AND er.institution_id = $2
      ORDER BY e.start_date DESC NULLS LAST, sub.name`,
-    [studentId]
+    [studentId, institutionId]
   );
   return rows;
 }

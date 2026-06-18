@@ -41,10 +41,11 @@ async function nextAdmissionNo(): Promise<string> {
 export async function listStudents(
   pagination: Pagination,
   filters: z.infer<typeof listStudentsQuerySchema>,
+  institutionId: string,
   restrictIds?: string[] | null
 ) {
-  const conditions: string[] = [];
-  const params: unknown[] = [];
+  const params: unknown[] = [institutionId];
+  const conditions: string[] = ["s.institution_id = $1"];
   if (filters.sectionId) {
     params.push(filters.sectionId);
     conditions.push(`s.section_id = $${params.length}`);
@@ -67,7 +68,7 @@ export async function listStudents(
     params.push(restrictIds);
     conditions.push(`s.id = ANY($${params.length}::uuid[])`);
   }
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const where = `WHERE ${conditions.join(" AND ")}`;
 
   const countResult = await query<{ count: string }>(
     `SELECT count(*) FROM students s ${where}`,
@@ -82,26 +83,28 @@ export async function listStudents(
   return paginatedResponse(rows, Number(countResult.rows[0].count), pagination);
 }
 
-export async function getStudent(id: string) {
+export async function getStudent(id: string, institutionId: string) {
   const { rows } = await query(
-    `SELECT ${STUDENT_SELECT} WHERE s.id = $1`,
-    [id]
+    `SELECT ${STUDENT_SELECT} WHERE s.id = $1 AND s.institution_id = $2`,
+    [id, institutionId]
   );
   if (!rows[0]) throw ApiError.notFound("Student not found");
   return rows[0];
 }
 
 export async function createStudent(
-  input: z.infer<typeof createStudentSchema>
+  input: z.infer<typeof createStudentSchema>,
+  institutionId: string
 ) {
   const admissionNo = input.admissionNo ?? (await nextAdmissionNo());
   const { rows } = await query<{ id: string }>(
     `INSERT INTO students (
-       admission_no, first_name, last_name, date_of_birth, gender, section_id,
-       guardian_name, guardian_phone, guardian_email, address
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       institution_id, admission_no, first_name, last_name, date_of_birth,
+       gender, section_id, guardian_name, guardian_phone, guardian_email, address
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      RETURNING id`,
     [
+      institutionId,
       admissionNo,
       input.firstName,
       input.lastName,
@@ -114,7 +117,7 @@ export async function createStudent(
       input.address ?? null,
     ]
   );
-  return getStudent(rows[0].id);
+  return getStudent(rows[0].id, institutionId);
 }
 
 const UPDATE_COLUMN_MAP: Record<string, string> = {
@@ -133,7 +136,8 @@ const UPDATE_COLUMN_MAP: Record<string, string> = {
 
 export async function updateStudent(
   id: string,
-  input: z.infer<typeof updateStudentSchema>
+  input: z.infer<typeof updateStudentSchema>,
+  institutionId: string
 ) {
   const sets: string[] = [];
   const params: unknown[] = [];
@@ -147,26 +151,37 @@ export async function updateStudent(
   if (!sets.length) throw ApiError.badRequest("No fields to update");
 
   params.push(id);
+  params.push(institutionId);
   const { rowCount } = await query(
-    `UPDATE students SET ${sets.join(", ")} WHERE id = $${params.length}`,
+    `UPDATE students SET ${sets.join(", ")}
+     WHERE id = $${params.length - 1} AND institution_id = $${params.length}`,
     params
   );
   if (!rowCount) throw ApiError.notFound("Student not found");
-  return getStudent(id);
+  return getStudent(id, institutionId);
 }
 
 /** Soft delete: mark the student archived, preserving their history. */
-export async function archiveStudent(id: string): Promise<void> {
+export async function archiveStudent(
+  id: string,
+  institutionId: string
+): Promise<void> {
   const { rowCount } = await query(
-    "UPDATE students SET status = 'archived' WHERE id = $1",
-    [id]
+    "UPDATE students SET status = 'archived' WHERE id = $1 AND institution_id = $2",
+    [id, institutionId]
   );
   if (!rowCount) throw ApiError.notFound("Student not found");
 }
 
 /** Hard delete: removes the row and cascades to attendance/invoices/payments. */
-export async function hardDeleteStudent(id: string): Promise<void> {
-  const { rowCount } = await query("DELETE FROM students WHERE id = $1", [id]);
+export async function hardDeleteStudent(
+  id: string,
+  institutionId: string
+): Promise<void> {
+  const { rowCount } = await query(
+    "DELETE FROM students WHERE id = $1 AND institution_id = $2",
+    [id, institutionId]
+  );
   if (!rowCount) throw ApiError.notFound("Student not found");
 }
 

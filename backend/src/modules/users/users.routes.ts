@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { uuidParam } from "../../utils/params";
 import { authenticate } from "../../middleware/auth";
+import { requireTenant, tenantId } from "../../middleware/tenant";
 import { requirePermission } from "../../middleware/permissions";
 import { parsePagination } from "../../utils/pagination";
 import {
@@ -12,7 +13,7 @@ import * as usersService from "./users.service";
 
 export const usersRouter = Router();
 
-usersRouter.use(authenticate, requirePermission("users:manage"));
+usersRouter.use(authenticate, requireTenant, requirePermission("users:manage"));
 
 /**
  * @openapi
@@ -51,16 +52,20 @@ usersRouter.use(authenticate, requirePermission("users:manage"));
  */
 usersRouter.get("/", async (req, res) => {
   const queryParams = listUsersQuerySchema.parse(req.query);
-  const result = await usersService.listUsers(parsePagination(queryParams), {
-    role: queryParams.role,
-    search: queryParams.search,
-  });
+  const result = await usersService.listUsers(
+    parsePagination(queryParams),
+    {
+      role: queryParams.role,
+      search: queryParams.search,
+    },
+    tenantId(req)
+  );
   res.json(result);
 });
 
 usersRouter.post("/", async (req, res) => {
   const input = createUserSchema.parse(req.body);
-  const user = await usersService.createUser(input);
+  const user = await usersService.createUser(input, tenantId(req));
   res.status(201).json(user);
 });
 
@@ -94,15 +99,15 @@ usersRouter.post("/", async (req, res) => {
  *       204: { description: Deactivated }
  */
 usersRouter.get("/:id", async (req, res) => {
-  res.json(await usersService.getUser(uuidParam(req)));
+  res.json(await usersService.getUser(uuidParam(req), tenantId(req)));
 });
 
 usersRouter.patch("/:id", async (req, res) => {
   const input = updateUserSchema.parse(req.body);
-  res.json(await usersService.updateUser(uuidParam(req), input));
+  res.json(await usersService.updateUser(uuidParam(req), input, tenantId(req)));
 });
 
 usersRouter.delete("/:id", async (req, res) => {
-  await usersService.deactivateUser(uuidParam(req));
+  await usersService.deactivateUser(uuidParam(req), tenantId(req));
   res.status(204).end();
 });

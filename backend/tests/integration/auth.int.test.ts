@@ -1,13 +1,20 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";
-import { app, createUser, resetDb, tokenFor } from "./helpers";
+import {
+  app,
+  createInstitution,
+  createUser,
+  resetDb,
+  tokenFor,
+} from "./helpers";
 
 const ADMIN = { email: "admin@test.dev", password: "Passw0rd!" };
 
 describe("auth & protected routes", () => {
   beforeEach(async () => {
     await resetDb();
-    await createUser({ ...ADMIN, role: "admin", fullName: "Admin" });
+    const institutionId = await createInstitution();
+    await createUser({ ...ADMIN, role: "admin", fullName: "Admin", institutionId });
   });
 
   it("rejects unauthenticated access to a protected route", async () => {

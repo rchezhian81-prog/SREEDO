@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { uuidParam } from "../../utils/params";
 import { authenticate, authorize } from "../../middleware/auth";
+import { requireTenant, tenantId } from "../../middleware/tenant";
 import { parsePagination } from "../../utils/pagination";
 import {
   createTeacherSchema,
@@ -11,7 +12,7 @@ import * as teachersService from "./teachers.service";
 
 export const teachersRouter = Router();
 
-teachersRouter.use(authenticate);
+teachersRouter.use(authenticate, requireTenant);
 
 /**
  * @openapi
@@ -53,14 +54,15 @@ teachersRouter.get("/", async (req, res) => {
   const queryParams = listTeachersQuerySchema.parse(req.query);
   const result = await teachersService.listTeachers(
     parsePagination(queryParams),
-    { search: queryParams.search }
+    { search: queryParams.search },
+    tenantId(req)
   );
   res.json(result);
 });
 
 teachersRouter.post("/", authorize("admin"), async (req, res) => {
   const input = createTeacherSchema.parse(req.body);
-  res.status(201).json(await teachersService.createTeacher(input));
+  res.status(201).json(await teachersService.createTeacher(input, tenantId(req)));
 });
 
 /**
@@ -92,15 +94,15 @@ teachersRouter.post("/", authorize("admin"), async (req, res) => {
  *       204: { description: Deleted }
  */
 teachersRouter.get("/:id", async (req, res) => {
-  res.json(await teachersService.getTeacher(uuidParam(req)));
+  res.json(await teachersService.getTeacher(uuidParam(req), tenantId(req)));
 });
 
 teachersRouter.patch("/:id", authorize("admin"), async (req, res) => {
   const input = updateTeacherSchema.parse(req.body);
-  res.json(await teachersService.updateTeacher(uuidParam(req), input));
+  res.json(await teachersService.updateTeacher(uuidParam(req), input, tenantId(req)));
 });
 
 teachersRouter.delete("/:id", authorize("admin"), async (req, res) => {
-  await teachersService.removeTeacher(uuidParam(req));
+  await teachersService.removeTeacher(uuidParam(req), tenantId(req));
   res.status(204).end();
 });
