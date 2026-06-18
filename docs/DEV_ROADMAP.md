@@ -67,7 +67,9 @@ exams (API), announcements, AI assistant, Swagger, seed, Docker, CI, unit tests.
    `guardians` parent⇄child links (migration `0016`), `/portal/*` owner-scoped
    endpoints, and portal UI (dashboard, profile, attendance, timetable, fees,
    notices, child selector). Mobile + homework/comms remain.
-5. **Homework/assignments** with submissions.
+5. **Homework/assignments** ✅ — section/subject assignments with attachments,
+   student submissions (text + file), teacher review/grading, assign/submit
+   notifications (migration `0020`); staff console + portal pages.
 6. **AI advanced:** embeddings document search, attendance-risk alerts, fee/
    performance summaries.
 

@@ -167,9 +167,14 @@ checking** that prevents teacher, room and section double-booking (enforced in
 the service and by race-safe partial unique indexes). Tenant-scoped, with
 `timetable:read|create|update|delete|export` permissions.
 
-### 4.11 Homework / Assignment — ⬜ Planned (Phase C)
-Teacher assigns; student views/submits; parent monitors; attachment upload;
-status tracking. (Uses object storage for attachments.)
+### 4.11 Homework / Assignment — ✅ Built (Phase C)
+Teacher assigns homework to a section + subject (title, description, instructions,
+due date, optional marks) with attachments; students view in the portal and
+submit text and/or a file; teachers list submissions and review/grade
+(reviewed/completed/late/resubmit + marks/remarks). Parents view their child's.
+Attachments reuse the object-storage layer via a protected, owner-scoped download
+route; assign/submit fire in-app + best-effort email/SMS/push notifications.
+Tenant + owner scoped; `homework:read|create|update|delete|submit|review` permissions.
 
 ### 4.12 Communication — ✅ Built (base)
 - ✅ Notice board / announcements with audience targeting and pinning.
