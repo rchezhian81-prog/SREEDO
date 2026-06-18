@@ -10,6 +10,7 @@ export { query };
 export const app = createApp();
 
 const TABLES = [
+  "data_exports",
   "payslip_lines",
   "payslips",
   "payroll_runs",

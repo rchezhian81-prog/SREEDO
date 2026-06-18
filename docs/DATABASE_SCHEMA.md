@@ -104,7 +104,13 @@ multi-tenancy.
 
 ### Phase A — Multi-tenancy, Super Admin, permissions
 - **institutions** — `id`, `name`, `type` (school|college), `code`, `settings`
-  (JSONB), `is_active`.
+  (JSONB — holds super-admin **feature flags / enabled modules / contact**),
+  `is_active`.
+- **data_exports** ✅ (migration `0030`) — `id`, `institution_id`, `kind`,
+  `status`, `summary` (JSONB; counts + metadata only, no secrets), `requested_by`
+  — the super-admin backup/export history.
+- *(Audit logs live in MongoDB `audit_logs` — best-effort; the super-admin viewer
+  reads them and degrades gracefully when Mongo is unconfigured.)*
 - **branches** — `id`, `institution_id`→institutions, `name`, `address`,
   `timezone`.
 - **subscription_packages** — `id`, `name`, `limits` (JSONB), `price`,

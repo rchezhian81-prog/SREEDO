@@ -15,12 +15,18 @@ Deliverable **#5 Module-wise workflow**. Step-by-step flows for each module.
 5. `POST /auth/change-password` re-hashes and **revokes all** refresh tokens.
 6. `POST /auth/logout` deletes the presented refresh token.
 
-## B. Super Admin onboarding ⬜
+## B. Super Admin onboarding ✅
 1. Super Admin creates an **institution** (school|college) + first **branch**.
 2. Assigns a **subscription package** (limits/features).
 3. Creates the institution's first **admin** user.
 4. Institution Admin logs in → scoped entirely to that `institution_id`.
-5. Super Admin can view global **audit logs**, trigger **backups**, switch tenant.
+5. ✅ Super Admin console (`/admin/*`, super-admin-only): global institution
+   **settings** (status, contact, **enabled modules + feature flags**),
+   **plan limits** (max students/staff enforced on create) + usage, a global
+   **audit-log viewer** (Mongo trail, filters + CSV, graceful when Mongo off),
+   safe **data export** (counts/metadata only — no secrets) with history, a
+   read-only **cross-tenant snapshot** switch, and a **system-health** summary.
+   All actions run through the audit middleware.
 
 ## C. Academic setup ✅ (school) / ✅ (college extensions)
 1. Admin creates an **academic year** (marks one `is_current`).

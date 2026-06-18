@@ -35,9 +35,13 @@ exams (API), announcements, AI assistant, Swagger, seed, Docker, CI, unit tests.
    `requireTenant` middleware; and **per-module query scoping** so every module
    filters by the caller's `institution_id`. Cross-tenant isolation is proven by
    integration tests. (Done in a dedicated follow-up PR after Phase A merged.)
-4. **Super Admin panel:** 🟡 backend CRUD **and the web console**
-   (`/super-admin`: institutions, branches, packages, subscriptions) shipped.
-   Remaining: global settings, backups, global audit-log viewer.
+4. **Super Admin panel:** ✅ backend CRUD + web console (`/super-admin`:
+   institutions, branches, packages, subscriptions) and ✅ **hardening**
+   (migration `0030`, `/admin/*`): global institution settings + feature
+   flags/modules, **plan-limit enforcement**, a global **audit-log viewer**
+   (Mongo, CSV, graceful), safe **data export** + history, read-only
+   **cross-tenant snapshot**, and **system health**. Remaining: scheduled
+   backup/restore automation, global user-role management.
 5. ✅ **MVP UI gaps filled:** Exams & Results page and Users/account-management
    page shipped.
 

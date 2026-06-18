@@ -99,7 +99,7 @@ Each module below lists its **purpose**, **key capabilities**, **status**, and
 the **phase** it lands in (see [`DEV_ROADMAP.md`](./DEV_ROADMAP.md)). Detailed
 flows are in [`MODULE_WORKFLOWS.md`](./MODULE_WORKFLOWS.md).
 
-### 4.1 Super Admin Panel — 🟡 Partial (Phase A)
+### 4.1 Super Admin Panel — ✅ Built (Phase A + hardening)
 - ✅ `super_admin` role; institution & branch/campus CRUD; subscription
   **package** management and per-institution **subscriptions** — backend
   (`/api/v1/institutions|branches|packages`, migration `0011`) **and** a
@@ -107,8 +107,15 @@ flows are in [`MODULE_WORKFLOWS.md`](./MODULE_WORKFLOWS.md).
 - ✅ Full tenant data isolation: `institution_id` is enforced (`NOT NULL`) and
   every module scopes its queries to the caller's institution (`requireTenant`
   middleware), proven by cross-tenant integration tests.
-- ⬜ Global user-role management, system settings, backup & restore, global
-  audit-log viewer.
+- ✅ **Hardening** (`/api/v1/admin/*`, migration `0030`, super-admin-only):
+  global institution **settings** (name/type/status/contact + per-institution
+  **enabled modules & feature flags** in `settings`), **plan feature-limit**
+  enforcement (max students/staff, enforced on create) + usage view, a global
+  **audit-log viewer** (reads the Mongo audit trail, filterable, CSV export,
+  degrades gracefully), safe **data-export** (counts + metadata only — no
+  secrets) with history, a read-only **cross-tenant snapshot** ("switch"), and a
+  **system-health** summary.
+- ⬜ Global user-role management; scheduled backup/restore automation.
 
 ### 4.2 School / College Admin Panel — 🟡 Partial
 Dashboard ✅; academic-year/class/section/subject setup ✅; **department,

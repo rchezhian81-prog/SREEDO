@@ -11,6 +11,7 @@ import { auditLog } from "./middleware/audit";
 import { errorHandler, notFoundHandler } from "./middleware/error";
 import { apiRateLimiter } from "./middleware/rate-limit";
 import { academicsRouter } from "./modules/academics/academics.routes";
+import { adminConsoleRouter } from "./modules/adminconsole/adminconsole.routes";
 import { aiRouter } from "./modules/ai/ai.routes";
 import { announcementsRouter } from "./modules/announcements/announcements.routes";
 import { attendanceRouter } from "./modules/attendance/attendance.routes";
@@ -105,6 +106,7 @@ export function createApp(): express.Express {
   api.use("/fee-receipts", feeReceiptsRouter);
   api.use("/id-cards", idCardsRouter);
   api.use("/ai", aiRouter);
+  api.use("/admin", adminConsoleRouter); // super-admin platform console
   api.use("/", superAdminRouter); // /institutions, /branches, /packages
   app.use("/api/v1", api);
 
