@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { uuidParam } from "../../utils/params";
 import { authenticate, authorize } from "../../middleware/auth";
+import { requireTenant, tenantId } from "../../middleware/tenant";
 import { parsePagination } from "../../utils/pagination";
 import { accessibleStudentIds, assertStudentAccess } from "../../utils/scope";
 import {
@@ -13,7 +14,7 @@ import * as studentsService from "./students.service";
 
 export const studentsRouter = Router();
 
-studentsRouter.use(authenticate);
+studentsRouter.use(authenticate, requireTenant);
 
 /**
  * @openapi
@@ -60,6 +61,7 @@ studentsRouter.get("/", async (req, res) => {
   const result = await studentsService.listStudents(
     parsePagination(queryParams),
     queryParams,
+    tenantId(req),
     await accessibleStudentIds(req)
   );
   res.json(result);
@@ -67,7 +69,7 @@ studentsRouter.get("/", async (req, res) => {
 
 studentsRouter.post("/", authorize("admin"), async (req, res) => {
   const input = createStudentSchema.parse(req.body);
-  const student = await studentsService.createStudent(input);
+  const student = await studentsService.createStudent(input, tenantId(req));
   res.status(201).json(student);
 });
 
@@ -105,21 +107,21 @@ studentsRouter.post("/", authorize("admin"), async (req, res) => {
 studentsRouter.get("/:id", async (req, res) => {
   const id = uuidParam(req);
   assertStudentAccess(await accessibleStudentIds(req), id);
-  res.json(await studentsService.getStudent(id));
+  res.json(await studentsService.getStudent(id, tenantId(req)));
 });
 
 studentsRouter.patch("/:id", authorize("admin"), async (req, res) => {
   const input = updateStudentSchema.parse(req.body);
-  res.json(await studentsService.updateStudent(uuidParam(req), input));
+  res.json(await studentsService.updateStudent(uuidParam(req), input, tenantId(req)));
 });
 
 studentsRouter.delete("/:id", authorize("admin"), async (req, res) => {
   const { hard } = deleteStudentQuerySchema.parse(req.query);
   const id = uuidParam(req);
   if (hard) {
-    await studentsService.hardDeleteStudent(id);
+    await studentsService.hardDeleteStudent(id, tenantId(req));
   } else {
-    await studentsService.archiveStudent(id);
+    await studentsService.archiveStudent(id, tenantId(req));
   }
   res.status(204).end();
 });

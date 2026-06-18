@@ -2,6 +2,7 @@ import { Router } from "express";
 import { uuidParam } from "../../utils/params";
 import { z } from "zod";
 import { authenticate, authorize } from "../../middleware/auth";
+import { requireTenant, tenantId } from "../../middleware/tenant";
 import {
   accessibleStudentIds,
   assertStudentAccess,
@@ -12,7 +13,7 @@ import * as examsService from "./exams.service";
 
 export const examsRouter = Router();
 
-examsRouter.use(authenticate);
+examsRouter.use(authenticate, requireTenant);
 
 /**
  * @openapi
@@ -42,13 +43,13 @@ examsRouter.use(authenticate);
  *     responses:
  *       201: { description: Created exam }
  */
-examsRouter.get("/", async (_req, res) => {
-  res.json(await examsService.listExams());
+examsRouter.get("/", async (req, res) => {
+  res.json(await examsService.listExams(tenantId(req)));
 });
 
 examsRouter.post("/", authorize("admin"), async (req, res) => {
   const input = createExamSchema.parse(req.body);
-  res.status(201).json(await examsService.createExam(input));
+  res.status(201).json(await examsService.createExam(input, tenantId(req)));
 });
 
 /**
@@ -97,7 +98,9 @@ examsRouter.get("/:id/results", async (req, res) => {
   const { sectionId } = z
     .object({ sectionId: z.string().uuid().optional() })
     .parse(req.query);
-  res.json(await examsService.examResults(uuidParam(req), sectionId));
+  res.json(
+    await examsService.examResults(uuidParam(req), sectionId, tenantId(req))
+  );
 });
 
 examsRouter.post(
@@ -105,7 +108,9 @@ examsRouter.post(
   authorize("admin", "teacher"),
   async (req, res) => {
     const input = upsertResultsSchema.parse(req.body);
-    res.json(await examsService.upsertResults(uuidParam(req), input));
+    res.json(
+      await examsService.upsertResults(uuidParam(req), input, tenantId(req))
+    );
   }
 );
 
@@ -124,5 +129,5 @@ examsRouter.post(
 examsRouter.get("/students/:studentId/report", async (req, res) => {
   const studentId = uuidParam(req, "studentId");
   assertStudentAccess(await accessibleStudentIds(req), studentId);
-  res.json(await examsService.studentReport(studentId));
+  res.json(await examsService.studentReport(studentId, tenantId(req)));
 });

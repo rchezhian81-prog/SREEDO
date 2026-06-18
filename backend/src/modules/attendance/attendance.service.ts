@@ -4,19 +4,21 @@ import type { bulkMarkAttendanceSchema } from "./attendance.schema";
 
 export async function bulkMark(
   input: z.infer<typeof bulkMarkAttendanceSchema>,
-  markedBy: string
+  markedBy: string,
+  institutionId: string
 ) {
   return withTransaction(async (client) => {
     let upserted = 0;
     for (const record of input.records) {
       await client.query(
-        `INSERT INTO attendance_records (student_id, date, status, remarks, marked_by)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO attendance_records (institution_id, student_id, date, status, remarks, marked_by)
+         VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (student_id, date)
          DO UPDATE SET status = EXCLUDED.status,
                        remarks = EXCLUDED.remarks,
                        marked_by = EXCLUDED.marked_by`,
         [
+          institutionId,
           record.studentId,
           input.date,
           record.status,
@@ -30,16 +32,19 @@ export async function bulkMark(
   });
 }
 
-export async function listByDate(filters: {
-  sectionId?: string;
-  date?: string;
-}) {
+export async function listByDate(
+  filters: {
+    sectionId?: string;
+    date?: string;
+  },
+  institutionId: string
+) {
   const date = filters.date ?? new Date().toISOString().slice(0, 10);
-  const params: unknown[] = [date];
+  const params: unknown[] = [date, institutionId];
   let sectionFilter = "";
   if (filters.sectionId) {
     params.push(filters.sectionId);
-    sectionFilter = `AND s.section_id = $2`;
+    sectionFilter = `AND s.section_id = $${params.length}`;
   }
   const { rows } = await query(
     `SELECT s.id AS "studentId",
@@ -52,7 +57,7 @@ export async function listByDate(filters: {
      FROM students s
      LEFT JOIN attendance_records ar
        ON ar.student_id = s.id AND ar.date = $1
-     WHERE s.status = 'active' ${sectionFilter}
+     WHERE s.status = 'active' AND s.institution_id = $2 ${sectionFilter}
      ORDER BY s.first_name, s.last_name`,
     params
   );
@@ -61,10 +66,11 @@ export async function listByDate(filters: {
 
 export async function studentHistory(
   studentId: string,
-  range: { from?: string; to?: string }
+  range: { from?: string; to?: string },
+  institutionId: string
 ) {
-  const params: unknown[] = [studentId];
-  const conditions: string[] = ["student_id = $1"];
+  const params: unknown[] = [studentId, institutionId];
+  const conditions: string[] = ["student_id = $1", "institution_id = $2"];
   if (range.from) {
     params.push(range.from);
     conditions.push(`date >= $${params.length}`);

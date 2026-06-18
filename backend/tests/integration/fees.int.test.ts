@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";
-import { app, createUser, resetDb, tokenFor } from "./helpers";
+import {
+  app,
+  createInstitution,
+  createUser,
+  resetDb,
+  tokenFor,
+} from "./helpers";
 
 const ADMIN = { email: "admin@test.dev", password: "Passw0rd!" };
 const STUDENT = { email: "student@test.dev", password: "Passw0rd!" };
@@ -8,10 +14,12 @@ const STUDENT = { email: "student@test.dev", password: "Passw0rd!" };
 describe("invoice amount_paid lifecycle", () => {
   let token: string;
   let studentId: string;
+  let institutionId: string;
 
   beforeEach(async () => {
     await resetDb();
-    await createUser({ ...ADMIN, role: "admin" });
+    institutionId = await createInstitution();
+    await createUser({ ...ADMIN, role: "admin", institutionId });
     token = await tokenFor(ADMIN.email, ADMIN.password);
     const student = await request(app)
       .post("/api/v1/students")
@@ -65,7 +73,7 @@ describe("invoice amount_paid lifecycle", () => {
   });
 
   it("exposes the fee summary to staff only", async () => {
-    await createUser({ ...STUDENT, role: "student" });
+    await createUser({ ...STUDENT, role: "student", institutionId });
     const studentToken = await tokenFor(STUDENT.email, STUDENT.password);
 
     const denied = await request(app)

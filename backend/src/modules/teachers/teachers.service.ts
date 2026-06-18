@@ -30,13 +30,14 @@ async function nextEmployeeNo(): Promise<string> {
 
 export async function listTeachers(
   pagination: Pagination,
-  filters: { search?: string }
+  filters: { search?: string },
+  institutionId: string
 ) {
-  const params: unknown[] = [];
-  let where = "";
+  const params: unknown[] = [institutionId];
+  let where = "WHERE institution_id = $1";
   if (filters.search) {
     params.push(`%${filters.search}%`);
-    where = `WHERE (first_name ILIKE $1 OR last_name ILIKE $1 OR employee_no ILIKE $1)`;
+    where += ` AND (first_name ILIKE $${params.length} OR last_name ILIKE $${params.length} OR employee_no ILIKE $${params.length})`;
   }
   const countResult = await query<{ count: string }>(
     `SELECT count(*) FROM teachers ${where}`,
@@ -51,26 +52,28 @@ export async function listTeachers(
   return paginatedResponse(rows, Number(countResult.rows[0].count), pagination);
 }
 
-export async function getTeacher(id: string) {
+export async function getTeacher(id: string, institutionId: string) {
   const { rows } = await query(
-    `SELECT ${TEACHER_COLUMNS} FROM teachers WHERE id = $1`,
-    [id]
+    `SELECT ${TEACHER_COLUMNS} FROM teachers WHERE id = $1 AND institution_id = $2`,
+    [id, institutionId]
   );
   if (!rows[0]) throw ApiError.notFound("Teacher not found");
   return rows[0];
 }
 
 export async function createTeacher(
-  input: z.infer<typeof createTeacherSchema>
+  input: z.infer<typeof createTeacherSchema>,
+  institutionId: string
 ) {
   const employeeNo = input.employeeNo ?? (await nextEmployeeNo());
   const { rows } = await query(
     `INSERT INTO teachers (
-       employee_no, first_name, last_name, email, phone,
+       institution_id, employee_no, first_name, last_name, email, phone,
        qualification, specialization, joining_date
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING ${TEACHER_COLUMNS}`,
     [
+      institutionId,
       employeeNo,
       input.firstName,
       input.lastName,
@@ -98,7 +101,8 @@ const UPDATE_COLUMN_MAP: Record<string, string> = {
 
 export async function updateTeacher(
   id: string,
-  input: z.infer<typeof updateTeacherSchema>
+  input: z.infer<typeof updateTeacherSchema>,
+  institutionId: string
 ) {
   const sets: string[] = [];
   const params: unknown[] = [];
@@ -112,8 +116,10 @@ export async function updateTeacher(
   if (!sets.length) throw ApiError.badRequest("No fields to update");
 
   params.push(id);
+  params.push(institutionId);
   const { rows } = await query(
-    `UPDATE teachers SET ${sets.join(", ")} WHERE id = $${params.length}
+    `UPDATE teachers SET ${sets.join(", ")}
+     WHERE id = $${params.length - 1} AND institution_id = $${params.length}
      RETURNING ${TEACHER_COLUMNS}`,
     params
   );
@@ -121,7 +127,13 @@ export async function updateTeacher(
   return rows[0];
 }
 
-export async function removeTeacher(id: string): Promise<void> {
-  const { rowCount } = await query("DELETE FROM teachers WHERE id = $1", [id]);
+export async function removeTeacher(
+  id: string,
+  institutionId: string
+): Promise<void> {
+  const { rowCount } = await query(
+    "DELETE FROM teachers WHERE id = $1 AND institution_id = $2",
+    [id, institutionId]
+  );
   if (!rowCount) throw ApiError.notFound("Teacher not found");
 }

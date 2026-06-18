@@ -56,9 +56,9 @@ export async function seed(): Promise<void> {
 
   const year = new Date().getFullYear();
   const { rows: yearRows } = await query<{ id: string }>(
-    `INSERT INTO academic_years (name, start_date, end_date, is_current)
-     VALUES ($1, $2, $3, true) RETURNING id`,
-    [`${year}-${year + 1}`, `${year}-06-01`, `${year + 1}-04-30`]
+    `INSERT INTO academic_years (institution_id, name, start_date, end_date, is_current)
+     VALUES ($1, $2, $3, $4, true) RETURNING id`,
+    [institutionId, `${year}-${year + 1}`, `${year}-06-01`, `${year + 1}-04-30`]
   );
   const academicYearId = yearRows[0].id;
 
@@ -69,9 +69,9 @@ export async function seed(): Promise<void> {
   const teacherIds: string[] = [];
   for (const [no, first, last, email, specialization] of teacherSeed) {
     const { rows: teacherRows } = await query<{ id: string }>(
-      `INSERT INTO teachers (employee_no, first_name, last_name, email, specialization, joining_date)
-       VALUES ($1, $2, $3, $4, $5, CURRENT_DATE) RETURNING id`,
-      [no, first, last, email, specialization]
+      `INSERT INTO teachers (institution_id, employee_no, first_name, last_name, email, specialization, joining_date)
+       VALUES ($1, $2, $3, $4, $5, $6, CURRENT_DATE) RETURNING id`,
+      [institutionId, no, first, last, email, specialization]
     );
     teacherIds.push(teacherRows[0].id);
   }
@@ -79,14 +79,14 @@ export async function seed(): Promise<void> {
   const sectionIds: string[] = [];
   for (const grade of [1, 2]) {
     const { rows: classRows } = await query<{ id: string }>(
-      `INSERT INTO classes (name, grade_level) VALUES ($1, $2) RETURNING id`,
-      [`Grade ${grade}`, grade]
+      `INSERT INTO classes (institution_id, name, grade_level) VALUES ($1, $2, $3) RETURNING id`,
+      [institutionId, `Grade ${grade}`, grade]
     );
     for (const sectionName of ["A", "B"]) {
       const { rows: sectionRows } = await query<{ id: string }>(
-        `INSERT INTO sections (class_id, name, homeroom_teacher_id)
-         VALUES ($1, $2, $3) RETURNING id`,
-        [classRows[0].id, sectionName, teacherIds[grade - 1]]
+        `INSERT INTO sections (institution_id, class_id, name, homeroom_teacher_id)
+         VALUES ($1, $2, $3, $4) RETURNING id`,
+        [institutionId, classRows[0].id, sectionName, teacherIds[grade - 1]]
       );
       sectionIds.push(sectionRows[0].id);
     }
@@ -98,10 +98,10 @@ export async function seed(): Promise<void> {
     ["Science", "SCI"],
     ["Social Studies", "SOC"],
   ]) {
-    await query(`INSERT INTO subjects (name, code) VALUES ($1, $2)`, [
-      name,
-      code,
-    ]);
+    await query(
+      `INSERT INTO subjects (institution_id, name, code) VALUES ($1, $2, $3)`,
+      [institutionId, name, code]
+    );
   }
 
   const studentSeed: Array<[string, string, string, string]> = [
@@ -116,10 +116,11 @@ export async function seed(): Promise<void> {
   for (const [first, last, gender, guardian] of studentSeed) {
     await query(
       `INSERT INTO students (
-         admission_no, first_name, last_name, gender, section_id,
+         institution_id, admission_no, first_name, last_name, gender, section_id,
          guardian_name, guardian_phone
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [
+        institutionId,
         `ADM-${year}-${String(admission).padStart(4, "0")}`,
         first,
         last,
@@ -133,21 +134,22 @@ export async function seed(): Promise<void> {
   }
 
   await query(
-    `INSERT INTO fee_structures (name, academic_year_id, amount, frequency)
-     VALUES ('Term 1 Tuition', $1, 15000, 'term')`,
-    [academicYearId]
+    `INSERT INTO fee_structures (institution_id, name, academic_year_id, amount, frequency)
+     VALUES ($1, 'Term 1 Tuition', $2, 15000, 'term')`,
+    [institutionId, academicYearId]
   );
 
   await query(
-    `INSERT INTO announcements (title, body, audience, is_pinned, created_by)
+    `INSERT INTO announcements (institution_id, title, body, audience, is_pinned, created_by)
      VALUES (
+       $1,
        'Welcome to SRE EDU OS',
        'The school ERP is now live. Staff can sign in to manage students, attendance, exams and fees.',
        'all',
        true,
-       (SELECT id FROM users WHERE email = $1)
+       (SELECT id FROM users WHERE email = $2)
      )`,
-    [ADMIN_EMAIL]
+    [institutionId, ADMIN_EMAIL]
   );
 
   // Tag all seeded school data with the demo institution (multi-tenancy).

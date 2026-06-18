@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { uuidParam } from "../../utils/params";
 import { authenticate, authorize } from "../../middleware/auth";
+import { requireTenant, tenantId } from "../../middleware/tenant";
 import { parsePagination } from "../../utils/pagination";
 import {
   accessibleStudentIds,
@@ -17,7 +18,7 @@ import * as feesService from "./fees.service";
 
 export const feesRouter = Router();
 
-feesRouter.use(authenticate);
+feesRouter.use(authenticate, requireTenant);
 
 const billing = authorize("admin", "accountant");
 
@@ -50,13 +51,13 @@ const billing = authorize("admin", "accountant");
  *     responses:
  *       201: { description: Created fee structure }
  */
-feesRouter.get("/structures", async (_req, res) => {
-  res.json(await feesService.listFeeStructures());
+feesRouter.get("/structures", async (req, res) => {
+  res.json(await feesService.listFeeStructures(tenantId(req)));
 });
 
 feesRouter.post("/structures", billing, async (req, res) => {
   const input = createFeeStructureSchema.parse(req.body);
-  res.status(201).json(await feesService.createFeeStructure(input));
+  res.status(201).json(await feesService.createFeeStructure(input, tenantId(req)));
 });
 
 /**
@@ -98,6 +99,7 @@ feesRouter.get("/invoices", async (req, res) => {
   const result = await feesService.listInvoices(
     parsePagination(queryParams),
     { studentId: queryParams.studentId, status: queryParams.status },
+    tenantId(req),
     await accessibleStudentIds(req)
   );
   res.json(result);
@@ -105,7 +107,7 @@ feesRouter.get("/invoices", async (req, res) => {
 
 feesRouter.post("/invoices", billing, async (req, res) => {
   const input = createInvoiceSchema.parse(req.body);
-  res.status(201).json(await feesService.createInvoice(input));
+  res.status(201).json(await feesService.createInvoice(input, tenantId(req)));
 });
 
 /**
@@ -121,7 +123,7 @@ feesRouter.post("/invoices", billing, async (req, res) => {
  *       200: { description: Invoice with payments }
  */
 feesRouter.get("/invoices/:id", async (req, res) => {
-  const invoice = await feesService.getInvoice(uuidParam(req));
+  const invoice = await feesService.getInvoice(uuidParam(req), tenantId(req));
   assertStudentAccess(await accessibleStudentIds(req), invoice.studentId);
   res.json(invoice);
 });
@@ -153,7 +155,7 @@ feesRouter.get("/invoices/:id", async (req, res) => {
 feesRouter.post("/invoices/:id/payments", billing, async (req, res) => {
   const input = recordPaymentSchema.parse(req.body);
   res.json(
-    await feesService.recordPayment(uuidParam(req), input, req.user!.id)
+    await feesService.recordPayment(uuidParam(req), input, req.user!.id, tenantId(req))
   );
 });
 
@@ -169,5 +171,5 @@ feesRouter.post("/invoices/:id/payments", billing, async (req, res) => {
  */
 feesRouter.get("/summary", async (req, res) => {
   requireStaff(req); // school-wide totals are staff-only
-  res.json(await feesService.feeSummary());
+  res.json(await feesService.feeSummary(tenantId(req)));
 });

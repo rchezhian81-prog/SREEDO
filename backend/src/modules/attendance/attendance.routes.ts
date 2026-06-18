@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { uuidParam } from "../../utils/params";
 import { authenticate, authorize } from "../../middleware/auth";
+import { requireTenant, tenantId } from "../../middleware/tenant";
 import {
   accessibleStudentIds,
   assertStudentAccess,
@@ -15,7 +16,7 @@ import * as attendanceService from "./attendance.service";
 
 export const attendanceRouter = Router();
 
-attendanceRouter.use(authenticate);
+attendanceRouter.use(authenticate, requireTenant);
 
 /**
  * @openapi
@@ -57,12 +58,12 @@ attendanceRouter.use(authenticate);
 attendanceRouter.get("/", async (req, res) => {
   requireStaff(req); // section roster is staff-only
   const filters = attendanceQuerySchema.parse(req.query);
-  res.json(await attendanceService.listByDate(filters));
+  res.json(await attendanceService.listByDate(filters, tenantId(req)));
 });
 
 attendanceRouter.post("/", authorize("admin", "teacher"), async (req, res) => {
   const input = bulkMarkAttendanceSchema.parse(req.body);
-  res.json(await attendanceService.bulkMark(input, req.user!.id));
+  res.json(await attendanceService.bulkMark(input, req.user!.id, tenantId(req)));
 });
 
 /**
@@ -83,5 +84,7 @@ attendanceRouter.get("/students/:studentId", async (req, res) => {
   const studentId = uuidParam(req, "studentId");
   assertStudentAccess(await accessibleStudentIds(req), studentId);
   const range = studentAttendanceQuerySchema.parse(req.query);
-  res.json(await attendanceService.studentHistory(studentId, range));
+  res.json(
+    await attendanceService.studentHistory(studentId, range, tenantId(req))
+  );
 });

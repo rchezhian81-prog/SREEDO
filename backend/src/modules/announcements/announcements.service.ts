@@ -17,14 +17,16 @@ LEFT JOIN users u ON u.id = a.created_by`;
 
 export async function listAnnouncements(
   pagination: Pagination,
-  filters: { audience?: string }
+  filters: { audience?: string },
+  institutionId: string
 ) {
-  const params: unknown[] = [];
-  let where = "";
+  const params: unknown[] = [institutionId];
+  const conditions: string[] = ["a.institution_id = $1"];
   if (filters.audience && filters.audience !== "all") {
     params.push(filters.audience);
-    where = `WHERE a.audience IN ('all', $1)`;
+    conditions.push(`a.audience IN ('all', $${params.length})`);
   }
+  const where = `WHERE ${conditions.join(" AND ")}`;
   const countResult = await query<{ count: string }>(
     `SELECT count(*) FROM announcements a ${where}`,
     params
@@ -40,13 +42,15 @@ export async function listAnnouncements(
 
 export async function createAnnouncement(
   input: z.infer<typeof createAnnouncementSchema>,
-  createdBy: string
+  createdBy: string,
+  institutionId: string
 ) {
   const { rows } = await query<{ id: string }>(
-    `INSERT INTO announcements (title, body, audience, is_pinned, created_by)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO announcements (institution_id, title, body, audience, is_pinned, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING id`,
     [
+      institutionId,
       input.title,
       input.body,
       input.audience ?? "all",
@@ -54,13 +58,13 @@ export async function createAnnouncement(
       createdBy,
     ]
   );
-  return getAnnouncement(rows[0].id);
+  return getAnnouncement(rows[0].id, institutionId);
 }
 
-export async function getAnnouncement(id: string) {
+export async function getAnnouncement(id: string, institutionId: string) {
   const { rows } = await query(
-    `SELECT ${ANNOUNCEMENT_SELECT} WHERE a.id = $1`,
-    [id]
+    `SELECT ${ANNOUNCEMENT_SELECT} WHERE a.id = $1 AND a.institution_id = $2`,
+    [id, institutionId]
   );
   if (!rows[0]) throw ApiError.notFound("Announcement not found");
   return rows[0];
@@ -68,7 +72,8 @@ export async function getAnnouncement(id: string) {
 
 export async function updateAnnouncement(
   id: string,
-  input: z.infer<typeof updateAnnouncementSchema>
+  input: z.infer<typeof updateAnnouncementSchema>,
+  institutionId: string
 ) {
   const sets: string[] = [];
   const params: unknown[] = [];
@@ -88,17 +93,23 @@ export async function updateAnnouncement(
   if (!sets.length) throw ApiError.badRequest("No fields to update");
 
   params.push(id);
+  params.push(institutionId);
   const { rowCount } = await query(
-    `UPDATE announcements SET ${sets.join(", ")} WHERE id = $${params.length}`,
+    `UPDATE announcements SET ${sets.join(", ")}
+     WHERE id = $${params.length - 1} AND institution_id = $${params.length}`,
     params
   );
   if (!rowCount) throw ApiError.notFound("Announcement not found");
-  return getAnnouncement(id);
+  return getAnnouncement(id, institutionId);
 }
 
-export async function removeAnnouncement(id: string): Promise<void> {
-  const { rowCount } = await query("DELETE FROM announcements WHERE id = $1", [
-    id,
-  ]);
+export async function removeAnnouncement(
+  id: string,
+  institutionId: string
+): Promise<void> {
+  const { rowCount } = await query(
+    "DELETE FROM announcements WHERE id = $1 AND institution_id = $2",
+    [id, institutionId]
+  );
   if (!rowCount) throw ApiError.notFound("Announcement not found");
 }

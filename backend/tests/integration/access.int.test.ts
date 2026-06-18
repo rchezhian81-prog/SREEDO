@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";
-import { app, createUser, query, resetDb, tokenFor } from "./helpers";
+import {
+  app,
+  createInstitution,
+  createUser,
+  query,
+  resetDb,
+  tokenFor,
+} from "./helpers";
 
 const USERS = {
   admin: { email: "admin@test.dev", password: "Passw0rd!" },
@@ -12,13 +19,19 @@ const USERS = {
 describe("role-protected access & owner-scoping", () => {
   const tokens: Record<string, string> = {};
   let studentUserId: string;
+  let institutionId: string;
 
   beforeEach(async () => {
     await resetDb();
-    await createUser({ ...USERS.admin, role: "admin" });
-    await createUser({ ...USERS.teacher, role: "teacher" });
-    await createUser({ ...USERS.accountant, role: "accountant" });
-    const studentUser = await createUser({ ...USERS.student, role: "student" });
+    institutionId = await createInstitution();
+    await createUser({ ...USERS.admin, role: "admin", institutionId });
+    await createUser({ ...USERS.teacher, role: "teacher", institutionId });
+    await createUser({ ...USERS.accountant, role: "accountant", institutionId });
+    const studentUser = await createUser({
+      ...USERS.student,
+      role: "student",
+      institutionId,
+    });
     studentUserId = studentUser.id;
     for (const [key, creds] of Object.entries(USERS)) {
       tokens[key] = await tokenFor(creds.email, creds.password);
@@ -56,13 +69,14 @@ describe("role-protected access & owner-scoping", () => {
   it("scopes a student's reads to their own record", async () => {
     // One student linked to the student user, and one unrelated student.
     await query(
-      `INSERT INTO students (user_id, admission_no, first_name, last_name)
-       VALUES ($1, 'ADM-OWN-1', 'Own', 'Student')`,
-      [studentUserId]
+      `INSERT INTO students (institution_id, user_id, admission_no, first_name, last_name)
+       VALUES ($1, $2, 'ADM-OWN-1', 'Own', 'Student')`,
+      [institutionId, studentUserId]
     );
     await query(
-      `INSERT INTO students (admission_no, first_name, last_name)
-       VALUES ('ADM-OTHER-1', 'Other', 'Student')`
+      `INSERT INTO students (institution_id, admission_no, first_name, last_name)
+       VALUES ($1, 'ADM-OTHER-1', 'Other', 'Student')`,
+      [institutionId]
     );
 
     const asStudent = await request(app)
