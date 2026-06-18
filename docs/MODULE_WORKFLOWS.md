@@ -111,11 +111,21 @@ Deliverable **#5 Module-wise workflow**. Step-by-step flows for each module.
    resubmit + marks/remarks); parent monitors via the portal. Attachments use the
    protected, owner-scoped download route.
 
-## M. Library ⬜ (Phase D)
-1. Librarian adds **books** + copies (catalogue).
-2. **Issue** to member (student/staff) with due date → **return** → auto **fine**
-   if late.
-3. Member history + stock report.
+## M. Library ✅ (Phase D)
+1. Admin sets circulation **settings** (loan days, fine/day, max renewals, max
+   books/member) and builds the **catalogue**: categories → books → copies (each
+   copy tracked: available/issued/lost/damaged/retired; accession auto or manual).
+2. Register **members** (students — including college students — and staff).
+3. **Issue** a copy to a member (by copy or any available copy of a book) with a
+   due date; **renew** up to the limit; **return** marks the copy available (or
+   lost/damaged) and **auto-computes the late fine** (days overdue × rate).
+4. Fines can be **waived** (`library:fines`) or **posted to a student invoice**
+   in the Fees module. Member borrowing history is available to staff and,
+   owner-scoped, to the student/parent portal.
+5. Reports (in the Reports Center): book stock, issued, overdue, member history,
+   lost/damaged, fines. Permissions: `library:read|create|update|delete|issue|
+   return|fines|reports` — admin full; teacher read+reports; accountant
+   read+fines+reports. All tenant-scoped.
 
 ## N. Transport ⬜ (Phase D)
 1. Add **vehicles**, **drivers**, **routes** + stops.
@@ -137,10 +147,11 @@ Deliverable **#5 Module-wise workflow**. Step-by-step flows for each module.
 
 ## R. Reports 🟡
 1. Each module exposes list/summary views ✅ where built.
-2. ✅ A **Reports Center** offers 16 cross-module reports with filters and
+2. ✅ A **Reports Center** offers 22 cross-module reports with filters and
    **CSV/PDF export + print** (`/report-center`), permission-gated + tenant-scoped
    — incl. 6 **college** reports (departments, programs, semester students,
-   semester attendance, semester results, program fee dues).
+   semester attendance, semester results, program fee dues) and 6 **library**
+   reports (stock, issued, overdue, member history, lost/damaged, fines).
    *(⬜)* Scheduled reports + a **custom report builder** (saved definitions).
 
 ## S. College mode ✅ (Phase B)

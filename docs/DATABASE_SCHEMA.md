@@ -154,7 +154,11 @@ used when `institutions.type = 'college'`; the school flow is unaffected.
   `size`, `uploaded_by` (secure object-storage references).
 
 ### Phase D — Library, transport, hostel, inventory, payroll
-- **Library:** `books`, `book_copies`, `book_loans` (issue/return, fine).
+- **Library:** ✅ (migration `0024`, all tenant-scoped) `book_categories`,
+  `books` (isbn/author/publisher/edition/subject/language/rack), `book_copies`
+  (status available|issued|lost|damaged|retired, unique accession), `library_members`
+  (student or staff), `book_issues` (issue/return/renew, fine_amount + fine_status,
+  optional `invoice_id` → Fees), `library_settings` (loan days, fine/day, limits).
 - **Transport:** `vehicles`, `drivers`, `transport_routes`, `route_stops`,
   `student_transport` (allocation + fee mapping → invoices).
 - **Hostel:** `hostels`, `hostel_rooms`, `hostel_allocations` (+ fee → invoices).

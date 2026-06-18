@@ -194,9 +194,15 @@ Tenant + owner scoped; `homework:read|create|update|delete|submit|review` permis
   Tenant-scoped + owner-scoped; `communication:*` / `notifications:send` permissions.
 - ⬜ Threaded 1:1 messaging and scheduled campaigns.
 
-### 4.13 Library Management — ⬜ Planned (Phase D)
-Book master, issue/return, fine calculation, member (student/staff) history,
-stock report.
+### 4.13 Library Management — ✅ Built (Phase D)
+Catalogue (categories, book master with ISBN/author/publisher/edition/subject/
+language/rack, per-copy tracking with status available/issued/lost/damaged/
+retired), members (student/staff, college students included), issue/return/renew
+with configurable loan period + borrowing limit, **auto late-fine** calculation
+(per-day rate) that can be **waived** or **posted to a student invoice** (Fees
+module). 6 reports (stock, issued, overdue, member history, lost/damaged, fines).
+`library:*` permissions, tenant-scoped, with an owner-scoped portal history
+endpoint (migration `0024`).
 
 ### 4.14 Transport Management — ⬜ Planned (Phase D)
 Vehicles, drivers, routes, student allocation, fee mapping (→ Fees), route-wise

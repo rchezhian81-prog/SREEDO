@@ -474,3 +474,82 @@ export interface CollegeCgpa {
   totalCredits: number;
   perSemester: { semesterId: string; gpa: number | null }[];
 }
+
+// --- Library ---
+
+export interface LibrarySettings {
+  loanDays: number;
+  finePerDay: number;
+  maxRenewals: number;
+  maxBooksPerMember: number;
+}
+
+export interface BookCategory {
+  id: string;
+  name: string;
+  code: string | null;
+  bookCount: number;
+}
+
+export interface LibraryBook {
+  id: string;
+  title: string;
+  author: string | null;
+  isbn: string | null;
+  publisher: string | null;
+  edition: string | null;
+  subject: string | null;
+  language: string | null;
+  rackLocation: string | null;
+  categoryId: string | null;
+  categoryName: string | null;
+  totalCopies: number;
+  availableCopies: number;
+}
+
+export type BookCopyStatus =
+  | "available"
+  | "issued"
+  | "lost"
+  | "damaged"
+  | "retired";
+
+export interface BookCopy {
+  id: string;
+  accessionNumber: string | null;
+  barcode: string | null;
+  status: BookCopyStatus;
+}
+
+export interface LibraryBookDetail extends LibraryBook {
+  copies: BookCopy[];
+}
+
+export type LibraryMemberType = "student" | "staff";
+
+export interface LibraryMember {
+  id: string;
+  memberType: LibraryMemberType;
+  memberCode: string | null;
+  status: string;
+  studentId: string | null;
+  teacherId: string | null;
+  name: string;
+  identifier: string | null;
+  openLoans: number;
+}
+
+export interface LibraryHistoryRow {
+  id: string;
+  bookId: string;
+  title: string;
+  accessionNumber: string | null;
+  issueDate: string;
+  dueDate: string;
+  returnDate: string | null;
+  status: string;
+  renewedCount: number;
+  fineAmount: number | string | null;
+  fineStatus: string | null;
+  overdue: boolean;
+}

@@ -26,6 +26,7 @@ export interface Filters {
   programId?: string;
   semesterId?: string;
   departmentId?: string;
+  memberId?: string;
 }
 
 interface Report {
@@ -689,6 +690,202 @@ export const REPORTS: Record<string, Report> = {
           { key: "amountPaid", label: "Amount Paid" },
           { key: "outstanding", label: "Outstanding" },
           { key: "status", label: "Status" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  // --- Library (Phase D) reports — empty for institutions without a library. ---
+
+  library_stock: {
+    title: "Book Stock",
+    category: "Library",
+    permission: "library:reports",
+    run: async (f, inst) => {
+      const params: unknown[] = [inst];
+      const where = ["b.institution_id = $1"];
+      if (f.category) {
+        params.push(f.category);
+        where.push(`c.name = $${params.length}`);
+      }
+      const rows = await rowsOf(
+        `SELECT b.title, b.author, b.isbn, c.name AS category, b.rack_location AS "rack",
+                count(cp.id)::int AS total,
+                count(cp.id) FILTER (WHERE cp.status = 'available')::int AS available,
+                count(cp.id) FILTER (WHERE cp.status = 'issued')::int AS issued
+         FROM books b
+         LEFT JOIN book_categories c ON c.id = b.category_id
+         LEFT JOIN book_copies cp ON cp.book_id = b.id
+         WHERE ${where.join(" AND ")}
+         GROUP BY b.id, c.name ORDER BY b.title`,
+        params
+      );
+      return {
+        title: "Book Stock",
+        columns: [
+          { key: "title", label: "Title" },
+          { key: "author", label: "Author" },
+          { key: "isbn", label: "ISBN" },
+          { key: "category", label: "Category" },
+          { key: "rack", label: "Rack" },
+          { key: "total", label: "Total" },
+          { key: "available", label: "Available" },
+          { key: "issued", label: "Issued" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  library_issued: {
+    title: "Issued Books",
+    category: "Library",
+    permission: "library:reports",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT b.title, cp.accession_number AS "accessionNo",
+                COALESCE(s.first_name || ' ' || s.last_name, t.first_name || ' ' || t.last_name) AS member,
+                bi.member_id, bi.issue_date AS "issueDate", bi.due_date AS "dueDate"
+         FROM book_issues bi
+         JOIN books b ON b.id = bi.book_id
+         JOIN book_copies cp ON cp.id = bi.copy_id
+         JOIN library_members m ON m.id = bi.member_id
+         LEFT JOIN students s ON s.id = m.student_id
+         LEFT JOIN teachers t ON t.id = m.teacher_id
+         WHERE bi.institution_id = $1 AND bi.status = 'issued'
+         ORDER BY bi.due_date`,
+        [inst]
+      );
+      return {
+        title: "Issued Books",
+        columns: [
+          { key: "title", label: "Title" },
+          { key: "accessionNo", label: "Accession" },
+          { key: "member", label: "Member" },
+          { key: "issueDate", label: "Issued" },
+          { key: "dueDate", label: "Due" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  library_overdue: {
+    title: "Overdue Books",
+    category: "Library",
+    permission: "library:reports",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT b.title, cp.accession_number AS "accessionNo",
+                COALESCE(s.first_name || ' ' || s.last_name, t.first_name || ' ' || t.last_name) AS member,
+                bi.due_date AS "dueDate",
+                (CURRENT_DATE - bi.due_date) AS "daysOverdue"
+         FROM book_issues bi
+         JOIN books b ON b.id = bi.book_id
+         JOIN book_copies cp ON cp.id = bi.copy_id
+         JOIN library_members m ON m.id = bi.member_id
+         LEFT JOIN students s ON s.id = m.student_id
+         LEFT JOIN teachers t ON t.id = m.teacher_id
+         WHERE bi.institution_id = $1 AND bi.status = 'issued' AND bi.due_date < CURRENT_DATE
+         ORDER BY bi.due_date`,
+        [inst]
+      );
+      return {
+        title: "Overdue Books",
+        columns: [
+          { key: "title", label: "Title" },
+          { key: "accessionNo", label: "Accession" },
+          { key: "member", label: "Member" },
+          { key: "dueDate", label: "Due" },
+          { key: "daysOverdue", label: "Days Overdue" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  library_member_history: {
+    title: "Member Borrowing History",
+    category: "Library",
+    permission: "library:reports",
+    run: async (f, inst) => {
+      const columns: Col[] = [
+        { key: "title", label: "Title" },
+        { key: "accessionNo", label: "Accession" },
+        { key: "issueDate", label: "Issued" },
+        { key: "dueDate", label: "Due" },
+        { key: "returnDate", label: "Returned" },
+        { key: "status", label: "Status" },
+        { key: "fineAmount", label: "Fine" },
+      ];
+      if (!f.memberId) return { title: "Member Borrowing History", columns, rows: [] };
+      const rows = await rowsOf(
+        `SELECT b.title, cp.accession_number AS "accessionNo",
+                bi.issue_date AS "issueDate", bi.due_date AS "dueDate",
+                bi.return_date AS "returnDate", bi.status, bi.fine_amount AS "fineAmount"
+         FROM book_issues bi
+         JOIN books b ON b.id = bi.book_id
+         JOIN book_copies cp ON cp.id = bi.copy_id
+         WHERE bi.institution_id = $1 AND bi.member_id = $2
+         ORDER BY bi.issue_date DESC`,
+        [inst, f.memberId]
+      );
+      return { title: "Member Borrowing History", columns, rows };
+    },
+  },
+
+  library_lost_damaged: {
+    title: "Lost / Damaged Books",
+    category: "Library",
+    permission: "library:reports",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT b.title, cp.accession_number AS "accessionNo", cp.status
+         FROM book_copies cp JOIN books b ON b.id = cp.book_id
+         WHERE cp.institution_id = $1 AND cp.status IN ('lost', 'damaged')
+         ORDER BY cp.status, b.title`,
+        [inst]
+      );
+      return {
+        title: "Lost / Damaged Books",
+        columns: [
+          { key: "title", label: "Title" },
+          { key: "accessionNo", label: "Accession" },
+          { key: "status", label: "Status" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  library_fines: {
+    title: "Library Fines",
+    category: "Library",
+    permission: "library:reports",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT b.title,
+                COALESCE(s.first_name || ' ' || s.last_name, t.first_name || ' ' || t.last_name) AS member,
+                bi.fine_amount AS "fineAmount", bi.fine_status AS "fineStatus",
+                bi.return_date AS "returnDate"
+         FROM book_issues bi
+         JOIN books b ON b.id = bi.book_id
+         JOIN library_members m ON m.id = bi.member_id
+         LEFT JOIN students s ON s.id = m.student_id
+         LEFT JOIN teachers t ON t.id = m.teacher_id
+         WHERE bi.institution_id = $1 AND bi.fine_amount > 0
+         ORDER BY bi.return_date DESC NULLS LAST`,
+        [inst]
+      );
+      return {
+        title: "Library Fines",
+        columns: [
+          { key: "title", label: "Title" },
+          { key: "member", label: "Member" },
+          { key: "fineAmount", label: "Fine" },
+          { key: "fineStatus", label: "Status" },
+          { key: "returnDate", label: "Returned" },
         ],
         rows,
       };
