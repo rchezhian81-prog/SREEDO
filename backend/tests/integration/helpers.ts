@@ -10,6 +10,7 @@ export { query };
 export const app = createApp();
 
 const TABLES = [
+  "documents",
   "notification_log",
   "message_recipients",
   "messages",

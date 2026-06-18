@@ -14,6 +14,7 @@ const NAV = [
   { href: "/portal/attendance", label: "Attendance", icon: "🗓️" },
   { href: "/portal/timetable", label: "Timetable", icon: "📅" },
   { href: "/portal/reports", label: "Report Card", icon: "📄" },
+  { href: "/portal/documents", label: "Documents", icon: "📁" },
   { href: "/portal/fees", label: "Fees", icon: "💳" },
   { href: "/portal/announcements", label: "Notices", icon: "📣" },
   { href: "/portal/inbox", label: "Inbox", icon: "📨" },

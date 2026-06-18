@@ -49,6 +49,19 @@ export interface Paginated<T> {
   meta: { page: number; limit: number; total: number; totalPages: number };
 }
 
+export interface DocumentMeta {
+  id: string;
+  ownerType: string;
+  ownerId: string | null;
+  category: string;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  storageMode: string;
+  uploadedBy: string | null;
+  createdAt: string;
+}
+
 export interface Student {
   id: string;
   admissionNo: string;
