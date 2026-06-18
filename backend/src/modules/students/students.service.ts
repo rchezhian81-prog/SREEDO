@@ -1,5 +1,6 @@
 import { query } from "../../db/postgres";
 import { ApiError } from "../../utils/api-error";
+import { assertWithinPlanLimit } from "../../utils/plan-limits";
 import { paginatedResponse, type Pagination } from "../../utils/pagination";
 import type { z } from "zod";
 import type {
@@ -96,6 +97,7 @@ export async function createStudent(
   input: z.infer<typeof createStudentSchema>,
   institutionId: string
 ) {
+  await assertWithinPlanLimit(institutionId, "students");
   const admissionNo = input.admissionNo ?? (await nextAdmissionNo());
   const { rows } = await query<{ id: string }>(
     `INSERT INTO students (
