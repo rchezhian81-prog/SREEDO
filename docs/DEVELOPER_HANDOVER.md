@@ -195,8 +195,11 @@ Quality / robustness:
    revokes the whole family (`revoked_at`, migration `0010`).
 9. Money handled as JS `number` in places — fine for whole rupees, review
    if paise precision matters.
-10. No API integration tests — only unit tests on utils. Supertest against
-    the seeded compose stack would be the highest-value testing addition.
+10. ✅ **Done (2026-06-18).** Supertest **API integration tests** live in
+    `backend/tests/integration/` (auth/RBAC, owner-scoping, sequence numbering,
+    invoice `amount_paid` + overpay, Swagger gating). Run with
+    `npm run test:integration` (needs `DATABASE_URL`); CI runs them against a
+    Postgres service container.
 11. Mobile FCM token is obtained but never registered with the backend;
     there is no push-sending endpoint yet.
 12. `class_subjects` table exists but has no endpoints.

@@ -11,6 +11,8 @@ is indexed in `docs/PLANNING_INDEX.md`.
 ## Commands
 
 - Backend (`cd backend`): `npm run dev | typecheck | test | build | migrate | seed`
+  (`npm test` = unit only; `npm run test:integration` needs `DATABASE_URL` to a
+  disposable Postgres — runs Supertest API tests, migrating automatically)
 - Frontend (`cd frontend`): `npm run dev | build | typecheck`
 - Mobile (`cd mobile`): `flutter pub get && flutter analyze`
 - Full stack: `docker compose up --build` (web on :80, seeded admin

@@ -67,8 +67,8 @@ of E2E. Every PR must keep CI green.
 
 | Layer | Tooling | Scope | Status |
 |-------|---------|-------|--------|
-| **Unit** | Node test runner / Vitest | utils (jwt, password, pagination), service pure logic | ✅ 11 tests |
-| **API integration** | Supertest against seeded Compose Postgres | auth flow, RBAC denials, CRUD per module, fee overpay guard, attendance upsert idempotency, owner-scoping | ⬜ highest-value next addition (handover §10) |
+| **Unit** | Vitest | utils (jwt, password, pagination) | ✅ 11 tests (`npm test`) |
+| **API integration** | Supertest + real Postgres | auth/RBAC, owner-scoping, sequence numbering, invoice `amount_paid` + overpay, Swagger gating | ✅ 18 tests (`npm run test:integration`, in CI) |
 | **Contract** | Validate responses against the generated OpenAPI spec | drift between code and Swagger | ⬜ |
 | **Frontend** | React Testing Library (components), Playwright (E2E) | login → dashboard → create student → record payment | ⬜ |
 | **Mobile** | `flutter analyze` + `flutter test` | widget/provider tests | 🟡 analyze in CI; tests ⬜ |
