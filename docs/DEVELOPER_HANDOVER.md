@@ -176,16 +176,23 @@ Fix-before-production:
    (status `archived`, migration `0007`), preserving attendance/fee history;
    a true hard delete is gated behind `?hard=true`.
 4. **Tokens live in localStorage** (web). Acceptable for an internal staff
-   tool; migrate to httpOnly cookies before exposing a public portal.
-5. **Swagger UI is publicly reachable** — restrict at nginx in production.
+   tool; migrate to httpOnly cookies before exposing a public portal. *(Still
+   open — deliberately deferred to the public-portal phase.)*
+5. ✅ **Done (2026-06-18).** Swagger is **off in production by default**
+   (`ENABLE_API_DOCS`, gated on `NODE_ENV`); `infra/nginx/default.conf` shows
+   how to IP-allowlist it if you re-enable it.
 
 Quality / robustness:
 
-6. Admission/employee numbers use `count(*)+1` — racy under concurrency
-   (fails clean on the unique constraint, but switch to a sequence).
-7. Concurrent payments on one invoice can theoretically both pass the
-   overpay check (snapshot vs. row lock) — store `amount_paid` on invoices.
-8. Expired refresh tokens are never purged; no reuse detection.
+6. ✅ **Done (2026-06-18).** Admission/employee numbers come from atomic
+   Postgres **sequences** (migration `0009`); the seed re-syncs them past the
+   demo rows.
+7. ✅ **Done (2026-06-18).** Invoices store **`amount_paid`** (migration
+   `0008`), maintained under the payment row lock; listings read it directly
+   instead of re-summing payments.
+8. ✅ **Done (2026-06-18).** Refresh tokens are **purged** opportunistically on
+   login and rotation now does **reuse detection** — replaying a rotated token
+   revokes the whole family (`revoked_at`, migration `0010`).
 9. Money handled as JS `number` in places — fine for whole rupees, review
    if paise precision matters.
 10. No API integration tests — only unit tests on utils. Supertest against

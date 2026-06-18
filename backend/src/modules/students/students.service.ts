@@ -31,11 +31,11 @@ LEFT JOIN classes c ON c.id = sec.class_id`;
 
 async function nextAdmissionNo(): Promise<string> {
   const year = new Date().getFullYear();
-  const { rows } = await query<{ count: string }>(
-    "SELECT count(*) FROM students"
+  // Atomic sequence (migration 0009) — race-free unlike the old count(*)+1.
+  const { rows } = await query<{ nextval: string }>(
+    "SELECT nextval('student_admission_seq') AS nextval"
   );
-  const sequence = Number(rows[0].count) + 1;
-  return `ADM-${year}-${String(sequence).padStart(4, "0")}`;
+  return `ADM-${year}-${String(Number(rows[0].nextval)).padStart(4, "0")}`;
 }
 
 export async function listStudents(

@@ -49,10 +49,14 @@ export function createApp(): express.Express {
     });
   });
 
-  app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-  app.get("/api/docs.json", (_req, res) => {
-    res.json(swaggerSpec);
-  });
+  // Swagger is disabled in production by default (see env.enableApiDocs) so the
+  // API surface is not publicly browsable; set ENABLE_API_DOCS=true to expose it.
+  if (env.enableApiDocs) {
+    app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+    app.get("/api/docs.json", (_req, res) => {
+      res.json(swaggerSpec);
+    });
+  }
 
   const api = express.Router();
   api.use(apiRateLimiter);

@@ -54,6 +54,15 @@ async function issueTokens(user: UserRow): Promise<AuthTokens> {
   };
 }
 
+/** Housekeeping: drop expired tokens and revoked ones past the detection window. */
+async function purgeStaleRefreshTokens(): Promise<void> {
+  await query(
+    `DELETE FROM refresh_tokens
+     WHERE expires_at < now()
+        OR (revoked_at IS NOT NULL AND revoked_at < now() - interval '2 days')`
+  );
+}
+
 export async function login(
   email: string,
   password: string
@@ -70,24 +79,43 @@ export async function login(
   if (!valid) {
     throw ApiError.unauthorized("Invalid email or password");
   }
+  await purgeStaleRefreshTokens();
   return issueTokens(user);
 }
 
 export async function refresh(refreshToken: string): Promise<AuthTokens> {
   const tokenHash = hashRefreshToken(refreshToken);
-  const { rows } = await query<{ id: string; user_id: string; expires_at: Date }>(
-    "SELECT id, user_id, expires_at FROM refresh_tokens WHERE token_hash = $1",
+  const { rows } = await query<{
+    id: string;
+    user_id: string;
+    expires_at: Date;
+    revoked_at: Date | null;
+  }>(
+    "SELECT id, user_id, expires_at, revoked_at FROM refresh_tokens WHERE token_hash = $1",
     [tokenHash]
   );
   const stored = rows[0];
   if (!stored) {
     throw ApiError.unauthorized("Invalid refresh token");
   }
-  // Rotate: a refresh token is single-use.
-  await query("DELETE FROM refresh_tokens WHERE id = $1", [stored.id]);
+  // Reuse detection: an already-rotated (revoked) token being presented again
+  // signals theft — revoke every session for that user.
+  if (stored.revoked_at) {
+    await query("DELETE FROM refresh_tokens WHERE user_id = $1", [
+      stored.user_id,
+    ]);
+    throw ApiError.unauthorized(
+      "Refresh token reuse detected — please sign in again"
+    );
+  }
   if (new Date(stored.expires_at) < new Date()) {
+    await query("DELETE FROM refresh_tokens WHERE id = $1", [stored.id]);
     throw ApiError.unauthorized("Refresh token expired");
   }
+  // Rotate: mark this token revoked (retained briefly for reuse detection).
+  await query("UPDATE refresh_tokens SET revoked_at = now() WHERE id = $1", [
+    stored.id,
+  ]);
   const { rows: userRows } = await query<UserRow>(
     "SELECT * FROM users WHERE id = $1 AND is_active = true",
     [stored.user_id]

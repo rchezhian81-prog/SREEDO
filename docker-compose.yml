@@ -33,6 +33,7 @@ services:
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET in .env}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost}
       SEED_ON_START: ${SEED_ON_START:-false}
+      ENABLE_API_DOCS: ${ENABLE_API_DOCS:-false}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}

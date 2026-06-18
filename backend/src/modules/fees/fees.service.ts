@@ -18,15 +18,12 @@ const INVOICE_SELECT = `
   s.admission_no AS "admissionNo",
   i.description,
   i.amount_due AS "amountDue",
-  COALESCE(p.paid, 0) AS "amountPaid",
+  i.amount_paid AS "amountPaid",
   i.due_date AS "dueDate",
   i.status,
   i.created_at AS "createdAt"
 FROM invoices i
-JOIN students s ON s.id = i.student_id
-LEFT JOIN LATERAL (
-  SELECT sum(amount) AS paid FROM payments WHERE invoice_id = i.id
-) p ON true`;
+JOIN students s ON s.id = i.student_id`;
 
 function generateInvoiceNo(): string {
   const stamp = new Date().toISOString().slice(0, 10).replaceAll("-", "");
@@ -143,9 +140,10 @@ export async function recordPayment(
   receivedBy: string
 ) {
   const result = await withTransaction(async (client) => {
+    // Lock the invoice row so concurrent payments serialise on amount_paid.
     const { rows } = await client.query(
-      `SELECT i.*, COALESCE((SELECT sum(amount) FROM payments WHERE invoice_id = i.id), 0) AS paid
-       FROM invoices i WHERE i.id = $1 FOR UPDATE`,
+      `SELECT amount_due, amount_paid, status
+       FROM invoices WHERE id = $1 FOR UPDATE`,
       [invoiceId]
     );
     const invoice = rows[0];
@@ -154,7 +152,8 @@ export async function recordPayment(
       throw ApiError.badRequest("Cannot pay a cancelled invoice");
     }
 
-    const outstanding = Number(invoice.amount_due) - Number(invoice.paid);
+    const outstanding =
+      Number(invoice.amount_due) - Number(invoice.amount_paid);
     if (input.amount > outstanding) {
       throw ApiError.badRequest(
         `Payment exceeds outstanding balance of ${outstanding.toFixed(2)}`
@@ -167,13 +166,13 @@ export async function recordPayment(
       [invoiceId, input.amount, input.method ?? "cash", input.reference ?? null, receivedBy]
     );
 
-    const newPaid = Number(invoice.paid) + input.amount;
+    const newPaid = Number(invoice.amount_paid) + input.amount;
     const newStatus =
       newPaid >= Number(invoice.amount_due) ? "paid" : "partially_paid";
-    await client.query("UPDATE invoices SET status = $1 WHERE id = $2", [
-      newStatus,
-      invoiceId,
-    ]);
+    await client.query(
+      "UPDATE invoices SET amount_paid = $1, status = $2 WHERE id = $3",
+      [newPaid, newStatus, invoiceId]
+    );
     return { invoiceId, newStatus };
   });
 

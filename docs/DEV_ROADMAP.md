@@ -18,10 +18,10 @@ exams (API), announcements, AI assistant, Swagger, seed, Docker, CI, unit tests.
 
 ### Phase A — Foundation hardening & multi-tenancy 🟡 IN PROGRESS
 **Goal:** make the platform truly multi-institution and production-safe.
-1. **Security backlog (handover §8):** ✅ owner-scope read endpoints, ✅
-   soft-delete students — both done. Remaining: store `amount_paid` on invoices,
-   sequence-based admission/employee numbers, restrict Swagger in prod,
-   token-storage review.
+1. **Security backlog (handover §8):** ✅ owner-scoped reads, ✅ soft-delete
+   students, ✅ invoice `amount_paid`, ✅ sequence-based numbering, ✅ Swagger
+   off in production — all done. Remaining: httpOnly-cookie token storage
+   (deferred to the public-portal phase).
 2. **Permissions layer:** `permissions` + `role_permissions`,
    `requirePermission()`, seed the role matrix.
 3. **Multi-tenancy:** `institutions`/`branches`, add `institution_id` to

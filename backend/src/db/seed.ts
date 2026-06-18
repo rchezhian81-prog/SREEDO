@@ -121,6 +121,19 @@ export async function seed(): Promise<void> {
     [ADMIN_EMAIL]
   );
 
+  // Re-sync the numbering sequences past the literal numbers seeded above so
+  // records created later through the API never collide with them.
+  await query(
+    `SELECT setval('student_admission_seq',
+       (SELECT COALESCE(MAX(CAST(SUBSTRING(admission_no FROM '[0-9]+$') AS INTEGER)), 0)
+        FROM students), true)`
+  );
+  await query(
+    `SELECT setval('teacher_employee_seq',
+       (SELECT COALESCE(MAX(CAST(SUBSTRING(employee_no FROM '[0-9]+$') AS INTEGER)), 0)
+        FROM teachers), true)`
+  );
+
   console.log(`Seed complete — admin login: ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
 }
 
