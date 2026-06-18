@@ -75,10 +75,11 @@ exams (API), announcements, AI assistant, Swagger, seed, Docker, CI, unit tests.
 6. **AI advanced:** embeddings document search, attendance-risk alerts, fee/
    performance summaries.
 
-### Phase D — Operations modules + reporting ⬜
-Library · Transport · Hostel · Inventory · Payroll (each with fee/finance
-integration where relevant) · **Report Center** (cross-module export/print) ·
-**custom report builder**.
+### Phase D — Operations modules + reporting 🟡
+✅ **Reports Center** — 10 cross-module reports with filters + CSV/PDF export
+(migration `0022`, `/report-center`, permission-gated). Remaining: Library ·
+Transport · Hostel · Inventory · Payroll (each with fee/finance integration
+where relevant) · **custom report builder**.
 
 ### Phase E — Scale & polish ⬜
 Caching, read replicas if needed, background job queue, observability/metrics,

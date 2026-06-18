@@ -136,5 +136,6 @@ Deliverable **#5 Module-wise workflow**. Step-by-step flows for each module.
 
 ## R. Reports 🟡
 1. Each module exposes list/summary views ✅ where built.
-2. *(⬜)* A **Report Center** offers cross-module reports with **CSV/PDF export +
-   print**, plus a **custom report builder** (saved definitions).
+2. ✅ A **Reports Center** offers 10 cross-module reports with filters and
+   **CSV/PDF export + print** (`/report-center`), permission-gated + tenant-scoped.
+   *(⬜)* Scheduled reports + a **custom report builder** (saved definitions).
