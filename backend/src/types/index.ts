@@ -10,6 +10,7 @@ export interface AuthenticatedUser {
   id: string;
   email: string;
   role: UserRole;
+  institutionId: string | null;
 }
 
 declare global {

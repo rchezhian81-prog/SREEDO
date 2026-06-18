@@ -28,9 +28,11 @@ exams (API), announcements, AI assistant, Swagger, seed, Docker, CI, unit tests.
    users module is wired to it; remaining routes migrate from `authorize(...)`
    to `requirePermission(...)` incrementally.
 3. **Multi-tenancy:** 🟡 `institutions`/`branches`/`subscription_packages`/
-   `institution_subscriptions` tables + `super_admin` role shipped (migration
-   `0011`). Remaining: add `institution_id` to tenant-scoped tables (add →
-   backfill → NOT NULL → index → scope queries) + `tenant` middleware.
+   `institution_subscriptions` + `super_admin` role (migration `0011`); and the
+   **scoping foundation** — `institution_id` added, backfilled and indexed on all
+   tenant tables (migration `0013`), tenant context carried in the JWT and on
+   `/auth/me`, and seed tagging. Remaining: enforce `institution_id` filtering in
+   each module's queries, then set the columns `NOT NULL`.
 4. **Super Admin panel:** 🟡 backend CRUD **and the web console**
    (`/super-admin`: institutions, branches, packages, subscriptions) shipped.
    Remaining: global settings, backups, global audit-log viewer.

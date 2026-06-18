@@ -150,6 +150,34 @@ export async function seed(): Promise<void> {
     [ADMIN_EMAIL]
   );
 
+  // Tag all seeded school data with the demo institution (multi-tenancy).
+  const tenantTables = [
+    "students",
+    "teachers",
+    "academic_years",
+    "classes",
+    "sections",
+    "subjects",
+    "class_subjects",
+    "attendance_records",
+    "fee_structures",
+    "invoices",
+    "payments",
+    "exams",
+    "exam_results",
+    "announcements",
+  ];
+  for (const table of tenantTables) {
+    await query(
+      `UPDATE ${table} SET institution_id = $1 WHERE institution_id IS NULL`,
+      [institutionId]
+    );
+  }
+  await query(
+    `UPDATE users SET institution_id = $1 WHERE institution_id IS NULL AND role <> 'super_admin'`,
+    [institutionId]
+  );
+
   // Re-sync the numbering sequences past the literal numbers seeded above so
   // records created later through the API never collide with them.
   await query(

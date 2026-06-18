@@ -45,14 +45,31 @@ export async function createUser(opts: {
   password: string;
   role: UserRole;
   fullName?: string;
+  institutionId?: string | null;
 }): Promise<{ id: string }> {
   const passwordHash = await hashPassword(opts.password);
   const { rows } = await query<{ id: string }>(
-    `INSERT INTO users (email, password_hash, full_name, role)
-     VALUES ($1, $2, $3, $4) RETURNING id`,
-    [opts.email, passwordHash, opts.fullName ?? "Test User", opts.role]
+    `INSERT INTO users (email, password_hash, full_name, role, institution_id)
+     VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+    [
+      opts.email,
+      passwordHash,
+      opts.fullName ?? "Test User",
+      opts.role,
+      opts.institutionId ?? null,
+    ]
   );
   return rows[0];
+}
+
+/** Creates an institution directly and returns its id (test setup). */
+export async function createInstitution(code = "TEST"): Promise<string> {
+  const { rows } = await query<{ id: string }>(
+    `INSERT INTO institutions (name, code, type)
+     VALUES ($1, $2, 'school') RETURNING id`,
+    [`Institution ${code}`, code]
+  );
+  return rows[0].id;
 }
 
 /** Logs in and returns the access token, throwing on failure. */

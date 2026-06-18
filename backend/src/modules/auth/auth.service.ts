@@ -17,6 +17,7 @@ interface UserRow {
   role: UserRole;
   phone: string | null;
   is_active: boolean;
+  institution_id: string | null;
 }
 
 export interface AuthTokens {
@@ -35,6 +36,7 @@ async function issueTokens(user: UserRow): Promise<AuthTokens> {
     sub: user.id,
     email: user.email,
     role: user.role,
+    institutionId: user.institution_id ?? null,
   });
   const { token: refreshToken, tokenHash } = generateRefreshToken();
   await query(
@@ -135,7 +137,7 @@ export async function logout(refreshToken: string): Promise<void> {
 
 export async function getProfile(userId: string) {
   const { rows } = await query<UserRow>(
-    "SELECT id, email, full_name, role, phone, is_active FROM users WHERE id = $1",
+    "SELECT id, email, full_name, role, phone, is_active, institution_id FROM users WHERE id = $1",
     [userId]
   );
   const user = rows[0];
@@ -148,6 +150,7 @@ export async function getProfile(userId: string) {
     fullName: user.full_name,
     role: user.role,
     phone: user.phone,
+    institutionId: user.institution_id ?? null,
   };
 }
 
