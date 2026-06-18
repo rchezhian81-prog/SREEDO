@@ -23,6 +23,7 @@ import { feesRouter } from "./modules/fees/fees.routes";
 import { homeworkRouter } from "./modules/homework/homework.routes";
 import { feeReceiptsRouter, idCardsRouter } from "./modules/pdfs/pdfs.routes";
 import { portalRouter } from "./modules/portal/portal.routes";
+import { reportCenterRouter } from "./modules/reportcenter/reportcenter.routes";
 import { reportsRouter } from "./modules/reports/reports.routes";
 import { studentsRouter } from "./modules/students/students.routes";
 import { superAdminRouter } from "./modules/superadmin/superadmin.routes";
@@ -82,6 +83,7 @@ export function createApp(): express.Express {
   api.use("/dashboard", dashboardRouter);
   api.use("/portal", portalRouter);
   api.use("/reports", reportsRouter);
+  api.use("/report-center", reportCenterRouter);
   api.use("/communication", communicationRouter);
   api.use("/documents", documentsRouter);
   api.use("/homework", homeworkRouter);

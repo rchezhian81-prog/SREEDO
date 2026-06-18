@@ -215,8 +215,11 @@ salary reports. (Reuses staff records + finance patterns.)
 
 ### 4.19 Reports — 🟡 Partial
 - ✅ Dashboard KPIs, fee summary, per-student exam report, attendance views.
-- ⬜ Cross-module report center with **export (CSV/PDF) + print**, scheduled
-  reports, and a **custom report builder**. (See report list per module in
+- ✅ **Reports Center**: 10 cross-module reports (students, staff, attendance,
+  fee collection, fee dues, exam results, homework, communication, documents,
+  timetable) with filters and **CSV/PDF export + print**, permission-gated +
+  tenant-scoped (`reports:center:*` + per-area read permissions).
+- ⬜ Scheduled reports and a **custom report builder**. (See report list per module in
   [`MODULE_WORKFLOWS.md`](./MODULE_WORKFLOWS.md).)
 
 ### 4.20 Security — 🟡 Partial (see §6)

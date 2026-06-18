@@ -358,6 +358,19 @@ export interface TimetableEntry {
   roomName: string | null;
 }
 
+export interface ReportMeta {
+  key: string;
+  title: string;
+  category: string;
+  permission: string;
+}
+
+export interface ReportData {
+  title: string;
+  columns: { key: string; label: string }[];
+  rows: Record<string, unknown>[];
+}
+
 export interface DashboardStats {
   activeStudents: number;
   activeTeachers: number;
