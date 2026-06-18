@@ -18,6 +18,7 @@ const SCHOOL_NAV: NavItem[] = [
   { href: "/attendance", label: "Attendance", icon: "🗓️" },
   { href: "/exams", label: "Exams", icon: "📝" },
   { href: "/reports", label: "Reports", icon: "📄" },
+  { href: "/documents", label: "Documents", icon: "📁" },
   { href: "/fees", label: "Fees", icon: "💳" },
   { href: "/announcements", label: "Announcements", icon: "📣" },
   { href: "/communication", label: "Communication", icon: "📨" },
