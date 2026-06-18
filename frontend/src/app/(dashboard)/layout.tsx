@@ -7,15 +7,22 @@ import { api } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth-store";
 import { cx, Spinner } from "@/components/ui";
 
-const NAV_ITEMS = [
+const NAV_ITEMS: Array<{
+  href: string;
+  label: string;
+  icon: string;
+  adminOnly?: boolean;
+}> = [
   { href: "/dashboard", label: "Dashboard", icon: "📊" },
   { href: "/students", label: "Students", icon: "🎓" },
   { href: "/teachers", label: "Teachers", icon: "👩‍🏫" },
   { href: "/classes", label: "Classes", icon: "🏫" },
   { href: "/attendance", label: "Attendance", icon: "🗓️" },
+  { href: "/exams", label: "Exams", icon: "📝" },
   { href: "/fees", label: "Fees", icon: "💳" },
   { href: "/announcements", label: "Announcements", icon: "📣" },
   { href: "/assistant", label: "AI Assistant", icon: "✨" },
+  { href: "/users", label: "Users", icon: "👥", adminOnly: true },
 ];
 
 export default function DashboardLayout({
@@ -53,7 +60,9 @@ export default function DashboardLayout({
           <span className="font-semibold text-slate-900">SRE EDU OS</span>
         </div>
         <nav className="flex-1 space-y-1 p-3">
-          {NAV_ITEMS.map((item) => (
+          {NAV_ITEMS.filter(
+            (item) => !item.adminOnly || user?.role === "admin"
+          ).map((item) => (
             <Link
               key={item.href}
               href={item.href}

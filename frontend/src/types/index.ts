@@ -100,6 +100,50 @@ export interface Announcement {
   createdByName: string | null;
 }
 
+export interface Subject {
+  id: string;
+  name: string;
+  code: string;
+}
+
+export interface AcademicYear {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  isCurrent: boolean;
+}
+
+export interface Exam {
+  id: string;
+  name: string;
+  academicYearId: string | null;
+  academicYearName: string | null;
+  startDate: string | null;
+  endDate: string | null;
+}
+
+export interface ExamResultRow {
+  studentId: string;
+  firstName: string;
+  lastName: string;
+  admissionNo: string;
+  subjectName: string;
+  marksObtained: string;
+  maxMarks: string;
+  grade: string | null;
+}
+
+export interface AccountUser {
+  id: string;
+  email: string;
+  fullName: string;
+  role: UserRole;
+  phone: string | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
 export interface DashboardStats {
   activeStudents: number;
   activeTeachers: number;
