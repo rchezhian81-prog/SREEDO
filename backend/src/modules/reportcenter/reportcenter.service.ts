@@ -23,6 +23,9 @@ export interface Filters {
   category?: string;
   ownerType?: string;
   search?: string;
+  programId?: string;
+  semesterId?: string;
+  departmentId?: string;
 }
 
 interface Report {
@@ -466,6 +469,226 @@ export const REPORTS: Record<string, Report> = {
           { key: "subject", label: "Subject" },
           { key: "teacher", label: "Teacher" },
           { key: "room", label: "Room" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  // --- College (Phase B) reports — empty for school tenants. ---
+
+  college_departments: {
+    title: "Departments",
+    category: "College",
+    permission: "college:read",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT d.code, d.name,
+                CASE WHEN t.id IS NULL THEN NULL ELSE t.first_name || ' ' || t.last_name END AS head,
+                (SELECT count(*)::int FROM programs p WHERE p.department_id = d.id) AS programs
+         FROM departments d LEFT JOIN teachers t ON t.id = d.head_teacher_id
+         WHERE d.institution_id = $1 ORDER BY d.name`,
+        [inst]
+      );
+      return {
+        title: "Departments",
+        columns: [
+          { key: "code", label: "Code" },
+          { key: "name", label: "Department" },
+          { key: "head", label: "Head" },
+          { key: "programs", label: "Programs" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  college_programs: {
+    title: "Programs / Courses",
+    category: "College",
+    permission: "college:read",
+    run: async (f, inst) => {
+      const params: unknown[] = [inst];
+      const where = ["p.institution_id = $1"];
+      if (f.departmentId) {
+        params.push(f.departmentId);
+        where.push(`p.department_id = $${params.length}`);
+      }
+      const rows = await rowsOf(
+        `SELECT p.code, p.name, d.name AS department,
+                p.duration_semesters AS duration,
+                (SELECT count(*)::int FROM enrollments e WHERE e.program_id = p.id) AS students
+         FROM programs p JOIN departments d ON d.id = p.department_id
+         WHERE ${where.join(" AND ")} ORDER BY d.name, p.name`,
+        params
+      );
+      return {
+        title: "Programs / Courses",
+        columns: [
+          { key: "code", label: "Code" },
+          { key: "name", label: "Program" },
+          { key: "department", label: "Department" },
+          { key: "duration", label: "Semesters" },
+          { key: "students", label: "Students" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  college_semester_students: {
+    title: "Semester Students",
+    category: "College",
+    permission: "college:read",
+    run: async (f, inst) => {
+      const params: unknown[] = [inst];
+      const where = ["e.institution_id = $1"];
+      if (f.semesterId) {
+        params.push(f.semesterId);
+        where.push(`e.semester_id = $${params.length}`);
+      }
+      if (f.programId) {
+        params.push(f.programId);
+        where.push(`e.program_id = $${params.length}`);
+      }
+      const rows = await rowsOf(
+        `SELECT s.admission_no AS "admissionNo", s.first_name || ' ' || s.last_name AS name,
+                pr.name AS program, sem.name AS semester, e.status
+         FROM enrollments e
+         JOIN students s ON s.id = e.student_id
+         JOIN programs pr ON pr.id = e.program_id
+         LEFT JOIN semesters sem ON sem.id = e.semester_id
+         WHERE ${where.join(" AND ")} ORDER BY name`,
+        params
+      );
+      return {
+        title: "Semester Students",
+        columns: [
+          { key: "admissionNo", label: "Admission No" },
+          { key: "name", label: "Name" },
+          { key: "program", label: "Program" },
+          { key: "semester", label: "Semester" },
+          { key: "status", label: "Status" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  college_semester_attendance: {
+    title: "Semester Attendance",
+    category: "College",
+    permission: "college:read",
+    run: async (f, inst) => {
+      const columns: Col[] = [
+        { key: "admissionNo", label: "Admission No" },
+        { key: "name", label: "Name" },
+        { key: "present", label: "Present" },
+        { key: "absent", label: "Absent" },
+        { key: "late", label: "Late" },
+        { key: "total", label: "Total" },
+        { key: "rate", label: "Rate" },
+      ];
+      if (!f.semesterId) return { title: "Semester Attendance", columns, rows: [] };
+      const params: unknown[] = [inst, f.semesterId];
+      const joinConds = ["ar.student_id = s.id", "ar.institution_id = $1"];
+      if (f.dateFrom) {
+        params.push(f.dateFrom);
+        joinConds.push(`ar.date >= $${params.length}`);
+      }
+      if (f.dateTo) {
+        params.push(f.dateTo);
+        joinConds.push(`ar.date <= $${params.length}`);
+      }
+      const raw = await rowsOf(
+        `SELECT s.admission_no AS "admissionNo", s.first_name || ' ' || s.last_name AS name,
+                count(ar.id) FILTER (WHERE ar.status = 'present')::int AS present,
+                count(ar.id) FILTER (WHERE ar.status = 'absent')::int AS absent,
+                count(ar.id) FILTER (WHERE ar.status = 'late')::int AS late,
+                count(ar.id)::int AS total
+         FROM enrollments e
+         JOIN students s ON s.id = e.student_id
+         LEFT JOIN attendance_records ar ON ${joinConds.join(" AND ")}
+         WHERE e.institution_id = $1 AND e.semester_id = $2
+         GROUP BY s.id, s.admission_no, s.first_name, s.last_name
+         ORDER BY name`,
+        params
+      );
+      const rows = raw.map((r) => {
+        const total = Number(r.total);
+        const attended = Number(r.present) + Number(r.late);
+        return { ...r, rate: total > 0 ? `${Math.round((attended / total) * 100)}%` : "—" };
+      });
+      return { title: "Semester Attendance", columns, rows };
+    },
+  },
+
+  college_semester_results: {
+    title: "Semester Results",
+    category: "College",
+    permission: "college:read",
+    run: async (f, inst) => {
+      const columns: Col[] = [
+        { key: "admissionNo", label: "Admission No" },
+        { key: "name", label: "Name" },
+        { key: "subject", label: "Subject" },
+        { key: "marks", label: "Marks" },
+        { key: "max", label: "Max" },
+        { key: "grade", label: "Grade" },
+      ];
+      if (!f.semesterId) return { title: "Semester Results", columns, rows: [] };
+      const rows = await rowsOf(
+        `SELECT s.admission_no AS "admissionNo", s.first_name || ' ' || s.last_name AS name,
+                sub.name AS subject, er.marks_obtained AS marks, er.max_marks AS max, er.grade
+         FROM exam_results er
+         JOIN exams ex ON ex.id = er.exam_id
+         JOIN students s ON s.id = er.student_id
+         JOIN subjects sub ON sub.id = er.subject_id
+         WHERE er.institution_id = $1 AND ex.semester_id = $2
+         ORDER BY name, subject`,
+        [inst, f.semesterId]
+      );
+      return { title: "Semester Results", columns, rows };
+    },
+  },
+
+  college_fee_dues: {
+    title: "Program Fee Dues",
+    category: "College",
+    permission: "college:read",
+    run: async (f, inst) => {
+      const params: unknown[] = [inst];
+      const where = [
+        "i.institution_id = $1",
+        "i.status IN ('pending', 'partially_paid')",
+      ];
+      if (f.programId) {
+        params.push(f.programId);
+        where.push(`e.program_id = $${params.length}`);
+      }
+      const rows = await rowsOf(
+        `SELECT i.invoice_no AS "invoiceNo", s.first_name || ' ' || s.last_name AS student,
+                pr.name AS program,
+                i.amount_due AS "amountDue", i.amount_paid AS "amountPaid",
+                (i.amount_due - i.amount_paid) AS outstanding, i.status
+         FROM invoices i
+         JOIN students s ON s.id = i.student_id
+         JOIN enrollments e ON e.student_id = s.id AND e.institution_id = i.institution_id
+         JOIN programs pr ON pr.id = e.program_id
+         WHERE ${where.join(" AND ")}
+         ORDER BY i.due_date NULLS LAST`,
+        params
+      );
+      return {
+        title: "Program Fee Dues",
+        columns: [
+          { key: "invoiceNo", label: "Invoice" },
+          { key: "student", label: "Student" },
+          { key: "program", label: "Program" },
+          { key: "amountDue", label: "Amount Due" },
+          { key: "amountPaid", label: "Amount Paid" },
+          { key: "outstanding", label: "Outstanding" },
+          { key: "status", label: "Status" },
         ],
         rows,
       };

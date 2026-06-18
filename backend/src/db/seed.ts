@@ -224,21 +224,22 @@ export async function seed(): Promise<void> {
     );
   }
 
-  // Default grade scale for report cards (boundaries resolve to the higher grade).
-  const gradeBands: Array<[string, number, number, string, number]> = [
-    ["A+", 90, 100, "Outstanding", 1],
-    ["A", 80, 90, "Excellent", 2],
-    ["B", 70, 80, "Very Good", 3],
-    ["C", 60, 70, "Good", 4],
-    ["D", 50, 60, "Satisfactory", 5],
-    ["E", 35, 50, "Needs Improvement", 6],
-    ["F", 0, 35, "Fail", 7],
+  // Default grade scale for report cards (boundaries resolve to the higher
+  // grade). grade_point drives college GPA/CGPA on a 10-point scale.
+  const gradeBands: Array<[string, number, number, string, number, number]> = [
+    ["A+", 90, 100, "Outstanding", 1, 10],
+    ["A", 80, 90, "Excellent", 2, 9],
+    ["B", 70, 80, "Very Good", 3, 8],
+    ["C", 60, 70, "Good", 4, 7],
+    ["D", 50, 60, "Satisfactory", 5, 6],
+    ["E", 35, 50, "Needs Improvement", 6, 5],
+    ["F", 0, 35, "Fail", 7, 0],
   ];
-  for (const [grade, lo, hi, remark, order] of gradeBands) {
+  for (const [grade, lo, hi, remark, order, gp] of gradeBands) {
     await query(
-      `INSERT INTO grade_bands (institution_id, grade, min_percent, max_percent, remark, sort_order)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [institutionId, grade, lo, hi, remark, order]
+      `INSERT INTO grade_bands (institution_id, grade, min_percent, max_percent, remark, sort_order, grade_point)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [institutionId, grade, lo, hi, remark, order, gp]
     );
   }
 

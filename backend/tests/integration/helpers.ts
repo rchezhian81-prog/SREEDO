@@ -19,6 +19,13 @@ const TABLES = [
   "device_tokens",
   "grade_bands",
   "guardians",
+  "staff_allocations",
+  "enrollments",
+  "program_subjects",
+  "batches",
+  "semesters",
+  "programs",
+  "departments",
   "timetable_entries",
   "periods",
   "rooms",
@@ -75,11 +82,14 @@ export async function createUser(opts: {
 }
 
 /** Creates an institution directly and returns its id (test setup). */
-export async function createInstitution(code = "TEST"): Promise<string> {
+export async function createInstitution(
+  code = "TEST",
+  type: "school" | "college" = "school"
+): Promise<string> {
   const { rows } = await query<{ id: string }>(
     `INSERT INTO institutions (name, code, type)
-     VALUES ($1, $2, 'school') RETURNING id`,
-    [`Institution ${code}`, code]
+     VALUES ($1, $2, $3) RETURNING id`,
+    [`Institution ${code}`, code, type]
   );
   return rows[0].id;
 }

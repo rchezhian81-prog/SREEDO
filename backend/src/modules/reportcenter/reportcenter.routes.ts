@@ -39,6 +39,9 @@ function parseFilters(q: Request["query"]): Filters {
     category: s(q.category),
     ownerType: s(q.ownerType),
     search: s(q.search),
+    programId: s(q.programId),
+    semesterId: s(q.semesterId),
+    departmentId: s(q.departmentId),
   };
 }
 

@@ -117,9 +117,23 @@ multi-tenancy.
 - *(Add `institution_id`/`branch_id` columns to existing tenant-scoped tables.)*
 
 ### Phase B — College mode + timetables
-- **departments** — `id`, `institution_id`, `name`, `code`.
-- **courses** (programs) — `id`, `department_id`, `name`, `code`, `duration`.
-- **semesters** — `id`, `academic_year_id`, `course_id`, `number`, dates.
+College tables (migration `0023`) are all tenant-scoped (`institution_id`) and
+used when `institutions.type = 'college'`; the school flow is unaffected.
+- **departments** ✅ — `id`, `institution_id`, `name`, `code`, `head_teacher_id`.
+- **programs** (courses) ✅ — `id`, `institution_id`, `department_id`, `name`,
+  `code`, `duration_semesters`.
+- **batches** ✅ — `id`, `institution_id`, `program_id`, `name`, `start_year`.
+- **semesters** ✅ — `id`, `institution_id`, `program_id`, `name`, `number`,
+  `academic_year_id`, dates.
+- **program_subjects** ✅ — `id`, `institution_id`, `program_id`, `semester_id?`,
+  `subject_id`, `credits` (drives GPA/CGPA weighting).
+- **enrollments** ✅ — `id`, `institution_id`, `student_id`, `program_id`,
+  `semester_id?`, `batch_id?`, `status`.
+- **staff_allocations** ✅ — `id`, `institution_id`, `teacher_id`,
+  `department_id?`, `program_id?`, `subject_id?`.
+- Additive college columns: `exams.semester_id`, `fee_structures.program_id` +
+  `fee_structures.semester_id`, `grade_bands.grade_point`,
+  `timetable_entries.semester_id` (section_id now nullable, one-of check).
 - **rooms** — `id`, `branch_id`, `name`, `capacity`, `type`.
 - **periods** — `id`, `name`, `start_time`, `end_time`.
 - **timetable_slots** — `id`, `section_id`, `period_id`, `day_of_week`,

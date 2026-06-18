@@ -87,9 +87,11 @@ The platform supports both via an **institution `type` + academic-term model**:
 | Promotion | Grade level → next | Semester progression |
 
 > **Today:** the academic model (`academic_years`, `classes`, `sections`,
-> `subjects`, `class_subjects`) covers **school mode**. College mode adds
-> `departments`, `courses/programs`, and `semesters` (planned, Phase B) — the
-> same students/exams/fees engines reuse them.
+> `subjects`, `class_subjects`) covers **school mode**. College mode (✅ Phase B,
+> migration `0023`) adds `departments`, `programs/courses`, `semesters`,
+> `batches`, `program_subjects` (with credits), `enrollments`, and
+> `staff_allocations` — the same students/exams/fees engines reuse them, and an
+> institution switches modes via its `type`.
 
 ## 4. Functional modules (the 20)
 
@@ -110,7 +112,8 @@ flows are in [`MODULE_WORKFLOWS.md`](./MODULE_WORKFLOWS.md).
 
 ### 4.2 School / College Admin Panel — 🟡 Partial
 Dashboard ✅; academic-year/class/section/subject setup ✅; **department,
-course, semester setup ⬜**; staff management 🟡; student management 🟡; parent
+program/course, semester, enrollment & staff-allocation setup ✅ (college mode)**;
+staff management 🟡; student management 🟡; parent
 management ⬜; fee structure setup ✅; transport/hostel/exam setup 🟡/⬜;
 reports 🟡.
 
@@ -159,7 +162,10 @@ server-side. Homework/results detail and study materials remain ⬜.
   PDF** (per student) and printable **mark-sheet PDF** (per section), generated
   with pdfkit from the exam results. Owner-scoped downloads (student→self,
   parent→linked child) + `report_cards:*` / `mark_sheets:export` permissions.
-- ⬜ Weighted/CGPA computation and subject-wise analytics screens.
+- ✅ **College GPA/CGPA foundation** — semester-tagged exams + credit-weighted
+  grade points (`grade_bands.grade_point` × `program_subjects.credits`) compute
+  a per-semester GPA and cumulative CGPA, exposed owner-scoped via
+  `/college/students/:id/...`. ⬜ Subject-wise analytics screens.
 
 ### 4.10 Timetable Management — ✅ Built (Phase B)
 Period & room masters, per-section timetable entries (subject/teacher/room per

@@ -41,9 +41,16 @@ exams (API), announcements, AI assistant, Swagger, seed, Docker, CI, unit tests.
 5. ✅ **MVP UI gaps filled:** Exams & Results page and Users/account-management
    page shipped.
 
-### Phase B — Academic depth (college mode + timetables) ⬜
-1. **College mode:** departments, courses/programs, semesters; make
-   term/semester configurable per institution `type`.
+### Phase B — Academic depth (college mode + timetables) ✅
+1. **College mode:** ✅ departments, programs/courses, semesters, academic
+   batches, course-/semester-wise subjects (with credits), student enrollment,
+   and staff allocation (migration `0023`) — tenant-scoped, permission-guarded
+   (`college:*`, `departments:*`, `programs:*`, `semesters:*`). Semester-tagged
+   exams + a **GPA/CGPA** foundation (grade-band `grade_point`, credit-weighted)
+   with owner-scoped student semester-result / CGPA views. Institutions switch
+   between school and college mode per `type` (school flow unchanged); web UI
+   shipped (`/college`). Additive, school-safe columns on `exams`,
+   `fee_structures`, `grade_bands`, and `timetable_entries`.
 2. **Timetable:** ✅ period & room masters, per-section timetable entries,
    teacher/room/section **conflict checking** (service 409s + race-safe partial
    unique indexes, migration `0015`), teacher-timetable view, CSV export, and
