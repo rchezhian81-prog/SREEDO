@@ -250,7 +250,9 @@ All 11 requirements from the brief, with status:
 5. **Input validation** ✅ — zod schemas on every request body/query.
 6. **Password hashing** ✅ — bcrypt; all sessions revoked on password change.
 7. **Audit logs** ✅ — mutating requests logged to MongoDB when connected.
-8. **Secure file uploads** ⬜ — object-storage adapter with type/size validation (Phase C).
+8. **Secure file uploads** ✅ — S3-compatible object-storage adapter (local-disk
+   fallback for dev), MIME+extension+size validation, safe generated names, and a
+   protected owner-scoped download route (private storage keys never exposed).
 9. **API validation** ✅ — schema validation + central error envelope.
 10. **HTTPS/SSL ready** ✅ — nginx reverse proxy; certbot steps documented.
 11. **Backup strategy** 🟡 — documented (nightly `pg_dump` off-box); automation ⬜.

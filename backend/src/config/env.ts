@@ -60,6 +60,16 @@ export const env = {
   // Firebase Cloud Messaging (push); degrades to no-op when unset.
   fcmServerKey: optional("FCM_SERVER_KEY"),
 
+  // Object storage (S3-compatible). When unset, files fall back to local disk
+  // (development only). No credentials are hardcoded.
+  storageEndpoint: optional("STORAGE_ENDPOINT"),
+  storageRegion: process.env.STORAGE_REGION ?? "us-east-1",
+  storageBucket: optional("STORAGE_BUCKET"),
+  storageAccessKey: optional("STORAGE_ACCESS_KEY"),
+  storageSecretKey: optional("STORAGE_SECRET_KEY"),
+  storageLocalDir: process.env.STORAGE_LOCAL_DIR ?? "uploads",
+  storageMaxMb: Number(process.env.STORAGE_MAX_MB ?? 10),
+
   seedOnStart: process.env.SEED_ON_START === "true",
 
   // API docs (Swagger) default off in production; override with ENABLE_API_DOCS.

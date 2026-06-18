@@ -17,6 +17,7 @@ import { attendanceRouter } from "./modules/attendance/attendance.routes";
 import { authRouter } from "./modules/auth/auth.routes";
 import { communicationRouter } from "./modules/communication/communication.routes";
 import { dashboardRouter } from "./modules/dashboard/dashboard.routes";
+import { documentsRouter } from "./modules/documents/documents.routes";
 import { examsRouter } from "./modules/exams/exams.routes";
 import { feesRouter } from "./modules/fees/fees.routes";
 import { portalRouter } from "./modules/portal/portal.routes";
@@ -80,6 +81,7 @@ export function createApp(): express.Express {
   api.use("/portal", portalRouter);
   api.use("/reports", reportsRouter);
   api.use("/communication", communicationRouter);
+  api.use("/documents", documentsRouter);
   api.use("/ai", aiRouter);
   api.use("/", superAdminRouter); // /institutions, /branches, /packages
   app.use("/api/v1", api);

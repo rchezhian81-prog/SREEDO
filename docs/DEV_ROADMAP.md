@@ -53,7 +53,11 @@ exams (API), announcements, AI assistant, Swagger, seed, Docker, CI, unit tests.
    owner-scoped, permission-guarded, with a staff Reports page + portal download.
 
 ### Phase C — Engagement (portals, homework, comms, AI+) ⬜
-1. **Object storage** adapter + secure uploads (documents, photos, attachments).
+1. **Object storage** ✅ — S3-compatible adapter (local-disk fallback), document
+   metadata table (migration `0019`), validated/safe-named uploads, protected
+   owner-scoped downloads, `documents:*` + `institution:logo:update` permissions,
+   and upload/list/download/delete UI (staff + portal). ID-card/photo/cert/TC +
+   message-attachment foundations included.
 2. **PDFs:** ✅ **report cards** + **mark sheets** (pdfkit) shipped; remaining: fee
    **receipts**, ID cards, transfer certificates.
 3. **Communication:** ✅ in-app messaging (audience targeting + read/unread inbox),
