@@ -156,9 +156,20 @@ Deliverable **#5 Module-wise workflow**. Step-by-step flows for each module.
    read+reports; accountant read+fees+reports. Tenant-scoped; the portal exposes a
    student's own allocation (owner-scoped).
 
-## P. Inventory ⬜ (Phase D)
-1. Add **items** + **vendors**; record **purchases** (stock in).
-2. Record **issues** (stock out); stock-level report.
+## P. Inventory ✅ (Phase D)
+1. Define **item categories**, **items** (unit, opening/min stock, location), and
+   **vendors**. Record **purchases** (stock-in, multi-line, optional document
+   attachment) — stock increases.
+2. **Issue** stock (stock-out) to department/staff/student/event — stock
+   decreases and **insufficient stock is rejected**. **Adjust** stock
+   (damage/lost/correction, signed) with a non-negative guard.
+3. `current_stock` is an authoritative running balance updated transactionally;
+   every change writes a **stock-movements** ledger row (change + resulting
+   balance) for audit. Reports (Reports Center): stock register, low stock,
+   purchases, issues, vendor-wise purchases, item movement history, damaged/lost.
+   Permissions: `inventory:read|create|update|delete|purchase|issue|adjust|
+   reports` — admin full; accountant read+purchase+reports; teacher read+reports.
+   Tenant-scoped.
 
 ## Q. Payroll ⬜ (Phase D)
 1. Define **salary structures** (allowances/deductions).
@@ -167,11 +178,11 @@ Deliverable **#5 Module-wise workflow**. Step-by-step flows for each module.
 
 ## R. Reports 🟡
 1. Each module exposes list/summary views ✅ where built.
-2. ✅ A **Reports Center** offers 35 cross-module reports with filters and
+2. ✅ A **Reports Center** offers 42 cross-module reports with filters and
    **CSV/PDF export + print** (`/report-center`), permission-gated + tenant-scoped
-   — incl. 6 **college**, 6 **library**, 7 **transport**, and 6 **hostel** reports
-   (hostel students, room allocation, occupancy/vacancy, fee dues, vacated
-   history, maintenance rooms).
+   — incl. 6 **college**, 6 **library**, 7 **transport**, 6 **hostel**, and 7
+   **inventory** reports (stock register, low stock, purchases, issues, vendor-wise
+   purchases, item movement history, damaged/lost).
    *(⬜)* Scheduled reports + a **custom report builder** (saved definitions).
 
 ## S. College mode ✅ (Phase B)

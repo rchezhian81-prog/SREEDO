@@ -83,19 +83,21 @@ exams (API), announcements, AI assistant, Swagger, seed, Docker, CI, unit tests.
    performance summaries.
 
 ### Phase D — Operations modules + reporting 🟡
-✅ **Reports Center** — 35 cross-module reports with filters + CSV/PDF export
+✅ **Reports Center** — 42 cross-module reports with filters + CSV/PDF export
 (migration `0022`, `/report-center`, permission-gated; includes 6 college, 6
-library, 7 transport, 6 hostel reports). ✅ **Library Management** — catalogue,
-members, issue/return/renew with auto late-fines (→ Fees), settings, 6 reports
-(migration `0024`, `/library`). ✅ **Transport Management** — vehicle & driver
-masters (expiry tracking), routes + stops, student allocation, route-/stop-level
-fee mapping with idempotent **invoice generation** (→ Fees), trip-log foundation,
-7 reports (migration `0025`, `/transport`). ✅ **Hostel Management** — hostels,
-blocks & rooms (capacity/status), student allocation with capacity enforcement +
-**room transfer/vacate**, hostel-/room-type fee mapping with idempotent invoice
-generation (→ Fees), and 6 reports (migration `0026`, `/hostel`, `hostel:*`,
-tenant-scoped, owner-scoped portal allocation). Remaining: Inventory · Payroll
-(each with fee/finance integration where relevant) · **custom report builder**.
+library, 7 transport, 6 hostel, 7 inventory reports). ✅ **Library Management** —
+catalogue, members, issue/return/renew with auto late-fines (→ Fees), settings, 6
+reports (migration `0024`). ✅ **Transport Management** — vehicle & driver masters
+(expiry tracking), routes + stops, student allocation, fee mapping with idempotent
+**invoice generation** (→ Fees), trip-log foundation, 7 reports (migration `0025`).
+✅ **Hostel Management** — hostels, blocks & rooms, student allocation with
+capacity enforcement + **room transfer/vacate**, fee mapping with invoice
+generation (→ Fees), 6 reports (migration `0026`). ✅ **Inventory Management** —
+item categories, items, vendors; **purchases (stock-in)**, **issues (stock-out,
+insufficient-stock guard)**, **adjustments** (damage/lost/correction); an
+authoritative `current_stock` + **stock-movements audit ledger**; 7 reports
+(migration `0027`, `/inventory`, `inventory:*`, tenant-scoped). Remaining: Payroll
+(needs staff attendance + leave first) · **custom report builder**.
 
 ### Phase E — Scale & polish ⬜
 Caching, read replicas if needed, background job queue, observability/metrics,

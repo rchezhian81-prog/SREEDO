@@ -31,6 +31,8 @@ export interface Filters {
   stopId?: string;
   hostelId?: string;
   roomId?: string;
+  itemId?: string;
+  vendorId?: string;
 }
 
 interface Report {
@@ -1351,6 +1353,229 @@ export const REPORTS: Record<string, Report> = {
           { key: "room", label: "Room" },
           { key: "roomType", label: "Type" },
           { key: "status", label: "Status" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  // --- Inventory (Phase D) reports — empty without inventory set up. ---
+
+  inventory_stock_register: {
+    title: "Stock Register",
+    category: "Inventory",
+    permission: "inventory:reports",
+    run: async (f, inst) => {
+      const params: unknown[] = [inst];
+      const where = ["i.institution_id = $1"];
+      if (f.category) {
+        params.push(f.category);
+        where.push(`c.name = $${params.length}`);
+      }
+      const rows = await rowsOf(
+        `SELECT i.code, i.name, c.name AS category, i.unit,
+                i.opening_stock AS "opening", i.current_stock AS "current",
+                i.min_stock_level AS "minLevel", i.location
+         FROM inventory_items i LEFT JOIN item_categories c ON c.id = i.category_id
+         WHERE ${where.join(" AND ")} ORDER BY i.name`,
+        params
+      );
+      return {
+        title: "Stock Register",
+        columns: [
+          { key: "code", label: "Code" },
+          { key: "name", label: "Item" },
+          { key: "category", label: "Category" },
+          { key: "unit", label: "Unit" },
+          { key: "opening", label: "Opening" },
+          { key: "current", label: "Current" },
+          { key: "minLevel", label: "Min" },
+          { key: "location", label: "Location" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  inventory_low_stock: {
+    title: "Low Stock",
+    category: "Inventory",
+    permission: "inventory:reports",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT i.code, i.name, i.unit, i.current_stock AS "current", i.min_stock_level AS "minLevel"
+         FROM inventory_items i
+         WHERE i.institution_id = $1 AND i.current_stock <= i.min_stock_level
+         ORDER BY i.name`,
+        [inst]
+      );
+      return {
+        title: "Low Stock",
+        columns: [
+          { key: "code", label: "Code" },
+          { key: "name", label: "Item" },
+          { key: "unit", label: "Unit" },
+          { key: "current", label: "Current" },
+          { key: "minLevel", label: "Min" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  inventory_purchases: {
+    title: "Purchases",
+    category: "Inventory",
+    permission: "inventory:reports",
+    run: async (f, inst) => {
+      const params: unknown[] = [inst];
+      const where = ["p.institution_id = $1"];
+      if (f.vendorId) {
+        params.push(f.vendorId);
+        where.push(`p.vendor_id = $${params.length}`);
+      }
+      if (f.dateFrom) {
+        params.push(f.dateFrom);
+        where.push(`p.purchase_date >= $${params.length}`);
+      }
+      if (f.dateTo) {
+        params.push(f.dateTo);
+        where.push(`p.purchase_date <= $${params.length}`);
+      }
+      const rows = await rowsOf(
+        `SELECT p.purchase_date AS date, v.name AS vendor, p.bill_no AS "billNo",
+                it.name AS item, pi.quantity, pi.rate, pi.amount
+         FROM purchase_items pi
+         JOIN purchases p ON p.id = pi.purchase_id
+         JOIN inventory_items it ON it.id = pi.item_id
+         LEFT JOIN vendors v ON v.id = p.vendor_id
+         WHERE ${where.join(" AND ")}
+         ORDER BY p.purchase_date DESC`,
+        params
+      );
+      return {
+        title: "Purchases",
+        columns: [
+          { key: "date", label: "Date" },
+          { key: "vendor", label: "Vendor" },
+          { key: "billNo", label: "Bill No" },
+          { key: "item", label: "Item" },
+          { key: "quantity", label: "Qty" },
+          { key: "rate", label: "Rate" },
+          { key: "amount", label: "Amount" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  inventory_issues: {
+    title: "Stock Issues",
+    category: "Inventory",
+    permission: "inventory:reports",
+    run: async (f, inst) => {
+      const params: unknown[] = [inst];
+      const where = ["si.institution_id = $1"];
+      if (f.itemId) {
+        params.push(f.itemId);
+        where.push(`si.item_id = $${params.length}`);
+      }
+      const rows = await rowsOf(
+        `SELECT si.issue_date AS date, it.name AS item, si.quantity,
+                si.issued_to_type AS "issuedToType", si.issued_to AS "issuedTo", si.purpose
+         FROM stock_issues si JOIN inventory_items it ON it.id = si.item_id
+         WHERE ${where.join(" AND ")} ORDER BY si.issue_date DESC`,
+        params
+      );
+      return {
+        title: "Stock Issues",
+        columns: [
+          { key: "date", label: "Date" },
+          { key: "item", label: "Item" },
+          { key: "quantity", label: "Qty" },
+          { key: "issuedToType", label: "Issued To" },
+          { key: "issuedTo", label: "Recipient" },
+          { key: "purpose", label: "Purpose" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  inventory_vendor_purchases: {
+    title: "Vendor-wise Purchases",
+    category: "Inventory",
+    permission: "inventory:reports",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT v.name AS vendor,
+                count(p.id)::int AS purchases,
+                COALESCE(sum(p.total_amount), 0) AS "totalAmount"
+         FROM vendors v LEFT JOIN purchases p ON p.vendor_id = v.id
+         WHERE v.institution_id = $1
+         GROUP BY v.id ORDER BY "totalAmount" DESC`,
+        [inst]
+      );
+      return {
+        title: "Vendor-wise Purchases",
+        columns: [
+          { key: "vendor", label: "Vendor" },
+          { key: "purchases", label: "Purchases" },
+          { key: "totalAmount", label: "Total Amount" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  inventory_item_movements: {
+    title: "Item Movement History",
+    category: "Inventory",
+    permission: "inventory:reports",
+    run: async (f, inst) => {
+      const columns: Col[] = [
+        { key: "date", label: "Date" },
+        { key: "item", label: "Item" },
+        { key: "type", label: "Type" },
+        { key: "change", label: "Change" },
+        { key: "balanceAfter", label: "Balance" },
+        { key: "note", label: "Note" },
+      ];
+      if (!f.itemId) return { title: "Item Movement History", columns, rows: [] };
+      const rows = await rowsOf(
+        `SELECT m.created_at::date AS date, it.name AS item, m.type, m.change,
+                m.balance_after AS "balanceAfter", m.note
+         FROM stock_movements m JOIN inventory_items it ON it.id = m.item_id
+         WHERE m.institution_id = $1 AND m.item_id = $2
+         ORDER BY m.created_at, m.id`,
+        [inst, f.itemId]
+      );
+      return { title: "Item Movement History", columns, rows };
+    },
+  },
+
+  inventory_damaged_lost: {
+    title: "Damaged / Lost Stock",
+    category: "Inventory",
+    permission: "inventory:reports",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT sa.created_at::date AS date, it.name AS item, sa.quantity, sa.reason,
+                sa.note, sa.approved_by AS "approvedBy"
+         FROM stock_adjustments sa JOIN inventory_items it ON it.id = sa.item_id
+         WHERE sa.institution_id = $1 AND sa.reason IN ('damage', 'lost')
+         ORDER BY sa.created_at DESC`,
+        [inst]
+      );
+      return {
+        title: "Damaged / Lost Stock",
+        columns: [
+          { key: "date", label: "Date" },
+          { key: "item", label: "Item" },
+          { key: "quantity", label: "Qty" },
+          { key: "reason", label: "Reason" },
+          { key: "note", label: "Note" },
+          { key: "approvedBy", label: "Approved By" },
         ],
         rows,
       };
