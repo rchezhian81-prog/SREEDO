@@ -805,3 +805,93 @@ export interface StockAdjustment {
   approvedBy: string | null;
   createdAt: string;
 }
+
+// --- Staff Attendance & Leave ---
+
+export type StaffAttendanceStatus =
+  | "present"
+  | "absent"
+  | "half_day"
+  | "leave"
+  | "holiday";
+
+export interface StaffAttendance {
+  id: string;
+  teacherId: string;
+  teacherName: string;
+  employeeNo: string;
+  date: string;
+  status: StaffAttendanceStatus;
+  checkIn: string | null;
+  checkOut: string | null;
+  late: boolean;
+  earlyOut: boolean;
+  leaveTypeId: string | null;
+  remarks: string | null;
+}
+
+export interface StaffAttendanceSummary {
+  teacherId: string;
+  employeeNo: string;
+  name: string;
+  present: number;
+  absent: number;
+  halfDay: number;
+  leave: number;
+  holiday: number;
+  lateCount: number;
+}
+
+export interface PayrollSummary {
+  teacherId: string;
+  employeeNo: string;
+  name: string;
+  workingDays: number;
+  presentDays: number;
+  absentDays: number;
+  halfDays: number;
+  paidLeave: number;
+  unpaidLeave: number;
+  lateCount: number;
+}
+
+export interface LeaveType {
+  id: string;
+  name: string;
+  code: string;
+  isPaid: boolean;
+  defaultBalance: number;
+  isActive: boolean;
+}
+
+export interface LeaveBalance {
+  id: string;
+  teacherId: string;
+  teacherName: string;
+  leaveTypeId: string;
+  leaveTypeName: string;
+  isPaid: boolean;
+  balance: number;
+}
+
+export type LeaveRequestStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "cancelled";
+
+export interface LeaveRequest {
+  id: string;
+  teacherId: string;
+  teacherName: string;
+  leaveTypeId: string;
+  leaveTypeName: string;
+  isPaid: boolean;
+  startDate: string;
+  endDate: string;
+  days: number;
+  reason: string | null;
+  status: LeaveRequestStatus;
+  decidedAt: string | null;
+  decisionNote: string | null;
+}
