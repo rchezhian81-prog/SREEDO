@@ -224,4 +224,24 @@ describe("document management", () => {
     // Institution A admin cannot reach B's document.
     expect((await get(`/api/v1/documents/${bDoc.body.id}/download`, tok.admin)).status).toBe(404);
   });
+
+  it("uploads an institution logo (admin only)", async () => {
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const ok = await request(app)
+      .post("/api/v1/documents/logo")
+      .set("Authorization", `Bearer ${tok.admin}`)
+      .attach("file", png, { filename: "logo.png", contentType: "image/png" });
+    expect(ok.status).toBe(201);
+    expect(ok.body.category).toBe("logo");
+    expect(ok.body.ownerType).toBe("institution");
+    expect(ok.body.storageMode).toBe("local");
+    expect(ok.body.storageKey).toBeUndefined();
+
+    // teacher lacks institution:logo:update
+    const denied = await request(app)
+      .post("/api/v1/documents/logo")
+      .set("Authorization", `Bearer ${tok.teacher}`)
+      .attach("file", png, { filename: "logo.png", contentType: "image/png" });
+    expect(denied.status).toBe(403);
+  });
 });
