@@ -10,6 +10,12 @@ export { query };
 export const app = createApp();
 
 const TABLES = [
+  "hostel_invoices",
+  "hostel_allocations",
+  "hostel_fees",
+  "hostel_rooms",
+  "hostel_blocks",
+  "hostels",
   "transport_invoices",
   "transport_trips",
   "transport_fees",

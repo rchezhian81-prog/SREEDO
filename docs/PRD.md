@@ -216,8 +216,17 @@ drivers, fee dues, occupancy, document expiry). `transport:*` permissions,
 tenant-scoped, with an owner-scoped portal allocation endpoint (migration `0025`).
 Optional live tracking feed for the parent app remains ⬜.
 
-### 4.15 Hostel Management — ⬜ Planned (Phase D)
-Hostels, rooms, student allocation, hostel fee (→ Fees), occupancy report.
+### 4.15 Hostel Management — ✅ Built (Phase D)
+Hostel master (type boys/girls/co-ed/staff, warden + contact), **blocks** and
+**rooms** (floor, room type, capacity, status available/occupied/maintenance/
+inactive). Student room/bed allocation (school + college) with **capacity
+enforcement** + one-active-allocation/one-occupant-per-bed guards, plus **room
+transfer** and **vacate** (status active/vacated/transferred). **Hostel- or
+room-type-level fee mapping** with idempotent **invoice generation** into the
+Fees module and a hostel-fee dues report. 6 reports (hostel students, room
+allocation, occupancy/vacancy, fee dues, vacated history, maintenance rooms).
+`hostel:*` permissions, tenant-scoped, with an owner-scoped portal allocation
+endpoint (migration `0026`).
 
 ### 4.16 Inventory Management — ⬜ Planned (Phase D)
 Stock items, purchase entry, issue entry, vendors, stock reports.

@@ -45,6 +45,8 @@ function parseFilters(q: Request["query"]): Filters {
     memberId: s(q.memberId),
     routeId: s(q.routeId),
     stopId: s(q.stopId),
+    hostelId: s(q.hostelId),
+    roomId: s(q.roomId),
   };
 }
 

@@ -639,3 +639,73 @@ export interface TransportTrip {
   driverId: string | null;
   status: string;
 }
+
+// --- Hostel ---
+
+export type HostelType = "boys" | "girls" | "co_ed" | "staff";
+
+export interface Hostel {
+  id: string;
+  name: string;
+  code: string;
+  type: HostelType | string | null;
+  address: string | null;
+  wardenName: string | null;
+  wardenPhone: string | null;
+  contactPhone: string | null;
+  capacity: number | null;
+  isActive: boolean;
+  roomCount: number;
+  bedCount: number;
+  occupied: number;
+}
+
+export interface HostelBlock {
+  id: string;
+  hostelId: string;
+  name: string;
+}
+
+export type HostelRoomStatus =
+  | "available"
+  | "occupied"
+  | "maintenance"
+  | "inactive";
+
+export interface HostelRoom {
+  id: string;
+  hostelId: string;
+  blockId: string | null;
+  blockName: string | null;
+  roomNumber: string;
+  floor: string | null;
+  roomType: string | null;
+  capacity: number;
+  status: HostelRoomStatus | string;
+  occupied: number;
+  availableBeds: number;
+}
+
+export interface HostelAllocation {
+  id: string;
+  studentId: string;
+  studentName: string;
+  admissionNo: string;
+  hostelId: string;
+  hostelName: string;
+  roomId: string;
+  roomNumber: string;
+  bedNo: string | null;
+  allocationDate: string | null;
+  vacateDate: string | null;
+  status: string;
+}
+
+export interface HostelFee {
+  id: string;
+  hostelId: string;
+  hostelName: string;
+  roomType: string | null;
+  amount: number | string;
+  frequency: string;
+}
