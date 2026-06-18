@@ -382,3 +382,95 @@ export interface DashboardStats {
     totalCollected: number;
   };
 }
+
+// --- College Mode ---
+
+export interface CollegeOverview {
+  type: "school" | "college";
+  departments: number;
+  programs: number;
+  semesters: number;
+  enrollments: number;
+}
+
+export interface CollegeDepartment {
+  id: string;
+  name: string;
+  code: string;
+  headTeacherId: string | null;
+  headTeacherName: string | null;
+  programCount: number;
+}
+
+export interface CollegeProgram {
+  id: string;
+  name: string;
+  code: string;
+  departmentId: string;
+  departmentName: string | null;
+  durationSemesters: number | null;
+}
+
+export interface CollegeSemester {
+  id: string;
+  name: string;
+  number: number;
+  programId: string;
+  programName: string | null;
+  academicYearId: string | null;
+  startDate: string | null;
+  endDate: string | null;
+}
+
+export interface CollegeBatch {
+  id: string;
+  name: string;
+  startYear: number | null;
+  programId: string;
+}
+
+export interface CollegeProgramSubject {
+  id: string;
+  programId: string;
+  semesterId: string | null;
+  semesterName: string | null;
+  subjectId: string;
+  subjectName: string | null;
+  credits: number | null;
+}
+
+export interface CollegeEnrollment {
+  id: string;
+  studentId: string;
+  studentName: string;
+  admissionNo: string;
+  programId: string;
+  programName: string | null;
+  semesterId: string | null;
+  semesterName: string | null;
+  batchId: string | null;
+  status: string;
+}
+
+export interface CollegeResultSubject {
+  subject: string;
+  credits: number | null;
+  percent: number | null;
+  grade: string | null;
+  gradePoint: number | null;
+}
+
+export interface CollegeSemesterResult {
+  semesterId: string;
+  semesterName: string;
+  subjects: CollegeResultSubject[];
+  totalCredits: number;
+  gpa: number | null;
+}
+
+export interface CollegeCgpa {
+  programId: string;
+  cgpa: number | null;
+  totalCredits: number;
+  perSemester: { semesterId: string; gpa: number | null }[];
+}
