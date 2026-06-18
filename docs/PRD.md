@@ -127,8 +127,14 @@ reports 🟡.
 ### 4.4 Staff / Teacher Management — 🟡 Partial
 - ✅ Profile, auto employee numbers, qualification/specialization, active status,
   assigned subjects/sections (`class_subjects`).
-- ⬜ Staff attendance, timetable, salary/payroll, leave management, performance
-  records, document upload.
+- ✅ **Staff attendance** (daily/bulk marking; present/absent/half-day/leave/
+  holiday; late/early-out; monthly summary) and **leave management** (leave types
+  + balances, request → approve/reject/cancel, approved leave auto-marks
+  attendance, leave register/balance reports) — migration `0028`, `staff_
+  attendance:*` / `leave:*` permissions, tenant-scoped + owner-scoped for staff.
+- ✅ **Payroll-attendance summary** foundation (working/present/absent/half/paid+
+  unpaid-leave/late per month) — ready for the Payroll module.
+- ⬜ Timetable allocation, salary/payroll run, performance records.
 
 ### 4.5 Parent Portal — ✅ Built (Phase C, base)
 Cookie-authenticated portal where a parent views **only their linked children**

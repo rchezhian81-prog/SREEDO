@@ -49,6 +49,8 @@ function parseFilters(q: Request["query"]): Filters {
     roomId: s(q.roomId),
     itemId: s(q.itemId),
     vendorId: s(q.vendorId),
+    teacherId: s(q.teacherId),
+    month: s(q.month),
   };
 }
 

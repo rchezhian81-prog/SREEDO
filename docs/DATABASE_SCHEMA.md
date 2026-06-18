@@ -175,8 +175,13 @@ used when `institutions.type = 'college'`; the school flow is unaffected.
   `purchases` + `purchase_items` (stock-in, optional `document_id`), `stock_issues`
   (stock-out), `stock_adjustments` (signed, damage/lost/correction), and
   `stock_movements` (unified audit ledger: change + balance_after per movement).
-- **Payroll:** `salary_structures`, `salary_components`, `payslips`,
-  `staff_attendance`, `leave_requests`.
+- **Staff attendance & leave:** ✅ (migration `0028`, all tenant-scoped)
+  `staff_attendance` (per teacher/date; present/absent/half_day/leave/holiday,
+  check-in/out, late, leave_type_id), `leave_types`, `leave_balances`,
+  `leave_requests` (request → approve/reject/cancel; approval deducts balance +
+  auto-marks attendance).
+- **Payroll:** ⬜ `salary_structures`, `salary_components`, `payslips` (will build
+  on the staff-attendance/leave payroll summary).
 
 ### Phase C/D supporting
 - **fee_categories**, **fee_discounts/scholarships**, **fee_fines** — extend the

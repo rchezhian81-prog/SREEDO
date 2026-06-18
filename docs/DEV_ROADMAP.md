@@ -83,9 +83,9 @@ exams (API), announcements, AI assistant, Swagger, seed, Docker, CI, unit tests.
    performance summaries.
 
 ### Phase D — Operations modules + reporting 🟡
-✅ **Reports Center** — 42 cross-module reports with filters + CSV/PDF export
+✅ **Reports Center** — 49 cross-module reports with filters + CSV/PDF export
 (migration `0022`, `/report-center`, permission-gated; includes 6 college, 6
-library, 7 transport, 6 hostel, 7 inventory reports). ✅ **Library Management** —
+library, 7 transport, 6 hostel, 7 inventory, 7 staff-attendance/leave reports). ✅ **Library Management** —
 catalogue, members, issue/return/renew with auto late-fines (→ Fees), settings, 6
 reports (migration `0024`). ✅ **Transport Management** — vehicle & driver masters
 (expiry tracking), routes + stops, student allocation, fee mapping with idempotent
@@ -96,8 +96,14 @@ generation (→ Fees), 6 reports (migration `0026`). ✅ **Inventory Management*
 item categories, items, vendors; **purchases (stock-in)**, **issues (stock-out,
 insufficient-stock guard)**, **adjustments** (damage/lost/correction); an
 authoritative `current_stock` + **stock-movements audit ledger**; 7 reports
-(migration `0027`, `/inventory`, `inventory:*`, tenant-scoped). Remaining: Payroll
-(needs staff attendance + leave first) · **custom report builder**.
+(migration `0027`, `/inventory`, `inventory:*`, tenant-scoped). ✅ **Staff
+Attendance + Leave** — daily/bulk staff attendance (monthly summary), leave types
++ balances, leave request → approve/reject/cancel (approval deducts balance +
+auto-marks attendance), a **payroll-attendance summary** foundation, and 7
+reports (migration `0028`, `/staff` + `/leave`, `staff_attendance:*` / `leave:*`,
+tenant-scoped + owner-scoped for staff). Remaining: **Payroll** (salary
+structures → payroll run → payslips, building on the staff summary) · **custom
+report builder**.
 
 ### Phase E — Scale & polish ⬜
 Caching, read replicas if needed, background job queue, observability/metrics,
