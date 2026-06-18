@@ -1820,6 +1820,215 @@ export const REPORTS: Record<string, Report> = {
       return { title: "Payroll Attendance Summary", columns, rows };
     },
   },
+
+  // --- Payroll (Phase D) reports. ---
+
+  payroll_register: {
+    title: "Monthly Payroll Register",
+    category: "Payroll",
+    permission: "payroll:reports",
+    run: async (f, inst) => {
+      const params: unknown[] = [inst];
+      const where = ["p.institution_id = $1"];
+      if (f.month) {
+        params.push(`${f.month}-01`);
+        where.push(`p.month = $${params.length}`);
+      }
+      const rows = await rowsOf(
+        `SELECT to_char(p.month, 'YYYY-MM') AS month, t.employee_no AS "employeeNo",
+                t.first_name || ' ' || t.last_name AS name,
+                p.gross, p.deductions, p.net, p.status
+         FROM payslips p JOIN teachers t ON t.id = p.teacher_id
+         WHERE ${where.join(" AND ")} ORDER BY p.month DESC, name`,
+        params
+      );
+      return {
+        title: "Monthly Payroll Register",
+        columns: [
+          { key: "month", label: "Month" },
+          { key: "employeeNo", label: "Employee No" },
+          { key: "name", label: "Staff" },
+          { key: "gross", label: "Gross" },
+          { key: "deductions", label: "Deductions" },
+          { key: "net", label: "Net" },
+          { key: "status", label: "Status" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  payroll_salary: {
+    title: "Staff-wise Salary",
+    category: "Payroll",
+    permission: "payroll:reports",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT t.employee_no AS "employeeNo", t.first_name || ' ' || t.last_name AS name,
+                s.effective_date AS "effectiveDate",
+                COALESCE(sum(ssc.value) FILTER (WHERE c.type='earning' AND ssc.calc_type='fixed'), 0) AS "fixedEarnings",
+                COALESCE(sum(ssc.value) FILTER (WHERE c.type='deduction' AND ssc.calc_type='fixed'), 0) AS "fixedDeductions"
+         FROM salary_structures s
+         JOIN teachers t ON t.id = s.teacher_id
+         LEFT JOIN salary_structure_components ssc ON ssc.structure_id = s.id
+         LEFT JOIN salary_components c ON c.id = ssc.component_id
+         WHERE s.institution_id = $1 AND s.is_active = true
+         GROUP BY t.id, s.effective_date ORDER BY name`,
+        [inst]
+      );
+      return {
+        title: "Staff-wise Salary",
+        columns: [
+          { key: "employeeNo", label: "Employee No" },
+          { key: "name", label: "Staff" },
+          { key: "effectiveDate", label: "Effective" },
+          { key: "fixedEarnings", label: "Fixed Earnings" },
+          { key: "fixedDeductions", label: "Fixed Deductions" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  payroll_deductions: {
+    title: "Deduction Report",
+    category: "Payroll",
+    permission: "payroll:reports",
+    run: async (f, inst) => {
+      const params: unknown[] = [inst];
+      const where = ["pl.institution_id = $1", "pl.type = 'deduction'"];
+      if (f.month) {
+        params.push(`${f.month}-01`);
+        where.push(`p.month = $${params.length}`);
+      }
+      const rows = await rowsOf(
+        `SELECT to_char(p.month, 'YYYY-MM') AS month, t.employee_no AS "employeeNo",
+                t.first_name || ' ' || t.last_name AS name, pl.name AS component, pl.amount
+         FROM payslip_lines pl
+         JOIN payslips p ON p.id = pl.payslip_id
+         JOIN teachers t ON t.id = p.teacher_id
+         WHERE ${where.join(" AND ")} ORDER BY p.month DESC, name, component`,
+        params
+      );
+      return {
+        title: "Deduction Report",
+        columns: [
+          { key: "month", label: "Month" },
+          { key: "employeeNo", label: "Employee No" },
+          { key: "name", label: "Staff" },
+          { key: "component", label: "Deduction" },
+          { key: "amount", label: "Amount" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  payslip_status: {
+    title: "Payslip Status",
+    category: "Payroll",
+    permission: "payroll:reports",
+    run: async (f, inst) => {
+      const params: unknown[] = [inst];
+      const where = ["p.institution_id = $1"];
+      if (f.month) {
+        params.push(`${f.month}-01`);
+        where.push(`p.month = $${params.length}`);
+      }
+      const rows = await rowsOf(
+        `SELECT to_char(p.month, 'YYYY-MM') AS month, t.employee_no AS "employeeNo",
+                t.first_name || ' ' || t.last_name AS name, p.net, p.status
+         FROM payslips p JOIN teachers t ON t.id = p.teacher_id
+         WHERE ${where.join(" AND ")} ORDER BY p.month DESC, name`,
+        params
+      );
+      return {
+        title: "Payslip Status",
+        columns: [
+          { key: "month", label: "Month" },
+          { key: "employeeNo", label: "Employee No" },
+          { key: "name", label: "Staff" },
+          { key: "net", label: "Net Pay" },
+          { key: "status", label: "Status" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  attendance_vs_payroll: {
+    title: "Attendance vs Payroll",
+    category: "Payroll",
+    permission: "payroll:reports",
+    run: async (f, inst) => {
+      const params: unknown[] = [inst];
+      const where = ["p.institution_id = $1"];
+      if (f.month) {
+        params.push(`${f.month}-01`);
+        where.push(`p.month = $${params.length}`);
+      }
+      const rows = await rowsOf(
+        `SELECT to_char(p.month, 'YYYY-MM') AS month, t.employee_no AS "employeeNo",
+                t.first_name || ' ' || t.last_name AS name,
+                p.working_days AS "workingDays", p.present_days AS "presentDays",
+                p.paid_leave AS "paidLeave", p.unpaid_leave AS "unpaidLeave",
+                p.gross, p.net
+         FROM payslips p JOIN teachers t ON t.id = p.teacher_id
+         WHERE ${where.join(" AND ")} ORDER BY p.month DESC, name`,
+        params
+      );
+      return {
+        title: "Attendance vs Payroll",
+        columns: [
+          { key: "month", label: "Month" },
+          { key: "employeeNo", label: "Employee No" },
+          { key: "name", label: "Staff" },
+          { key: "workingDays", label: "Working" },
+          { key: "presentDays", label: "Present" },
+          { key: "paidLeave", label: "Paid Leave" },
+          { key: "unpaidLeave", label: "Unpaid Leave" },
+          { key: "gross", label: "Gross" },
+          { key: "net", label: "Net" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  unpaid_leave_deduction: {
+    title: "Unpaid Leave Deductions",
+    category: "Payroll",
+    permission: "payroll:reports",
+    run: async (f, inst) => {
+      const params: unknown[] = [inst];
+      const where = ["pl.institution_id = $1", "pl.type = 'deduction'", "pl.name = 'Unpaid Leave'"];
+      if (f.month) {
+        params.push(`${f.month}-01`);
+        where.push(`p.month = $${params.length}`);
+      }
+      const rows = await rowsOf(
+        `SELECT to_char(p.month, 'YYYY-MM') AS month, t.employee_no AS "employeeNo",
+                t.first_name || ' ' || t.last_name AS name,
+                p.unpaid_leave AS "unpaidLeaveDays", pl.amount AS "deduction"
+         FROM payslip_lines pl
+         JOIN payslips p ON p.id = pl.payslip_id
+         JOIN teachers t ON t.id = p.teacher_id
+         WHERE ${where.join(" AND ")} ORDER BY p.month DESC, name`,
+        params
+      );
+      return {
+        title: "Unpaid Leave Deductions",
+        columns: [
+          { key: "month", label: "Month" },
+          { key: "employeeNo", label: "Employee No" },
+          { key: "name", label: "Staff" },
+          { key: "unpaidLeaveDays", label: "Unpaid Days" },
+          { key: "deduction", label: "Deduction" },
+        ],
+        rows,
+      };
+    },
+  },
 };
 
 export function listReports() {

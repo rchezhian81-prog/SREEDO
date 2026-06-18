@@ -180,8 +180,11 @@ used when `institutions.type = 'college'`; the school flow is unaffected.
   check-in/out, late, leave_type_id), `leave_types`, `leave_balances`,
   `leave_requests` (request → approve/reject/cancel; approval deducts balance +
   auto-marks attendance).
-- **Payroll:** ⬜ `salary_structures`, `salary_components`, `payslips` (will build
-  on the staff-attendance/leave payroll summary).
+- **Payroll:** ✅ (migration `0029`, all tenant-scoped) `salary_components`
+  (earning/deduction, fixed|percent), `salary_structures` (+ `salary_structure_
+  components`; one active per staff = revision history), `payroll_runs` (one per
+  month, draft|finalized), `payslips` (unique per staff/month; snapshots
+  attendance + gross/deductions/net), `payslip_lines` (earning/deduction breakdown).
 
 ### Phase C/D supporting
 - **fee_categories**, **fee_discounts/scholarships**, **fee_fines** — extend the

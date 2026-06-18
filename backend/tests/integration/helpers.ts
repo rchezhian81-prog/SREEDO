@@ -10,6 +10,12 @@ export { query };
 export const app = createApp();
 
 const TABLES = [
+  "payslip_lines",
+  "payslips",
+  "payroll_runs",
+  "salary_structure_components",
+  "salary_structures",
+  "salary_components",
   "staff_attendance",
   "leave_requests",
   "leave_balances",
