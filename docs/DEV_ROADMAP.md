@@ -83,10 +83,14 @@ exams (API), announcements, AI assistant, Swagger, seed, Docker, CI, unit tests.
    performance summaries.
 
 ### Phase D — Operations modules + reporting 🟡
-✅ **Reports Center** — 10 cross-module reports with filters + CSV/PDF export
-(migration `0022`, `/report-center`, permission-gated). Remaining: Library ·
-Transport · Hostel · Inventory · Payroll (each with fee/finance integration
-where relevant) · **custom report builder**.
+✅ **Reports Center** — 22 cross-module reports with filters + CSV/PDF export
+(migration `0022`, `/report-center`, permission-gated; includes 6 college + 6
+library reports). ✅ **Library Management** — catalogue (categories, books,
+copies), members (student/staff), issue/return/renew with auto late-fines
+(optionally posted to the Fees module), circulation settings, and 6 reports
+(migration `0024`, `/library`, `library:*` permissions, tenant-scoped, owner-
+scoped portal history). Remaining: Transport · Hostel · Inventory · Payroll
+(each with fee/finance integration where relevant) · **custom report builder**.
 
 ### Phase E — Scale & polish ⬜
 Caching, read replicas if needed, background job queue, observability/metrics,

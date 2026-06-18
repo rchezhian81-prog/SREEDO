@@ -10,6 +10,12 @@ export { query };
 export const app = createApp();
 
 const TABLES = [
+  "book_issues",
+  "book_copies",
+  "books",
+  "book_categories",
+  "library_members",
+  "library_settings",
   "homework_submissions",
   "homework",
   "documents",
