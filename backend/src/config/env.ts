@@ -51,6 +51,15 @@ export const env = {
   smtpPass: optional("SMTP_PASS"),
   smtpFrom: process.env.SMTP_FROM ?? "SRE EDU OS <no-reply@sreedo.edu>",
 
+  // SMS adapter (provider-agnostic; degrades to no-op when unset).
+  smsProvider: optional("SMS_PROVIDER"),
+  smsApiKey: optional("SMS_API_KEY"),
+  smsApiUrl: optional("SMS_API_URL"),
+  smsSender: process.env.SMS_SENDER ?? "SREEDO",
+
+  // Firebase Cloud Messaging (push); degrades to no-op when unset.
+  fcmServerKey: optional("FCM_SERVER_KEY"),
+
   seedOnStart: process.env.SEED_ON_START === "true",
 
   // API docs (Swagger) default off in production; override with ENABLE_API_DOCS.

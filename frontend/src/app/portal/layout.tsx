@@ -16,6 +16,7 @@ const NAV = [
   { href: "/portal/reports", label: "Report Card", icon: "📄" },
   { href: "/portal/fees", label: "Fees", icon: "💳" },
   { href: "/portal/announcements", label: "Notices", icon: "📣" },
+  { href: "/portal/inbox", label: "Inbox", icon: "📨" },
 ];
 
 export default function PortalLayout({

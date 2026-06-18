@@ -73,11 +73,15 @@ Deliverable **#5 Module-wise workflow**. Step-by-step flows for each module.
 5. *(⬜)* Fee categories, term schedules, **fines**, **discounts/scholarships**,
    **receipt PDF**, **online gateway** adapter, class/student dues reports.
 
-## I. Communication 🟡
+## I. Communication ✅
 1. Admin/Teacher posts an **announcement** with **audience** + optional **pin**.
 2. Clients list audience-filtered, pinned-first.
-3. *(⬜)* Circulars, **email/SMS/FCM push** fan-out, **internal messaging**
-   threads, read receipts.
+3. ✅ **In-app messaging**: compose to an audience (all students/parents, staff,
+   class, section, individual) → per-recipient inbox with read/unread; staff see
+   sent history + read counts. **email/SMS/FCM** fan-out (best-effort, optional).
+4. ✅ **Fee reminders** (outstanding invoices) and **absence alerts** (absentees,
+   de-duplicated per student/day) to students + guardians.
+5. *(⬜)* Threaded 1:1 messaging, scheduled campaigns.
 
 ## J. AI assistant ✅ / ⬜ advanced
 1. Staff asks a question → `POST /ai/assistant`.

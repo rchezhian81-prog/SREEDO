@@ -10,6 +10,10 @@ export { query };
 export const app = createApp();
 
 const TABLES = [
+  "notification_log",
+  "message_recipients",
+  "messages",
+  "device_tokens",
   "grade_bands",
   "guardians",
   "timetable_entries",
