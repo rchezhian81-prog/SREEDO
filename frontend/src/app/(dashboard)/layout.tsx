@@ -14,6 +14,7 @@ const SCHOOL_NAV: NavItem[] = [
   { href: "/students", label: "Students", icon: "🎓" },
   { href: "/teachers", label: "Teachers", icon: "👩‍🏫" },
   { href: "/classes", label: "Classes", icon: "🏫" },
+  { href: "/timetable", label: "Timetable", icon: "📅" },
   { href: "/attendance", label: "Attendance", icon: "🗓️" },
   { href: "/exams", label: "Exams", icon: "📝" },
   { href: "/fees", label: "Fees", icon: "💳" },
