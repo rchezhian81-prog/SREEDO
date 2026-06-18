@@ -7,12 +7,9 @@ import { api } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth-store";
 import { cx, Spinner } from "@/components/ui";
 
-const NAV_ITEMS: Array<{
-  href: string;
-  label: string;
-  icon: string;
-  adminOnly?: boolean;
-}> = [
+type NavItem = { href: string; label: string; icon: string; adminOnly?: boolean };
+
+const SCHOOL_NAV: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: "📊" },
   { href: "/students", label: "Students", icon: "🎓" },
   { href: "/teachers", label: "Teachers", icon: "👩‍🏫" },
@@ -23,6 +20,11 @@ const NAV_ITEMS: Array<{
   { href: "/announcements", label: "Announcements", icon: "📣" },
   { href: "/assistant", label: "AI Assistant", icon: "✨" },
   { href: "/users", label: "Users", icon: "👥", adminOnly: true },
+];
+
+const SUPER_ADMIN_NAV: NavItem[] = [
+  { href: "/super-admin", label: "Institutions", icon: "🏢" },
+  { href: "/super-admin/packages", label: "Packages", icon: "📦" },
 ];
 
 export default function DashboardLayout({
@@ -37,10 +39,30 @@ export default function DashboardLayout({
 
   useEffect(() => setHydrated(true), []);
   useEffect(() => {
-    if (hydrated && !accessToken) router.replace("/login");
-  }, [hydrated, accessToken, router]);
+    if (!hydrated) return;
+    if (!accessToken) {
+      router.replace("/login");
+      return;
+    }
+    // Super admins live in the /super-admin console; everyone else in the
+    // school dashboard. Keep each role on its own side.
+    const inSuperArea = pathname.startsWith("/super-admin");
+    if (user?.role === "super_admin" && !inSuperArea) {
+      router.replace("/super-admin");
+    } else if (user && user.role !== "super_admin" && inSuperArea) {
+      router.replace("/dashboard");
+    }
+  }, [hydrated, accessToken, user, pathname, router]);
 
+  const isSuper = user?.role === "super_admin";
+  const inSuperArea = pathname.startsWith("/super-admin");
+  const navItems = isSuper
+    ? SUPER_ADMIN_NAV
+    : SCHOOL_NAV.filter((item) => !item.adminOnly || user?.role === "admin");
+
+  // While unauthenticated or mid-redirect to the correct area, show a spinner.
   if (!hydrated || !accessToken) return <Spinner />;
+  if (isSuper !== inSuperArea) return <Spinner />;
 
   const handleLogout = async () => {
     if (refreshToken) {
@@ -57,18 +79,22 @@ export default function DashboardLayout({
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 font-bold text-white">
             S
           </div>
-          <span className="font-semibold text-slate-900">SRE EDU OS</span>
+          <span className="font-semibold text-slate-900">
+            SRE EDU OS{isSuper ? " · Platform" : ""}
+          </span>
         </div>
         <nav className="flex-1 space-y-1 p-3">
-          {NAV_ITEMS.filter(
-            (item) => !item.adminOnly || user?.role === "admin"
-          ).map((item) => (
+          {navItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}
               className={cx(
                 "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
-                pathname.startsWith(item.href)
+                (
+                  item.href === "/super-admin"
+                    ? pathname === item.href
+                    : pathname.startsWith(item.href)
+                )
                   ? "bg-brand-50 text-brand-700"
                   : "text-slate-600 hover:bg-slate-100"
               )}
@@ -83,7 +109,7 @@ export default function DashboardLayout({
             {user?.fullName}
           </p>
           <p className="truncate text-xs capitalize text-slate-500">
-            {user?.role}
+            {user?.role?.replace("_", " ")}
           </p>
           <button
             onClick={handleLogout}

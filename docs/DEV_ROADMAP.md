@@ -28,9 +28,9 @@ exams (API), announcements, AI assistant, Swagger, seed, Docker, CI, unit tests.
    `institution_subscriptions` tables + `super_admin` role shipped (migration
    `0011`). Remaining: add `institution_id` to tenant-scoped tables (add →
    backfill → NOT NULL → index → scope queries) + `tenant` middleware.
-4. **Super Admin panel:** 🟡 backend CRUD for institutions, branches,
-   packages and subscriptions shipped. Remaining: web UI, global settings,
-   backups, global audit-log viewer.
+4. **Super Admin panel:** 🟡 backend CRUD **and the web console**
+   (`/super-admin`: institutions, branches, packages, subscriptions) shipped.
+   Remaining: global settings, backups, global audit-log viewer.
 5. ✅ **MVP UI gaps filled:** Exams & Results page and Users/account-management
    page shipped.
 

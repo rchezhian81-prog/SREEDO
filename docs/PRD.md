@@ -98,12 +98,13 @@ the **phase** it lands in (see [`DEV_ROADMAP.md`](./DEV_ROADMAP.md)). Detailed
 flows are in [`MODULE_WORKFLOWS.md`](./MODULE_WORKFLOWS.md).
 
 ### 4.1 Super Admin Panel — 🟡 Partial (Phase A)
-- ✅ Backend: `super_admin` role; institution & branch/campus CRUD;
-  subscription **package** management and per-institution **subscriptions**
-  (migration `0011`, `/api/v1/institutions|branches|packages`).
-- ⬜ Super Admin **web UI**, global user-role management, system settings,
-  backup & restore, global audit-log viewer, and scoping existing data by
-  `institution_id` (the rest of multi-tenancy).
+- ✅ `super_admin` role; institution & branch/campus CRUD; subscription
+  **package** management and per-institution **subscriptions** — backend
+  (`/api/v1/institutions|branches|packages`, migration `0011`) **and** a
+  dedicated Super Admin **web console** (`/super-admin`).
+- ⬜ Global user-role management, system settings, backup & restore, global
+  audit-log viewer, and scoping existing data by `institution_id` (the rest of
+  multi-tenancy).
 
 ### 4.2 School / College Admin Panel — 🟡 Partial
 Dashboard ✅; academic-year/class/section/subject setup ✅; **department,

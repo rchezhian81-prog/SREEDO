@@ -50,16 +50,16 @@ primitives; the **students page is the reference** for table+form screens.
 | Reports center | C/D | cross-module reports, export/print, custom builder |
 | Settings | A | institution settings, branding |
 
-## 2. Super Admin console ⬜ (Phase A)
-| Page | Notes |
-|------|-------|
-| Institutions | create/manage institutions |
-| Branches / campuses | per-institution branches |
-| Subscription packages | package + limits management |
-| Global users & roles | cross-tenant user/role admin |
-| System settings | global configuration |
-| Backup & restore | trigger/list/restore backups |
-| Global audit logs | searchable audit trail |
+## 2. Super Admin console 🟡 (Phase A) — `/super-admin`
+| Page | Status | Notes |
+|------|--------|-------|
+| Institutions | ✅ | list/create/manage; detail with branches + subscription |
+| Branches / campuses | ✅ | added per institution from the detail panel |
+| Subscription packages | ✅ | `/super-admin/packages` — create/list packages |
+| Global users & roles | ⬜ | cross-tenant user/role admin |
+| System settings | ⬜ | global configuration |
+| Backup & restore | ⬜ | trigger/list/restore backups |
+| Global audit logs | ⬜ | searchable audit trail |
 
 ## 3. Parent portal ⬜ (Phase C)
 Child attendance · homework · exam marks · fee status & payment · notices ·

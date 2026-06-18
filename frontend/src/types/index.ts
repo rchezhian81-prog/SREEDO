@@ -145,6 +145,45 @@ export interface AccountUser {
   createdAt: string;
 }
 
+export interface Branch {
+  id: string;
+  institutionId: string;
+  name: string;
+  address: string | null;
+  timezone: string;
+  isActive: boolean;
+}
+
+export interface InstitutionSubscription {
+  id: string;
+  status: string;
+  startsAt: string;
+  endsAt: string | null;
+  packageId: string;
+  packageName: string;
+}
+
+export interface Institution {
+  id: string;
+  name: string;
+  code: string;
+  type: "school" | "college";
+  isActive: boolean;
+  branchCount?: string | number;
+  branches?: Branch[];
+  subscription?: InstitutionSubscription | null;
+}
+
+export interface SubscriptionPackage {
+  id: string;
+  name: string;
+  maxStudents: number | null;
+  maxStaff: number | null;
+  price: string | number;
+  billingCycle: "monthly" | "quarterly" | "annual";
+  isActive: boolean;
+}
+
 export interface DashboardStats {
   activeStudents: number;
   activeTeachers: number;
