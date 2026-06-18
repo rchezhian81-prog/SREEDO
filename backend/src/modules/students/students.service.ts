@@ -31,16 +31,17 @@ LEFT JOIN classes c ON c.id = sec.class_id`;
 
 async function nextAdmissionNo(): Promise<string> {
   const year = new Date().getFullYear();
-  const { rows } = await query<{ count: string }>(
-    "SELECT count(*) FROM students"
+  // Atomic sequence (migration 0009) — race-free unlike the old count(*)+1.
+  const { rows } = await query<{ nextval: string }>(
+    "SELECT nextval('student_admission_seq') AS nextval"
   );
-  const sequence = Number(rows[0].count) + 1;
-  return `ADM-${year}-${String(sequence).padStart(4, "0")}`;
+  return `ADM-${year}-${String(Number(rows[0].nextval)).padStart(4, "0")}`;
 }
 
 export async function listStudents(
   pagination: Pagination,
-  filters: z.infer<typeof listStudentsQuerySchema>
+  filters: z.infer<typeof listStudentsQuerySchema>,
+  restrictIds?: string[] | null
 ) {
   const conditions: string[] = [];
   const params: unknown[] = [];
@@ -51,12 +52,20 @@ export async function listStudents(
   if (filters.status) {
     params.push(filters.status);
     conditions.push(`s.status = $${params.length}`);
+  } else {
+    // Archived (soft-deleted) students are hidden unless explicitly requested.
+    conditions.push(`s.status <> 'archived'`);
   }
   if (filters.search) {
     params.push(`%${filters.search}%`);
     conditions.push(
       `(s.first_name ILIKE $${params.length} OR s.last_name ILIKE $${params.length} OR s.admission_no ILIKE $${params.length})`
     );
+  }
+  // Owner-scoping: restrict to a set of ids (student/parent), null = unrestricted.
+  if (restrictIds != null) {
+    params.push(restrictIds);
+    conditions.push(`s.id = ANY($${params.length}::uuid[])`);
   }
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
@@ -146,7 +155,26 @@ export async function updateStudent(
   return getStudent(id);
 }
 
-export async function removeStudent(id: string): Promise<void> {
+/** Soft delete: mark the student archived, preserving their history. */
+export async function archiveStudent(id: string): Promise<void> {
+  const { rowCount } = await query(
+    "UPDATE students SET status = 'archived' WHERE id = $1",
+    [id]
+  );
+  if (!rowCount) throw ApiError.notFound("Student not found");
+}
+
+/** Hard delete: removes the row and cascades to attendance/invoices/payments. */
+export async function hardDeleteStudent(id: string): Promise<void> {
   const { rowCount } = await query("DELETE FROM students WHERE id = $1", [id]);
   if (!rowCount) throw ApiError.notFound("Student not found");
+}
+
+/** Resolves the student record linked to a user account, if any. */
+export async function studentIdForUser(userId: string): Promise<string | null> {
+  const { rows } = await query<{ id: string }>(
+    "SELECT id FROM students WHERE user_id = $1",
+    [userId]
+  );
+  return rows[0]?.id ?? null;
 }

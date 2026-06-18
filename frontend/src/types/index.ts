@@ -1,4 +1,5 @@
 export type UserRole =
+  | "super_admin"
   | "admin"
   | "teacher"
   | "accountant"
@@ -98,6 +99,89 @@ export interface Announcement {
   isPinned: boolean;
   publishedAt: string;
   createdByName: string | null;
+}
+
+export interface Subject {
+  id: string;
+  name: string;
+  code: string;
+}
+
+export interface AcademicYear {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  isCurrent: boolean;
+}
+
+export interface Exam {
+  id: string;
+  name: string;
+  academicYearId: string | null;
+  academicYearName: string | null;
+  startDate: string | null;
+  endDate: string | null;
+}
+
+export interface ExamResultRow {
+  studentId: string;
+  firstName: string;
+  lastName: string;
+  admissionNo: string;
+  subjectName: string;
+  marksObtained: string;
+  maxMarks: string;
+  grade: string | null;
+}
+
+export interface AccountUser {
+  id: string;
+  email: string;
+  fullName: string;
+  role: UserRole;
+  phone: string | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface Branch {
+  id: string;
+  institutionId: string;
+  name: string;
+  address: string | null;
+  timezone: string;
+  isActive: boolean;
+}
+
+export interface InstitutionSubscription {
+  id: string;
+  status: string;
+  startsAt: string;
+  endsAt: string | null;
+  packageId: string;
+  packageName: string;
+}
+
+export interface Institution {
+  id: string;
+  name: string;
+  code: string;
+  type: "school" | "college";
+  isActive: boolean;
+  branchCount?: string | number;
+  branches?: Branch[];
+  subscription?: InstitutionSubscription | null;
+}
+
+export interface SubscriptionPackage {
+  id: string;
+  name: string;
+  maxStudents: number | null;
+  maxStaff: number | null;
+  price: string | number;
+  billingCycle: "monthly" | "quarterly" | "annual";
+  isActive: boolean;
 }
 
 export interface DashboardStats {

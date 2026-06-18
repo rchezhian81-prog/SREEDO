@@ -5,10 +5,14 @@ SRE EDU OS school ERP monorepo: `backend/` (Express 5 + TS + PostgreSQL),
 `infra/` (nginx), Docker Compose at root.
 
 Full orientation: `docs/DEVELOPER_HANDOVER.md`. Backlog lives there too (§8).
+Planning suite (PRD, architecture, schema, API, roles, workflows, UI, roadmap)
+is indexed in `docs/PLANNING_INDEX.md`.
 
 ## Commands
 
 - Backend (`cd backend`): `npm run dev | typecheck | test | build | migrate | seed`
+  (`npm test` = unit only; `npm run test:integration` needs `DATABASE_URL` to a
+  disposable Postgres — runs Supertest API tests, migrating automatically)
 - Frontend (`cd frontend`): `npm run dev | build | typecheck`
 - Mobile (`cd mobile`): `flutter pub get && flutter analyze`
 - Full stack: `docker compose up --build` (web on :80, seeded admin

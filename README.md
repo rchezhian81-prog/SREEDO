@@ -45,6 +45,16 @@ infra/      Nginx reverse-proxy config
 .github/    CI: backend typecheck+tests+build, frontend build, flutter analyze
 ```
 
+## Documentation
+
+Planning & specification live in [`docs/`](docs/PLANNING_INDEX.md):
+
+- [`docs/PLANNING_INDEX.md`](docs/PLANNING_INDEX.md) — start here; maps every
+  planning artifact (PRD, architecture, schema, API, roles, workflows, UI,
+  roadmap) to its document and notes what is built vs planned.
+- [`docs/DEVELOPER_HANDOVER.md`](docs/DEVELOPER_HANDOVER.md) — how the built
+  system works, conventions, and the prioritized backlog.
+
 ## Quick start (Docker)
 
 ```bash

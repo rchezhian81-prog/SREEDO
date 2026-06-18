@@ -52,6 +52,12 @@ export const env = {
   smtpFrom: process.env.SMTP_FROM ?? "SRE EDU OS <no-reply@sreedo.edu>",
 
   seedOnStart: process.env.SEED_ON_START === "true",
+
+  // API docs (Swagger) default off in production; override with ENABLE_API_DOCS.
+  enableApiDocs:
+    process.env.ENABLE_API_DOCS !== undefined
+      ? process.env.ENABLE_API_DOCS === "true"
+      : process.env.NODE_ENV !== "production",
 };
 
 if (env.isProduction && env.jwtAccessSecret.startsWith("dev-")) {

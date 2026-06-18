@@ -19,6 +19,7 @@ import { dashboardRouter } from "./modules/dashboard/dashboard.routes";
 import { examsRouter } from "./modules/exams/exams.routes";
 import { feesRouter } from "./modules/fees/fees.routes";
 import { studentsRouter } from "./modules/students/students.routes";
+import { superAdminRouter } from "./modules/superadmin/superadmin.routes";
 import { teachersRouter } from "./modules/teachers/teachers.routes";
 import { usersRouter } from "./modules/users/users.routes";
 
@@ -49,10 +50,14 @@ export function createApp(): express.Express {
     });
   });
 
-  app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-  app.get("/api/docs.json", (_req, res) => {
-    res.json(swaggerSpec);
-  });
+  // Swagger is disabled in production by default (see env.enableApiDocs) so the
+  // API surface is not publicly browsable; set ENABLE_API_DOCS=true to expose it.
+  if (env.enableApiDocs) {
+    app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+    app.get("/api/docs.json", (_req, res) => {
+      res.json(swaggerSpec);
+    });
+  }
 
   const api = express.Router();
   api.use(apiRateLimiter);
@@ -68,6 +73,7 @@ export function createApp(): express.Express {
   api.use("/announcements", announcementsRouter);
   api.use("/dashboard", dashboardRouter);
   api.use("/ai", aiRouter);
+  api.use("/", superAdminRouter); // /institutions, /branches, /packages
   app.use("/api/v1", api);
 
   app.use(notFoundHandler);

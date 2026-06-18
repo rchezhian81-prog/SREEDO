@@ -14,7 +14,12 @@ export function authenticate(
   }
   try {
     const payload = verifyAccessToken(header.slice("Bearer ".length));
-    req.user = { id: payload.sub, email: payload.email, role: payload.role };
+    req.user = {
+      id: payload.sub,
+      email: payload.email,
+      role: payload.role,
+      institutionId: payload.institutionId ?? null,
+    };
     next();
   } catch {
     throw ApiError.unauthorized("Invalid or expired token");

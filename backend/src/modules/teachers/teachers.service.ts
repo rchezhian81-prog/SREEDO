@@ -21,10 +21,11 @@ const TEACHER_COLUMNS = `
   created_at AS "createdAt"`;
 
 async function nextEmployeeNo(): Promise<string> {
-  const { rows } = await query<{ count: string }>(
-    "SELECT count(*) FROM teachers"
+  // Atomic sequence (migration 0009) — race-free unlike the old count(*)+1.
+  const { rows } = await query<{ nextval: string }>(
+    "SELECT nextval('teacher_employee_seq') AS nextval"
   );
-  return `EMP-${String(Number(rows[0].count) + 1).padStart(4, "0")}`;
+  return `EMP-${String(Number(rows[0].nextval)).padStart(4, "0")}`;
 }
 
 export async function listTeachers(

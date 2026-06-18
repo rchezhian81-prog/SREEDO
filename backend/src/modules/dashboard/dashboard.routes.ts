@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { authenticate } from "../../middleware/auth";
+import { requireStaff } from "../../utils/scope";
 import { query } from "../../db/postgres";
 
 export const dashboardRouter = Router();
@@ -15,7 +16,8 @@ export const dashboardRouter = Router();
  *       200:
  *         description: Student/teacher counts, today's attendance rate and fee totals
  */
-dashboardRouter.get("/stats", authenticate, async (_req, res) => {
+dashboardRouter.get("/stats", authenticate, async (req, res) => {
+  requireStaff(req); // school-wide aggregates are staff-only
   const { rows } = await query<{
     active_students: string;
     active_teachers: string;

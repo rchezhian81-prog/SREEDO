@@ -17,7 +17,7 @@ export const updateStudentSchema = createStudentSchema
   .partial()
   .extend({
     status: z
-      .enum(["active", "inactive", "graduated", "transferred"])
+      .enum(["active", "inactive", "graduated", "transferred", "archived"])
       .optional(),
   });
 
@@ -26,7 +26,11 @@ export const listStudentsQuerySchema = z.object({
   limit: z.coerce.number().int().positive().optional(),
   sectionId: z.string().uuid().optional(),
   status: z
-    .enum(["active", "inactive", "graduated", "transferred"])
+    .enum(["active", "inactive", "graduated", "transferred", "archived"])
     .optional(),
   search: z.string().max(200).optional(),
+});
+
+export const deleteStudentQuerySchema = z.object({
+  hard: z.coerce.boolean().optional(),
 });

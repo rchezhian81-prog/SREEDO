@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { uuidParam } from "../../utils/params";
-import { authenticate, authorize } from "../../middleware/auth";
+import { authenticate } from "../../middleware/auth";
+import { requirePermission } from "../../middleware/permissions";
 import { parsePagination } from "../../utils/pagination";
 import {
   createUserSchema,
@@ -11,7 +12,7 @@ import * as usersService from "./users.service";
 
 export const usersRouter = Router();
 
-usersRouter.use(authenticate, authorize("admin"));
+usersRouter.use(authenticate, requirePermission("users:manage"));
 
 /**
  * @openapi

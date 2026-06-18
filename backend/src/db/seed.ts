@@ -4,6 +4,8 @@ import { hashPassword } from "../utils/password";
 
 const ADMIN_EMAIL = "admin@sreedo.edu";
 const ADMIN_PASSWORD = "Admin@12345";
+const SUPER_ADMIN_EMAIL = "super@sreedo.edu";
+const SUPER_ADMIN_PASSWORD = "Super@12345";
 
 /** Seeds demo data only when the database has no users yet (idempotent). */
 export async function seedIfEmpty(): Promise<void> {
@@ -23,6 +25,33 @@ export async function seed(): Promise<void> {
     `INSERT INTO users (email, password_hash, full_name, role)
      VALUES ($1, $2, 'School Administrator', 'admin')`,
     [ADMIN_EMAIL, adminHash]
+  );
+
+  // Super admin + a demo tenant (institution, branch, package, subscription).
+  const superHash = await hashPassword(SUPER_ADMIN_PASSWORD);
+  await query(
+    `INSERT INTO users (email, password_hash, full_name, role)
+     VALUES ($1, $2, 'Platform Super Admin', 'super_admin')`,
+    [SUPER_ADMIN_EMAIL, superHash]
+  );
+  const { rows: instRows } = await query<{ id: string }>(
+    `INSERT INTO institutions (name, code, type)
+     VALUES ('SRE Demo School', 'SREDEMO', 'school') RETURNING id`
+  );
+  const institutionId = instRows[0].id;
+  await query(
+    `INSERT INTO branches (institution_id, name, address)
+     VALUES ($1, 'Main Campus', '1 School Road')`,
+    [institutionId]
+  );
+  const { rows: pkgRows } = await query<{ id: string }>(
+    `INSERT INTO subscription_packages (name, max_students, max_staff, price, billing_cycle)
+     VALUES ('Standard', 1000, 200, 50000, 'annual') RETURNING id`
+  );
+  await query(
+    `INSERT INTO institution_subscriptions (institution_id, package_id, status)
+     VALUES ($1, $2, 'active')`,
+    [institutionId, pkgRows[0].id]
   );
 
   const year = new Date().getFullYear();
@@ -121,7 +150,51 @@ export async function seed(): Promise<void> {
     [ADMIN_EMAIL]
   );
 
-  console.log(`Seed complete — admin login: ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
+  // Tag all seeded school data with the demo institution (multi-tenancy).
+  const tenantTables = [
+    "students",
+    "teachers",
+    "academic_years",
+    "classes",
+    "sections",
+    "subjects",
+    "class_subjects",
+    "attendance_records",
+    "fee_structures",
+    "invoices",
+    "payments",
+    "exams",
+    "exam_results",
+    "announcements",
+  ];
+  for (const table of tenantTables) {
+    await query(
+      `UPDATE ${table} SET institution_id = $1 WHERE institution_id IS NULL`,
+      [institutionId]
+    );
+  }
+  await query(
+    `UPDATE users SET institution_id = $1 WHERE institution_id IS NULL AND role <> 'super_admin'`,
+    [institutionId]
+  );
+
+  // Re-sync the numbering sequences past the literal numbers seeded above so
+  // records created later through the API never collide with them.
+  await query(
+    `SELECT setval('student_admission_seq',
+       (SELECT COALESCE(MAX(CAST(SUBSTRING(admission_no FROM '[0-9]+$') AS INTEGER)), 0)
+        FROM students), true)`
+  );
+  await query(
+    `SELECT setval('teacher_employee_seq',
+       (SELECT COALESCE(MAX(CAST(SUBSTRING(employee_no FROM '[0-9]+$') AS INTEGER)), 0)
+        FROM teachers), true)`
+  );
+
+  console.log(
+    `Seed complete — admin: ${ADMIN_EMAIL} / ${ADMIN_PASSWORD} · ` +
+      `super admin: ${SUPER_ADMIN_EMAIL} / ${SUPER_ADMIN_PASSWORD}`
+  );
 }
 
 if (require.main === module) {

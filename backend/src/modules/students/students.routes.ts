@@ -2,8 +2,10 @@ import { Router } from "express";
 import { uuidParam } from "../../utils/params";
 import { authenticate, authorize } from "../../middleware/auth";
 import { parsePagination } from "../../utils/pagination";
+import { accessibleStudentIds, assertStudentAccess } from "../../utils/scope";
 import {
   createStudentSchema,
+  deleteStudentQuerySchema,
   listStudentsQuerySchema,
   updateStudentSchema,
 } from "./students.schema";
@@ -24,7 +26,7 @@ studentsRouter.use(authenticate);
  *       - { in: query, name: page, schema: { type: integer } }
  *       - { in: query, name: limit, schema: { type: integer } }
  *       - { in: query, name: sectionId, schema: { type: string, format: uuid } }
- *       - { in: query, name: status, schema: { type: string, enum: [active, inactive, graduated, transferred] } }
+ *       - { in: query, name: status, schema: { type: string, enum: [active, inactive, graduated, transferred, archived] } }
  *       - { in: query, name: search, schema: { type: string } }
  *     responses:
  *       200: { description: Paginated list of students }
@@ -57,7 +59,8 @@ studentsRouter.get("/", async (req, res) => {
   const queryParams = listStudentsQuerySchema.parse(req.query);
   const result = await studentsService.listStudents(
     parsePagination(queryParams),
-    queryParams
+    queryParams,
+    await accessibleStudentIds(req)
   );
   res.json(result);
 });
@@ -90,15 +93,19 @@ studentsRouter.post("/", authorize("admin"), async (req, res) => {
  *       200: { description: Updated student }
  *   delete:
  *     tags: [Students]
- *     summary: Delete a student record (admin)
+ *     summary: Archive a student (admin); soft delete by default
+ *     description: Marks the student archived, preserving attendance/fees history. Pass hard=true to permanently delete the row and its dependent records.
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *       - { in: query, name: hard, schema: { type: boolean }, description: Permanently delete instead of archiving }
  *     responses:
- *       204: { description: Deleted }
+ *       204: { description: Archived (or deleted when hard=true) }
  */
 studentsRouter.get("/:id", async (req, res) => {
-  res.json(await studentsService.getStudent(uuidParam(req)));
+  const id = uuidParam(req);
+  assertStudentAccess(await accessibleStudentIds(req), id);
+  res.json(await studentsService.getStudent(id));
 });
 
 studentsRouter.patch("/:id", authorize("admin"), async (req, res) => {
@@ -107,6 +114,12 @@ studentsRouter.patch("/:id", authorize("admin"), async (req, res) => {
 });
 
 studentsRouter.delete("/:id", authorize("admin"), async (req, res) => {
-  await studentsService.removeStudent(uuidParam(req));
+  const { hard } = deleteStudentQuerySchema.parse(req.query);
+  const id = uuidParam(req);
+  if (hard) {
+    await studentsService.hardDeleteStudent(id);
+  } else {
+    await studentsService.archiveStudent(id);
+  }
   res.status(204).end();
 });
