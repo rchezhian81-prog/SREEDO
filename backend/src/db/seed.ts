@@ -224,6 +224,24 @@ export async function seed(): Promise<void> {
     );
   }
 
+  // Default grade scale for report cards (boundaries resolve to the higher grade).
+  const gradeBands: Array<[string, number, number, string, number]> = [
+    ["A+", 90, 100, "Outstanding", 1],
+    ["A", 80, 90, "Excellent", 2],
+    ["B", 70, 80, "Very Good", 3],
+    ["C", 60, 70, "Good", 4],
+    ["D", 50, 60, "Satisfactory", 5],
+    ["E", 35, 50, "Needs Improvement", 6],
+    ["F", 0, 35, "Fail", 7],
+  ];
+  for (const [grade, lo, hi, remark, order] of gradeBands) {
+    await query(
+      `INSERT INTO grade_bands (institution_id, grade, min_percent, max_percent, remark, sort_order)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [institutionId, grade, lo, hi, remark, order]
+    );
+  }
+
   // Tag all seeded school data with the demo institution (multi-tenancy).
   const tenantTables = [
     "students",

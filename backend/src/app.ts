@@ -19,6 +19,7 @@ import { dashboardRouter } from "./modules/dashboard/dashboard.routes";
 import { examsRouter } from "./modules/exams/exams.routes";
 import { feesRouter } from "./modules/fees/fees.routes";
 import { portalRouter } from "./modules/portal/portal.routes";
+import { reportsRouter } from "./modules/reports/reports.routes";
 import { studentsRouter } from "./modules/students/students.routes";
 import { superAdminRouter } from "./modules/superadmin/superadmin.routes";
 import { teachersRouter } from "./modules/teachers/teachers.routes";
@@ -76,6 +77,7 @@ export function createApp(): express.Express {
   api.use("/announcements", announcementsRouter);
   api.use("/dashboard", dashboardRouter);
   api.use("/portal", portalRouter);
+  api.use("/reports", reportsRouter);
   api.use("/ai", aiRouter);
   api.use("/", superAdminRouter); // /institutions, /branches, /packages
   app.use("/api/v1", api);
