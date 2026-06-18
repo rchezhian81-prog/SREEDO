@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { api, ApiError } from "@/lib/api";
+import { useAuthStore } from "@/stores/auth-store";
 import {
   Badge,
   Button,
@@ -18,7 +19,39 @@ import {
   Select,
   Spinner,
 } from "@/components/ui";
-import type { FeeSummary, Invoice, Paginated, Student } from "@/types";
+import type {
+  FeeSummary,
+  Invoice,
+  InvoiceWithPayments,
+  Paginated,
+  Student,
+} from "@/types";
+
+async function downloadPdf(path: string, filename: string) {
+  const base =
+    process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
+  const token = useAuthStore.getState().accessToken;
+  const res = await fetch(`${base}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    let msg = res.statusText;
+    try {
+      const d = await res.json();
+      if (typeof d.error === "string") msg = d.error;
+    } catch {
+      // non-JSON error body — keep statusText
+    }
+    throw new ApiError(res.status, msg);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 const invoiceSchema = z.object({
   studentId: z.string().min(1, "Pick a student"),
@@ -53,6 +86,14 @@ export default function FeesPage() {
   const [invoiceModal, setInvoiceModal] = useState(false);
   const [payingInvoice, setPayingInvoice] = useState<Invoice | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
+
+  // "View payments" modal state.
+  const [paymentsInvoice, setPaymentsInvoice] =
+    useState<InvoiceWithPayments | null>(null);
+  const [paymentsOpen, setPaymentsOpen] = useState(false);
+  const [paymentsLoading, setPaymentsLoading] = useState(false);
+  const [paymentsError, setPaymentsError] = useState<string | null>(null);
+  const [receiptError, setReceiptError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -117,6 +158,39 @@ export default function FeesPage() {
     } catch (err) {
       setServerError(
         err instanceof ApiError ? err.message : "Failed to record payment"
+      );
+    }
+  };
+
+  const viewPayments = async (invoice: Invoice) => {
+    setPaymentsOpen(true);
+    setPaymentsInvoice(null);
+    setPaymentsError(null);
+    setReceiptError(null);
+    setPaymentsLoading(true);
+    try {
+      setPaymentsInvoice(
+        await api.get<InvoiceWithPayments>(`/fees/invoices/${invoice.id}`)
+      );
+    } catch (err) {
+      setPaymentsError(
+        err instanceof ApiError ? err.message : "Failed to load payments"
+      );
+    } finally {
+      setPaymentsLoading(false);
+    }
+  };
+
+  const downloadReceipt = async (paymentId: string) => {
+    setReceiptError(null);
+    try {
+      await downloadPdf(
+        `/fee-receipts/${paymentId}/download`,
+        "receipt.pdf"
+      );
+    } catch (err) {
+      setReceiptError(
+        err instanceof ApiError ? err.message : "Failed to download receipt"
       );
     }
   };
@@ -205,15 +279,23 @@ export default function FeesPage() {
                     </Badge>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    {invoice.status !== "paid" &&
-                      invoice.status !== "cancelled" && (
-                        <button
-                          onClick={() => setPayingInvoice(invoice)}
-                          className="text-xs font-medium text-brand-600 hover:text-brand-700"
-                        >
-                          Record payment
-                        </button>
-                      )}
+                    <div className="flex justify-end gap-3">
+                      <button
+                        onClick={() => viewPayments(invoice)}
+                        className="text-xs font-medium text-brand-600 hover:text-brand-700"
+                      >
+                        View payments
+                      </button>
+                      {invoice.status !== "paid" &&
+                        invoice.status !== "cancelled" && (
+                          <button
+                            onClick={() => setPayingInvoice(invoice)}
+                            className="text-xs font-medium text-brand-600 hover:text-brand-700"
+                          >
+                            Record payment
+                          </button>
+                        )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -221,6 +303,63 @@ export default function FeesPage() {
           </table>
         </div>
       )}
+
+      <Modal
+        title={`Payments — ${paymentsInvoice?.invoiceNo ?? ""}`}
+        open={paymentsOpen}
+        onClose={() => setPaymentsOpen(false)}
+      >
+        {paymentsLoading ? (
+          <Spinner />
+        ) : paymentsError ? (
+          <ErrorNote message={paymentsError} />
+        ) : paymentsInvoice && paymentsInvoice.payments.length > 0 ? (
+          <div className="space-y-3">
+            <ErrorNote message={receiptError} />
+            <div className="overflow-x-auto rounded-xl border border-slate-200">
+              <table className="w-full text-left text-sm">
+                <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3 text-right">Amount</th>
+                    <th className="px-4 py-3">Method</th>
+                    <th className="px-4 py-3">Reference</th>
+                    <th className="px-4 py-3">Paid</th>
+                    <th className="px-4 py-3" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {paymentsInvoice.payments.map((payment) => (
+                    <tr key={payment.id}>
+                      <td className="px-4 py-3 text-right text-slate-900">
+                        {Number(payment.amount).toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {payment.method.replace("_", " ")}
+                      </td>
+                      <td className="px-4 py-3 text-slate-500">
+                        {payment.reference ?? "—"}
+                      </td>
+                      <td className="px-4 py-3 text-slate-500">
+                        {new Date(payment.paidAt).toLocaleDateString()}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => downloadReceipt(payment.id)}
+                          className="text-xs font-medium text-brand-600 hover:text-brand-700"
+                        >
+                          Receipt
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <EmptyState message="No payments recorded yet" />
+        )}
+      </Modal>
 
       <Modal
         title="New invoice"

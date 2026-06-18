@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { portalApi } from "@/lib/portal-api";
+import { ApiError } from "@/lib/api";
 import { usePortalStore } from "@/stores/portal-store";
 import {
   Badge,
+  Button,
   Card,
   EmptyState,
   ErrorNote,
@@ -12,6 +14,29 @@ import {
   Spinner,
 } from "@/components/ui";
 import type { StudentSummary } from "@/types";
+
+async function downloadPortalPdf(path: string, filename: string) {
+  const base =
+    process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
+  const res = await fetch(`${base}${path}`, { credentials: "include" });
+  if (!res.ok) {
+    let msg = res.statusText;
+    try {
+      const d = await res.json();
+      if (typeof d.error === "string") msg = d.error;
+    } catch {
+      // non-JSON error body — keep statusText
+    }
+    throw new ApiError(res.status, msg);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 function Row({ label, value }: { label: string; value: string | null }) {
   return (
@@ -40,6 +65,10 @@ export default function PortalProfilePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // ID card download state.
+  const [idLoading, setIdLoading] = useState(false);
+  const [idError, setIdError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!studentId) {
       setSummary(null);
@@ -54,6 +83,24 @@ export default function PortalProfilePage() {
       .catch(() => setError("Could not load the profile."))
       .finally(() => setLoading(false));
   }, [studentId]);
+
+  const downloadIdCard = async () => {
+    if (!studentId) return;
+    setIdLoading(true);
+    setIdError(null);
+    try {
+      await downloadPortalPdf(
+        `/id-cards/student/${studentId}/download`,
+        "id-card.pdf"
+      );
+    } catch (err) {
+      setIdError(
+        err instanceof ApiError ? err.message : "Failed to download ID card"
+      );
+    } finally {
+      setIdLoading(false);
+    }
+  };
 
   if (!studentId) {
     return (
@@ -103,6 +150,12 @@ export default function PortalProfilePage() {
           <Row label="Guardian phone" value={p.guardianPhone} />
           <Row label="Guardian email" value={p.guardianEmail} />
           <Row label="Address" value={p.address} />
+          <div className="mt-4 space-y-2">
+            <Button onClick={downloadIdCard} disabled={idLoading}>
+              {idLoading ? "Downloading…" : "Download ID card"}
+            </Button>
+            <ErrorNote message={idError} />
+          </div>
         </Card>
       )}
     </>

@@ -2,16 +2,47 @@
 
 import { useEffect, useState } from "react";
 import { portalApi } from "@/lib/portal-api";
+import { ApiError } from "@/lib/api";
 import { usePortalStore } from "@/stores/portal-store";
 import {
   Badge,
+  Button,
   Card,
   EmptyState,
   ErrorNote,
+  Modal,
   PageHeader,
   Spinner,
 } from "@/components/ui";
-import type { Invoice, Paginated, StudentSummary } from "@/types";
+import type {
+  Invoice,
+  InvoiceWithPayments,
+  Paginated,
+  StudentSummary,
+} from "@/types";
+
+async function downloadPortalPdf(path: string, filename: string) {
+  const base =
+    process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
+  const res = await fetch(`${base}${path}`, { credentials: "include" });
+  if (!res.ok) {
+    let msg = res.statusText;
+    try {
+      const d = await res.json();
+      if (typeof d.error === "string") msg = d.error;
+    } catch {
+      // non-JSON error body — keep statusText
+    }
+    throw new ApiError(res.status, msg);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 function StatCard({
   label,
@@ -48,6 +79,14 @@ export default function PortalFeesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // "View payments" modal state.
+  const [paymentsInvoice, setPaymentsInvoice] =
+    useState<InvoiceWithPayments | null>(null);
+  const [paymentsOpen, setPaymentsOpen] = useState(false);
+  const [paymentsLoading, setPaymentsLoading] = useState(false);
+  const [paymentsError, setPaymentsError] = useState<string | null>(null);
+  const [receiptError, setReceiptError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!studentId) {
       setSummary(null);
@@ -71,6 +110,41 @@ export default function PortalFeesPage() {
       .then((res) => setInvoices(res.data))
       .catch(() => setInvoices(null));
   }, [studentId]);
+
+  const viewPayments = async (invoice: Invoice) => {
+    setPaymentsOpen(true);
+    setPaymentsInvoice(null);
+    setPaymentsError(null);
+    setReceiptError(null);
+    setPaymentsLoading(true);
+    try {
+      setPaymentsInvoice(
+        await portalApi.get<InvoiceWithPayments>(
+          `/fees/invoices/${invoice.id}`
+        )
+      );
+    } catch (err) {
+      setPaymentsError(
+        err instanceof ApiError ? err.message : "Failed to load payments"
+      );
+    } finally {
+      setPaymentsLoading(false);
+    }
+  };
+
+  const downloadReceipt = async (paymentId: string) => {
+    setReceiptError(null);
+    try {
+      await downloadPortalPdf(
+        `/fee-receipts/${paymentId}/download`,
+        "receipt.pdf"
+      );
+    } catch (err) {
+      setReceiptError(
+        err instanceof ApiError ? err.message : "Failed to download receipt"
+      );
+    }
+  };
 
   if (!studentId) {
     return (
@@ -111,6 +185,7 @@ export default function PortalFeesPage() {
                 <th className="px-4 py-3 text-right">Due</th>
                 <th className="px-4 py-3 text-right">Paid</th>
                 <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -133,12 +208,77 @@ export default function PortalFeesPage() {
                       {inv.status.replace("_", " ")}
                     </Badge>
                   </td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      onClick={() => viewPayments(inv)}
+                      className="text-xs font-medium text-brand-600 hover:text-brand-700"
+                    >
+                      View payments
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+
+      <Modal
+        title={`Payments — ${paymentsInvoice?.invoiceNo ?? ""}`}
+        open={paymentsOpen}
+        onClose={() => setPaymentsOpen(false)}
+      >
+        {paymentsLoading ? (
+          <Spinner />
+        ) : paymentsError ? (
+          <ErrorNote message={paymentsError} />
+        ) : paymentsInvoice && paymentsInvoice.payments.length > 0 ? (
+          <div className="space-y-3">
+            <ErrorNote message={receiptError} />
+            <div className="overflow-x-auto rounded-xl border border-slate-200">
+              <table className="w-full text-left text-sm">
+                <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3 text-right">Amount</th>
+                    <th className="px-4 py-3">Method</th>
+                    <th className="px-4 py-3">Reference</th>
+                    <th className="px-4 py-3">Paid</th>
+                    <th className="px-4 py-3" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {paymentsInvoice.payments.map((payment) => (
+                    <tr key={payment.id}>
+                      <td className="px-4 py-3 text-right text-slate-900">
+                        {Number(payment.amount).toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {payment.method.replace("_", " ")}
+                      </td>
+                      <td className="px-4 py-3 text-slate-500">
+                        {payment.reference ?? "—"}
+                      </td>
+                      <td className="px-4 py-3 text-slate-500">
+                        {new Date(payment.paidAt).toLocaleDateString()}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => downloadReceipt(payment.id)}
+                          className="text-xs font-medium text-brand-600 hover:text-brand-700"
+                        >
+                          Receipt
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <EmptyState message="No payments recorded yet" />
+        )}
+      </Modal>
     </>
   );
 }

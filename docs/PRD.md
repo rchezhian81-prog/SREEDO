@@ -147,9 +147,10 @@ server-side. Homework/results detail and study materials remain ⬜.
 ### 4.8 Fee Management — 🟡 Partial
 - ✅ Fee structures (class/year, frequency), invoices with unique numbers,
   payments with **overpay guard**, status lifecycle, multiple methods, summary.
+- ✅ **Payment receipt PDF** (owner-scoped download from the fee page + portal),
+  on the shared pdfkit utility.
 - ⬜ Fee categories, term-wise schedules, **fine** rules, **discount/scholarship**,
-  online-payment gateway adapter, **receipt PDF**, class-wise/student-wise dues
-  reports as printable documents.
+  online-payment gateway adapter, class-wise/student-wise dues reports.
 
 ### 4.9 Exam & Result Management — ✅ Built
 - ✅ Exam creation, bulk mark entry (web **Exams & Results** page with a

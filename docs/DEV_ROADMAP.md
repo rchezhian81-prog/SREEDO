@@ -58,8 +58,10 @@ exams (API), announcements, AI assistant, Swagger, seed, Docker, CI, unit tests.
    owner-scoped downloads, `documents:*` + `institution:logo:update` permissions,
    and upload/list/download/delete UI (staff + portal). ID-card/photo/cert/TC +
    message-attachment foundations included.
-2. **PDFs:** ✅ **report cards** + **mark sheets** (pdfkit) shipped; remaining: fee
-   **receipts**, ID cards, transfer certificates.
+2. **PDFs:** ✅ **report cards**, **mark sheets**, **fee receipts**, and **student/
+   staff ID cards** (incl. bulk section export) shipped on a shared pdfkit utility
+   (migration `0021` adds `fee_receipts:*` / `id_cards:*` permissions). Remaining:
+   transfer certificates.
 3. **Communication:** ✅ in-app messaging (audience targeting + read/unread inbox),
    **email/SMS/FCM-push** adapters (optional, graceful), device-token registration,
    **fee reminders** + **absence alerts** (migration `0018`). Threaded messaging ⬜.
