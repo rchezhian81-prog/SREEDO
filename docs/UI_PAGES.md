@@ -30,12 +30,13 @@ primitives; the **students page is the reference** for table+form screens.
 | Fees | `/fees` | structures, invoices, payments, summary |
 | Announcements | `/announcements` | notice board CRUD |
 | AI Assistant | `/assistant` | chat with GPT-4o assistant |
+| Exams & Results | `/exams` | exam CRUD + per-section/subject mark entry grid |
+| Users / Account management | `/users` | admin-only: list, create, edit role/status, deactivate |
 
 ### Planned admin pages ⬜ (APIs partly exist)
 | Page | Phase | Notes |
 |------|-------|-------|
-| Exams & Results | A | mark entry grid, report cards (API ✅, UI missing — handover §8.1) |
-| Users / Account management | A | role assignment (API ✅, UI missing — handover §8.1) |
+| Report cards / printable mark sheets | B/C | PDF generation on top of the exams data |
 | Academic years & terms/semesters | A/B | year + term/semester setup |
 | Departments / Courses (college) | B | college-mode setup |
 | Timetable builder | B | drag-grid, conflict warnings |

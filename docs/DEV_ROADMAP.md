@@ -16,11 +16,12 @@ Auth + RBAC, admin dashboard, students, teachers, academics, attendance, fees,
 exams (API), announcements, AI assistant, Swagger, seed, Docker, CI, unit tests.
 *This satisfies the brief's MVP list.*
 
-### Phase A — Foundation hardening & multi-tenancy 🟡 NEXT
+### Phase A — Foundation hardening & multi-tenancy 🟡 IN PROGRESS
 **Goal:** make the platform truly multi-institution and production-safe.
-1. **Security backlog (handover §8) first:** owner-scope read endpoints,
-   soft-delete students, store `amount_paid` on invoices, sequence-based
-   admission/employee numbers, restrict Swagger in prod, token-storage review.
+1. **Security backlog (handover §8):** ✅ owner-scope read endpoints, ✅
+   soft-delete students — both done. Remaining: store `amount_paid` on invoices,
+   sequence-based admission/employee numbers, restrict Swagger in prod,
+   token-storage review.
 2. **Permissions layer:** `permissions` + `role_permissions`,
    `requirePermission()`, seed the role matrix.
 3. **Multi-tenancy:** `institutions`/`branches`, add `institution_id` to
@@ -28,8 +29,8 @@ exams (API), announcements, AI assistant, Swagger, seed, Docker, CI, unit tests.
    `tenant` middleware.
 4. **Super Admin panel:** institutions, branches, packages/subscriptions,
    global settings, backups, global audit log UI.
-5. **Fill MVP UI gaps:** Exams & Results page, Users/account-management page
-   (APIs already exist).
+5. ✅ **MVP UI gaps filled:** Exams & Results page and Users/account-management
+   page shipped.
 
 ### Phase B — Academic depth (college mode + timetables) ⬜
 1. **College mode:** departments, courses/programs, semesters; make

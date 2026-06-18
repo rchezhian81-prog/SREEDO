@@ -12,6 +12,9 @@ endpoints** per upcoming module.
   consistent error envelope from the central error handler.
 - **Rate limiting:** global limiter on all `/api/v1`; stricter limiter on login.
 - **Errors:** `{ error: { message, ... } }` via `ApiError` + error middleware.
+- **Owner-scoping:** staff roles see all records; `student` is limited to their
+  own student/attendance/exam/fee records; section rosters, exam-wide results,
+  the fee summary and dashboard stats are staff-only.
 - **Health (outside /api/v1):** `GET /health` → `{ status, postgres, mongo, uptime }`.
 
 Auth column legend: **public** · **auth** (any logged-in) · or explicit role(s).
@@ -45,7 +48,7 @@ Auth column legend: **public** · **auth** (any logged-in) · or explicit role(s
 | POST | `/` | admin | Create (auto admission no.) |
 | GET | `/:id` | auth | Get student |
 | PATCH | `/:id` | admin | Update |
-| DELETE | `/:id` | admin | Delete *(hard delete today — see handover §8)* |
+| DELETE | `/:id` | admin | Archive (soft delete); `?hard=true` to permanently delete |
 
 ### Teachers — `/api/v1/teachers`
 | Method | Path | Auth | Purpose |

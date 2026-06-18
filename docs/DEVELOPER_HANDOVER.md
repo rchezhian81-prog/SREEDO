@@ -165,14 +165,16 @@ go-live is a nightly `pg_dump` shipped off-box — fee data is money.
 
 Fix-before-production:
 
-1. **Web app has no Exams page and no Users (account management) page** —
-   the APIs are complete; only the UI screens are missing.
-2. **Read endpoints are not owner-scoped.** Any authenticated user can list
-   all students/invoices/attendance. Fine while only staff have logins;
-   must be scoped before `student`/`parent` accounts are issued.
-3. **Student delete is a hard delete** that cascades to attendance,
-   invoices, payments. Convert to soft-delete (status change) and gate the
-   hard delete.
+1. ✅ **Done (2026-06-18).** Web **Exams & Results** and **Users** (account
+   management) pages shipped — `frontend/src/app/(dashboard)/{exams,users}`.
+2. ✅ **Done (2026-06-18).** Read endpoints are **owner-scoped** via
+   `backend/src/utils/scope.ts`: staff are unrestricted; `student` is limited to
+   their own records; `parent` returns none until the parent⇄student link ships
+   (Phase C). Section rosters, exam-wide results, the fee summary and dashboard
+   stats are staff-only.
+3. ✅ **Done (2026-06-18).** `DELETE /students/:id` now **soft-deletes**
+   (status `archived`, migration `0007`), preserving attendance/fee history;
+   a true hard delete is gated behind `?hard=true`.
 4. **Tokens live in localStorage** (web). Acceptable for an internal staff
    tool; migrate to httpOnly cookies before exposing a public portal.
 5. **Swagger UI is publicly reachable** — restrict at nginx in production.

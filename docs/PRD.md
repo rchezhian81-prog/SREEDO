@@ -110,7 +110,8 @@ reports 🟡.
 
 ### 4.3 Student Management — 🟡 Partial
 - ✅ Admission (create) with auto admission numbers, profile, status lifecycle
-  (active/inactive/graduated/transferred), section assignment, guardian fields.
+  (active/inactive/graduated/transferred), section assignment, guardian fields,
+  and **soft-delete** (archive) that preserves attendance/fee history.
 - ⬜ Document upload, ID-card details, disciplinary records, transfer-certificate
   (TC) generation. Attendance/fees/exam links exist via their modules.
 
@@ -143,7 +144,8 @@ study materials. *Role exists; needs scoped endpoints + portal UI/app.*
   reports as printable documents.
 
 ### 4.9 Exam & Result Management — 🟡 Partial
-- ✅ Exam creation, bulk mark entry, per-exam results, per-student report.
+- ✅ Exam creation, bulk mark entry (web **Exams & Results** page with a
+  per-section/subject grid), per-exam results, per-student report.
 - ⬜ Grade-band setup table, weighted/total computation, **report-card PDF**,
   printable mark sheets, subject-wise analytics screens.
 
@@ -193,10 +195,11 @@ salary reports. (Reuses staff records + finance patterns.)
 
 ### 4.20 Security — 🟡 Partial (see §6)
 - ✅ JWT auth, role-based access, rate limiting, zod input validation, bcrypt
-  password hashing, audit logs (Mongo), parameterized SQL, HTTPS-ready (nginx).
+  password hashing, audit logs (Mongo), parameterized SQL, HTTPS-ready (nginx),
+  **owner-scoped reads** (student role; parent pending its link).
 - ⬜ Fine-grained **permission** layer (beyond role gates), secure **file
-  uploads** to object storage, owner-scoping of read endpoints, automated
-  **backup** job, httpOnly-cookie token option.
+  uploads** to object storage, automated **backup** job, httpOnly-cookie token
+  option.
 
 ## 5. Non-functional requirements (NFRs)
 
@@ -275,8 +278,8 @@ announcements ✅, dashboard KPIs ✅, AI assistant ✅, Swagger ✅, seed data 
 Docker Compose ✅, CI ✅, 11 unit tests passing ✅.
 
 **Clients:** Next.js web admin (login, dashboard, students, teachers, classes,
-attendance, fees, announcements, assistant) ✅; Flutter app (dashboard, notices,
-profile) 🟡 unverified.
+attendance, exams, fees, announcements, assistant, users) ✅; Flutter app
+(dashboard, notices, profile) 🟡 unverified.
 
 This snapshot is the **MVP baseline** the brief asked for. Everything in §4 marked
 🟡/⬜ is the path from MVP → full ERP, sequenced in [`DEV_ROADMAP.md`](./DEV_ROADMAP.md).
