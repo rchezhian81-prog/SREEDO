@@ -166,6 +166,15 @@ export interface ExamResultRow {
   grade: string | null;
 }
 
+export interface GradeBand {
+  id: string;
+  grade: string;
+  minPercent: string; // NUMERIC → returned as strings e.g. "90.00"
+  maxPercent: string;
+  remark: string | null;
+  sortOrder: number;
+}
+
 export interface AccountUser {
   id: string;
   email: string;
