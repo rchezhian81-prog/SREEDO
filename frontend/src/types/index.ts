@@ -322,6 +322,99 @@ export interface SubscriptionPackage {
   isActive: boolean;
 }
 
+// --- Super Admin console (platform hardening) ---
+
+/** Brief institution row from GET /admin/institutions (selectors). */
+export interface AdminInstitutionBrief {
+  id: string;
+  name: string;
+  code: string;
+  type: "school" | "college";
+  isActive: boolean;
+}
+
+export interface InstitutionSettings {
+  id: string;
+  name: string;
+  code: string;
+  type: "school" | "college";
+  isActive: boolean;
+  settings: {
+    contact?: {
+      email?: string | null;
+      phone?: string | null;
+      address?: string | null;
+    };
+    enabledModules?: string[];
+    featureFlags?: Record<string, boolean>;
+    academicYearDefaults?: Record<string, unknown>;
+  } | null;
+}
+
+export interface InstitutionLimits {
+  packageName: string;
+  maxStudents: number | null;
+  students: number;
+  maxStaff: number | null;
+  staff: number;
+  storageLimitMb: number | null;
+  smsQuota: number | null;
+  withinLimits: boolean;
+}
+
+export interface InstitutionStats {
+  students: number;
+  teachers: number;
+  classes: number;
+  sections: number;
+  subjects: number;
+  users: number;
+  feesOutstanding: number | string;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  method: string;
+  path: string;
+  module: string | null;
+  statusCode: number | null;
+  userRole: string | null;
+  userId: string | null;
+  institutionId: string | null;
+  ip: string | null;
+  createdAt: string;
+}
+
+export interface AuditLogResponse {
+  available: boolean;
+  rows: AuditLogEntry[];
+}
+
+export interface DataExportSummary {
+  institution: { name: string; code: string; type: string };
+  counts: Record<string, number>;
+  generatedAt: string;
+}
+
+export interface DataExport {
+  id: string;
+  institutionId: string;
+  institutionName?: string;
+  kind: string;
+  status: string;
+  summary: DataExportSummary;
+  createdAt: string;
+}
+
+export interface SystemHealth {
+  postgres: boolean;
+  mongo: boolean;
+  auditLog: boolean;
+  institutions: number;
+  users: number;
+  uptimeSeconds: number;
+}
+
 export interface Period {
   id: string;
   name: string;
