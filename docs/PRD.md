@@ -228,8 +228,17 @@ allocation, occupancy/vacancy, fee dues, vacated history, maintenance rooms).
 `hostel:*` permissions, tenant-scoped, with an owner-scoped portal allocation
 endpoint (migration `0026`).
 
-### 4.16 Inventory Management — ⬜ Planned (Phase D)
-Stock items, purchase entry, issue entry, vendors, stock reports.
+### 4.16 Inventory Management — ✅ Built (Phase D)
+Item categories + item master (unit, opening/min/current stock, location), vendor
+master (contact/GST/terms). **Purchases (stock-in)** with multi-line entry +
+optional document attachment increase stock; **stock issues (stock-out)** to
+department/staff/student/event decrease stock and **reject when insufficient**;
+**stock adjustments** (damage/lost/correction, signed) with a negative guard.
+`current_stock` is an authoritative running balance maintained transactionally
+(row-locked), with a **stock-movements audit ledger** (one row per change, with
+the resulting balance). 7 reports (stock register, low stock, purchases, issues,
+vendor-wise purchases, item movement history, damaged/lost). `inventory:*`
+permissions, tenant-scoped (migration `0027`).
 
 ### 4.17 Payroll Management — ⬜ Planned (Phase D)
 Salary structure, allowances/deductions, monthly salary generation, payslip PDF,

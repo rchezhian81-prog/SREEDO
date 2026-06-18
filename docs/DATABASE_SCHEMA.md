@@ -170,7 +170,11 @@ used when `institutions.type = 'college'`; the school flow is unaffected.
   `hostel_allocations` (room/bed, active/vacated/transferred; partial-unique on
   active student + active bed), `hostel_fees` (hostel- or room-type-level,
   partial-unique), `hostel_invoices` (links generated fee invoices → hostel/dues).
-- **Inventory:** `inventory_items`, `vendors`, `purchases`, `stock_issues`.
+- **Inventory:** ✅ (migration `0027`, all tenant-scoped) `item_categories`,
+  `vendors`, `inventory_items` (unit, opening/current/min stock, location),
+  `purchases` + `purchase_items` (stock-in, optional `document_id`), `stock_issues`
+  (stock-out), `stock_adjustments` (signed, damage/lost/correction), and
+  `stock_movements` (unified audit ledger: change + balance_after per movement).
 - **Payroll:** `salary_structures`, `salary_components`, `payslips`,
   `staff_attendance`, `leave_requests`.
 

@@ -10,6 +10,14 @@ export { query };
 export const app = createApp();
 
 const TABLES = [
+  "stock_movements",
+  "stock_adjustments",
+  "stock_issues",
+  "purchase_items",
+  "purchases",
+  "inventory_items",
+  "vendors",
+  "item_categories",
   "hostel_invoices",
   "hostel_allocations",
   "hostel_fees",
