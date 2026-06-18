@@ -69,7 +69,8 @@ export async function createFeeStructure(
 
 export async function listInvoices(
   pagination: Pagination,
-  filters: { studentId?: string; status?: string }
+  filters: { studentId?: string; status?: string },
+  restrictIds?: string[] | null
 ) {
   const conditions: string[] = [];
   const params: unknown[] = [];
@@ -80,6 +81,11 @@ export async function listInvoices(
   if (filters.status) {
     params.push(filters.status);
     conditions.push(`i.status = $${params.length}`);
+  }
+  // Owner-scoping: restrict to a set of student ids (student/parent).
+  if (restrictIds != null) {
+    params.push(restrictIds);
+    conditions.push(`i.student_id = ANY($${params.length}::uuid[])`);
   }
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
@@ -97,7 +103,10 @@ export async function listInvoices(
 }
 
 export async function getInvoice(id: string) {
-  const { rows } = await query(`SELECT ${INVOICE_SELECT} WHERE i.id = $1`, [id]);
+  const { rows } = await query<{ studentId: string }>(
+    `SELECT ${INVOICE_SELECT} WHERE i.id = $1`,
+    [id]
+  );
   if (!rows[0]) throw ApiError.notFound("Invoice not found");
   const payments = await query(
     `SELECT id, amount, method, reference, paid_at AS "paidAt"

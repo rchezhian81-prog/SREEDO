@@ -2,6 +2,11 @@ import { Router } from "express";
 import { uuidParam } from "../../utils/params";
 import { authenticate, authorize } from "../../middleware/auth";
 import {
+  accessibleStudentIds,
+  assertStudentAccess,
+  requireStaff,
+} from "../../utils/scope";
+import {
   attendanceQuerySchema,
   bulkMarkAttendanceSchema,
   studentAttendanceQuerySchema,
@@ -50,6 +55,7 @@ attendanceRouter.use(authenticate);
  *       200: { description: Upsert summary }
  */
 attendanceRouter.get("/", async (req, res) => {
+  requireStaff(req); // section roster is staff-only
   const filters = attendanceQuerySchema.parse(req.query);
   res.json(await attendanceService.listByDate(filters));
 });
@@ -74,6 +80,8 @@ attendanceRouter.post("/", authorize("admin", "teacher"), async (req, res) => {
  *       200: { description: Records plus per-status counts }
  */
 attendanceRouter.get("/students/:studentId", async (req, res) => {
+  const studentId = uuidParam(req, "studentId");
+  assertStudentAccess(await accessibleStudentIds(req), studentId);
   const range = studentAttendanceQuerySchema.parse(req.query);
-  res.json(await attendanceService.studentHistory(uuidParam(req, "studentId"), range));
+  res.json(await attendanceService.studentHistory(studentId, range));
 });

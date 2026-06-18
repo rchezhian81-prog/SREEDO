@@ -2,6 +2,11 @@ import { Router } from "express";
 import { uuidParam } from "../../utils/params";
 import { z } from "zod";
 import { authenticate, authorize } from "../../middleware/auth";
+import {
+  accessibleStudentIds,
+  assertStudentAccess,
+  requireStaff,
+} from "../../utils/scope";
 import { createExamSchema, upsertResultsSchema } from "./exams.schema";
 import * as examsService from "./exams.service";
 
@@ -88,6 +93,7 @@ examsRouter.post("/", authorize("admin"), async (req, res) => {
  *       200: { description: Upsert summary }
  */
 examsRouter.get("/:id/results", async (req, res) => {
+  requireStaff(req); // exam-wide / section results are staff-only
   const { sectionId } = z
     .object({ sectionId: z.string().uuid().optional() })
     .parse(req.query);
@@ -116,5 +122,7 @@ examsRouter.post(
  *       200: { description: Report rows }
  */
 examsRouter.get("/students/:studentId/report", async (req, res) => {
-  res.json(await examsService.studentReport(uuidParam(req, "studentId")));
+  const studentId = uuidParam(req, "studentId");
+  assertStudentAccess(await accessibleStudentIds(req), studentId);
+  res.json(await examsService.studentReport(studentId));
 });
