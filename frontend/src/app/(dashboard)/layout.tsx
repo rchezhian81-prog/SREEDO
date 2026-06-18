@@ -18,6 +18,7 @@ const SCHOOL_NAV: NavItem[] = [
   { href: "/college", label: "College", icon: "🏛️" },
   { href: "/library", label: "Library", icon: "📖" },
   { href: "/transport", label: "Transport", icon: "🚌" },
+  { href: "/hostel", label: "Hostel", icon: "🏨" },
   { href: "/attendance", label: "Attendance", icon: "🗓️" },
   { href: "/exams", label: "Exams", icon: "📝" },
   { href: "/reports", label: "Reports", icon: "📄" },
