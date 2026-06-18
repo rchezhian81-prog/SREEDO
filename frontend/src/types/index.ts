@@ -184,6 +184,42 @@ export interface SubscriptionPackage {
   isActive: boolean;
 }
 
+export interface Period {
+  id: string;
+  name: string;
+  startTime: string;
+  endTime: string;
+  sortOrder: number;
+  isBreak: boolean;
+}
+
+export interface Room {
+  id: string;
+  name: string;
+  code: string;
+  capacity: number | null;
+  building: string | null;
+}
+
+export interface TimetableEntry {
+  id: string;
+  sectionId: string;
+  sectionName: string;
+  className: string;
+  dayOfWeek: number;
+  periodId: string;
+  periodName: string;
+  startTime: string;
+  endTime: string;
+  periodOrder: number;
+  subjectId: string;
+  subjectName: string;
+  teacherId: string | null;
+  teacherName: string | null;
+  roomId: string | null;
+  roomName: string | null;
+}
+
 export interface DashboardStats {
   activeStudents: number;
   activeTeachers: number;

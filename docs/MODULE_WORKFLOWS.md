@@ -86,11 +86,15 @@ Deliverable **#5 Module-wise workflow**. Step-by-step flows for each module.
 3. *(⬜)* Report summaries, **attendance-risk alerts**, fee-pending summaries,
    **embeddings document search**, workflow suggestions.
 
-## K. Timetable ⬜ (Phase B)
-1. Admin defines **periods** and **rooms**.
-2. Builds per-section timetable: assign subject + teacher + room per day/period.
-3. On save, server runs **conflict checks** (teacher/room double-booking).
-4. Teacher timetable is the same data sliced by teacher.
+## K. Timetable ✅ (Phase B)
+1. Admin defines **periods** and **rooms** (`/timetable/periods`, `/timetable/rooms`).
+2. Builds per-section timetable: assign subject + teacher + room per day/period
+   (`/timetable/entries`).
+3. On save, the server runs **conflict checks** — same section, same teacher, or
+   same room in one day+period is rejected with 409 (also guaranteed by partial
+   unique indexes). Re-checked on update.
+4. Teacher timetable is the same data sliced by `teacherId`; both class and
+   teacher views export to CSV (`/timetable/export`).
 
 ## L. Homework / assignment ⬜ (Phase C)
 1. Teacher creates homework (section, subject, due date, attachment).

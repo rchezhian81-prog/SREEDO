@@ -10,6 +10,9 @@ export { query };
 export const app = createApp();
 
 const TABLES = [
+  "timetable_entries",
+  "periods",
+  "rooms",
   "institution_subscriptions",
   "branches",
   "subscription_packages",
