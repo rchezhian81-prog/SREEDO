@@ -33,7 +33,8 @@ Deliverable **#5 Module-wise workflow**. Step-by-step flows for each module.
 ## D. Student admission & lifecycle 🟡
 1. Office/Admin opens **New Student**, fills profile + guardian + section.
 2. `POST /students` → server assigns next **admission number**, status `active`.
-3. *(⬜)* Upload documents/photo (object storage), generate **ID card**.
+3. ✅ Upload documents/photo (object storage); ✅ generate **ID card** PDF
+   (single + bulk per section). Transfer Certificate remains ⬜.
 4. Ongoing: attendance, fees, exams link automatically by `student_id`.
 5. Status transitions: `active → inactive | graduated | transferred`.
 6. *(⬜)* On transfer, generate a **Transfer Certificate** PDF; switch to
@@ -70,8 +71,8 @@ Deliverable **#5 Module-wise workflow**. Step-by-step flows for each module.
 3. Records **payments** → server **rejects overpayment**, advances status
    `pending → partially_paid → paid`.
 4. `GET /fees/summary` → collected vs pending KPIs.
-5. *(⬜)* Fee categories, term schedules, **fines**, **discounts/scholarships**,
-   **receipt PDF**, **online gateway** adapter, class/student dues reports.
+5. ✅ Payment **receipt PDF** (owner-scoped). *(⬜)* Fee categories, term schedules,
+   **fines**, **discounts/scholarships**, **online gateway** adapter, dues reports.
 
 ## I. Communication ✅
 1. Admin/Teacher posts an **announcement** with **audience** + optional **pin**.
