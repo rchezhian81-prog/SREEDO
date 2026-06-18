@@ -22,13 +22,14 @@ Deliverable **#5 Module-wise workflow**. Step-by-step flows for each module.
 4. Institution Admin logs in → scoped entirely to that `institution_id`.
 5. Super Admin can view global **audit logs**, trigger **backups**, switch tenant.
 
-## C. Academic setup ✅ (school) / ⬜ (college extensions)
+## C. Academic setup ✅ (school) / ✅ (college extensions)
 1. Admin creates an **academic year** (marks one `is_current`).
 2. Creates **classes** (grade levels) → **sections** (with capacity + homeroom
    teacher) → **subjects**.
 3. Maps subject ↔ section ↔ teacher via **class_subjects** (🟡 API pending).
-4. *College:* create **departments → courses → semesters**, attach subjects per
-   semester (⬜).
+4. *College:* ✅ create **departments → programs/courses → semesters** (+ batches),
+   attach subjects per program/semester with credits, enroll students, and
+   allocate staff — see **§S. College mode**.
 
 ## D. Student admission & lifecycle 🟡
 1. Office/Admin opens **New Student**, fills profile + guardian + section.
@@ -136,6 +137,26 @@ Deliverable **#5 Module-wise workflow**. Step-by-step flows for each module.
 
 ## R. Reports 🟡
 1. Each module exposes list/summary views ✅ where built.
-2. ✅ A **Reports Center** offers 10 cross-module reports with filters and
-   **CSV/PDF export + print** (`/report-center`), permission-gated + tenant-scoped.
+2. ✅ A **Reports Center** offers 16 cross-module reports with filters and
+   **CSV/PDF export + print** (`/report-center`), permission-gated + tenant-scoped
+   — incl. 6 **college** reports (departments, programs, semester students,
+   semester attendance, semester results, program fee dues).
    *(⬜)* Scheduled reports + a **custom report builder** (saved definitions).
+
+## S. College mode ✅ (Phase B)
+1. Admin sets the institution to **college** mode (`PATCH /college/settings`,
+   `college:update`); the school flow is unchanged and college data only appears
+   for college tenants.
+2. Build the structure: **departments** → **programs/courses** (duration in
+   semesters) → **semesters** (+ optional **batches**). Map **subjects** to a
+   program/semester with **credits** (`program_subjects`).
+3. **Enroll** students into a program (+ current semester/batch); **allocate**
+   teachers to a department/program/subject. All tenant-scoped and
+   permission-guarded (`departments:*`, `programs:*`, `semesters:*`, `college:*`).
+4. **Results:** create exams tagged to a semester (`exams.semester_id`) and enter
+   marks as usual. The **GPA/CGPA** foundation weights each subject's grade point
+   (`grade_bands.grade_point`) by its credits → per-semester GPA and cumulative
+   CGPA, read **owner-scoped** at `/college/students/:id/semesters/:id/result`
+   and `/college/students/:id/cgpa` (student→self, parent→child, staff→any).
+5. **Fees/timetable:** fee structures may target a program/semester; a timetable
+   entry targets a section (school) **or** a semester (college).

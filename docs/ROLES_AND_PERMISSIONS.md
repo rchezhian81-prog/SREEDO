@@ -66,6 +66,7 @@ Legend: **F** full (CRUD) · **W** write (create/update) · **R** read ·
 | Exams & results | R | F | W | W | — | R | W | R* | R* | — | — | — | — |
 | Fees | R | F | R | R | F | R | — | R* | R* | — | W | W | — |
 | Timetable | R | F | W | W | — | R | R | R* | R* | — | — | — | — |
+| College (dept/program/sem) | R | F | W | W | R | — | R | R* | R* | — | — | — | — |
 | Homework | R | F | R | R | — | — | F | R*/submit | R* | — | — | — | — |
 | Communication/Notices | F | F | W | W | W | W | W | R | R | W | W | W | W |
 | Library | R | F | R | — | — | — | R | R* | R* | F | — | — | — |
