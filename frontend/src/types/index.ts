@@ -172,6 +172,58 @@ export interface Subject {
   code: string;
 }
 
+export interface Homework {
+  id: string;
+  sectionId: string;
+  sectionName: string | null;
+  className: string | null;
+  subjectId: string;
+  subjectName: string | null;
+  title: string;
+  description: string;
+  instructions: string | null;
+  dueDate: string | null;
+  maxMarks: string | null;
+  attachmentCount: number;
+  submissionCount: number;
+  createdAt: string;
+}
+
+export interface HomeworkAttachment {
+  id: string;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt: string;
+}
+
+export interface HomeworkDetail extends Homework {
+  attachments: HomeworkAttachment[];
+  submission: {
+    id: string;
+    content: string | null;
+    status: string;
+    marks: string | null;
+    remarks: string | null;
+    submittedAt: string;
+    reviewedAt: string | null;
+  } | null;
+}
+
+export interface HomeworkSubmission {
+  id: string;
+  studentId: string;
+  studentName: string;
+  admissionNo: string;
+  content: string | null;
+  status: string;
+  marks: string | null;
+  remarks: string | null;
+  submittedAt: string;
+  reviewedAt: string | null;
+  attachmentCount: number;
+}
+
 export interface AcademicYear {
   id: string;
   name: string;
