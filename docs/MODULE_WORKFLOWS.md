@@ -142,9 +142,19 @@ Deliverable **#5 Module-wise workflow**. Step-by-step flows for each module.
    teacher read+reports; accountant read+fees+reports. Tenant-scoped; the portal
    exposes a student's own allocation (owner-scoped). ⬜ live location feed.
 
-## O. Hostel ⬜ (Phase D)
-1. Define **hostels** + **rooms** (capacity).
-2. Allocate students; **map hostel fee → invoices**; occupancy report.
+## O. Hostel ✅ (Phase D)
+1. Define **hostels** (type, warden), **blocks**, and **rooms** (floor, type,
+   capacity, status: available/occupied/maintenance/inactive).
+2. **Allocate** a student to a room/bed (school + college) — capacity enforced,
+   one active allocation per student, one occupant per bed; **transfer** between
+   rooms and **vacate** keep history (active/vacated/transferred).
+3. Map a **hostel- or room-type-level fee** (room type overrides hostel) and
+   **generate hostel invoices** into the Fees module (idempotent per
+   student/period). Reports (Reports Center): hostel students, room allocation,
+   occupancy/vacancy, fee dues, vacated history, maintenance rooms. Permissions:
+   `hostel:read|create|update|delete|allocate|fees|reports` — admin full; teacher
+   read+reports; accountant read+fees+reports. Tenant-scoped; the portal exposes a
+   student's own allocation (owner-scoped).
 
 ## P. Inventory ⬜ (Phase D)
 1. Add **items** + **vendors**; record **purchases** (stock in).
@@ -157,11 +167,11 @@ Deliverable **#5 Module-wise workflow**. Step-by-step flows for each module.
 
 ## R. Reports 🟡
 1. Each module exposes list/summary views ✅ where built.
-2. ✅ A **Reports Center** offers 29 cross-module reports with filters and
+2. ✅ A **Reports Center** offers 35 cross-module reports with filters and
    **CSV/PDF export + print** (`/report-center`), permission-gated + tenant-scoped
-   — incl. 6 **college**, 6 **library** (stock, issued, overdue, member history,
-   lost/damaged, fines), and 7 **transport** reports (route-/stop-wise students,
-   vehicles, drivers, fee dues, occupancy, document expiry).
+   — incl. 6 **college**, 6 **library**, 7 **transport**, and 6 **hostel** reports
+   (hostel students, room allocation, occupancy/vacancy, fee dues, vacated
+   history, maintenance rooms).
    *(⬜)* Scheduled reports + a **custom report builder** (saved definitions).
 
 ## S. College mode ✅ (Phase B)

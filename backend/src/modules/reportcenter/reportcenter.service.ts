@@ -29,6 +29,8 @@ export interface Filters {
   memberId?: string;
   routeId?: string;
   stopId?: string;
+  hostelId?: string;
+  roomId?: string;
 }
 
 interface Report {
@@ -1137,6 +1139,220 @@ export const REPORTS: Record<string, Report> = {
           { key: "status", label: "Status" },
         ],
         rows: out,
+      };
+    },
+  },
+
+  // --- Hostel (Phase D) reports — empty without hostels set up. ---
+
+  hostel_students: {
+    title: "Hostel-wise Students",
+    category: "Hostel",
+    permission: "hostel:reports",
+    run: async (f, inst) => {
+      const params: unknown[] = [inst];
+      const where = ["a.institution_id = $1", "a.status = 'active'"];
+      if (f.hostelId) {
+        params.push(f.hostelId);
+        where.push(`a.hostel_id = $${params.length}`);
+      }
+      const rows = await rowsOf(
+        `SELECT h.name AS hostel, s.admission_no AS "admissionNo",
+                s.first_name || ' ' || s.last_name AS student,
+                r.room_number AS room, a.bed_no AS bed
+         FROM hostel_allocations a
+         JOIN students s ON s.id = a.student_id
+         JOIN hostels h ON h.id = a.hostel_id
+         JOIN hostel_rooms r ON r.id = a.room_id
+         WHERE ${where.join(" AND ")}
+         ORDER BY h.name, r.room_number, student`,
+        params
+      );
+      return {
+        title: "Hostel-wise Students",
+        columns: [
+          { key: "hostel", label: "Hostel" },
+          { key: "admissionNo", label: "Admission No" },
+          { key: "student", label: "Student" },
+          { key: "room", label: "Room" },
+          { key: "bed", label: "Bed" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  hostel_room_allocation: {
+    title: "Room-wise Allocation",
+    category: "Hostel",
+    permission: "hostel:reports",
+    run: async (f, inst) => {
+      const params: unknown[] = [inst];
+      const where = ["r.institution_id = $1"];
+      if (f.hostelId) {
+        params.push(f.hostelId);
+        where.push(`r.hostel_id = $${params.length}`);
+      }
+      const rows = await rowsOf(
+        `SELECT h.name AS hostel, r.room_number AS room, r.room_type AS "roomType",
+                r.capacity,
+                count(a.id) FILTER (WHERE a.status = 'active')::int AS occupied,
+                (r.capacity - count(a.id) FILTER (WHERE a.status = 'active'))::int AS available,
+                r.status
+         FROM hostel_rooms r
+         JOIN hostels h ON h.id = r.hostel_id
+         LEFT JOIN hostel_allocations a ON a.room_id = r.id
+         WHERE ${where.join(" AND ")}
+         GROUP BY r.id, h.name
+         ORDER BY h.name, r.room_number`,
+        params
+      );
+      return {
+        title: "Room-wise Allocation",
+        columns: [
+          { key: "hostel", label: "Hostel" },
+          { key: "room", label: "Room" },
+          { key: "roomType", label: "Type" },
+          { key: "capacity", label: "Capacity" },
+          { key: "occupied", label: "Occupied" },
+          { key: "available", label: "Available" },
+          { key: "status", label: "Status" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  hostel_occupancy: {
+    title: "Hostel Occupancy",
+    category: "Hostel",
+    permission: "hostel:reports",
+    run: async (_f, inst) => {
+      const raw = await rowsOf(
+        `SELECT h.name AS hostel, h.type,
+                COALESCE(sum(r.capacity), 0)::int AS beds,
+                (SELECT count(*)::int FROM hostel_allocations a
+                   WHERE a.hostel_id = h.id AND a.status = 'active') AS occupied
+         FROM hostels h
+         LEFT JOIN hostel_rooms r ON r.hostel_id = h.id
+         WHERE h.institution_id = $1
+         GROUP BY h.id
+         ORDER BY h.name`,
+        [inst]
+      );
+      const rows = raw.map((r) => {
+        const beds = Number(r.beds);
+        const occupied = Number(r.occupied);
+        return {
+          ...r,
+          vacant: beds - occupied,
+          utilization: beds > 0 ? `${Math.round((occupied / beds) * 100)}%` : "—",
+        };
+      });
+      return {
+        title: "Hostel Occupancy",
+        columns: [
+          { key: "hostel", label: "Hostel" },
+          { key: "type", label: "Type" },
+          { key: "beds", label: "Beds" },
+          { key: "occupied", label: "Occupied" },
+          { key: "vacant", label: "Vacant" },
+          { key: "utilization", label: "Utilization" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  hostel_fee_dues: {
+    title: "Hostel Fee Dues",
+    category: "Hostel",
+    permission: "hostel:reports",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT i.invoice_no AS "invoiceNo", s.first_name || ' ' || s.last_name AS student,
+                h.name AS hostel, hi.period,
+                i.amount_due AS "amountDue", i.amount_paid AS "amountPaid",
+                (i.amount_due - i.amount_paid) AS outstanding, i.status
+         FROM hostel_invoices hi
+         JOIN invoices i ON i.id = hi.invoice_id
+         JOIN students s ON s.id = hi.student_id
+         LEFT JOIN hostels h ON h.id = hi.hostel_id
+         WHERE hi.institution_id = $1 AND i.status IN ('pending', 'partially_paid')
+         ORDER BY i.due_date NULLS LAST`,
+        [inst]
+      );
+      return {
+        title: "Hostel Fee Dues",
+        columns: [
+          { key: "invoiceNo", label: "Invoice" },
+          { key: "student", label: "Student" },
+          { key: "hostel", label: "Hostel" },
+          { key: "period", label: "Period" },
+          { key: "amountDue", label: "Amount Due" },
+          { key: "amountPaid", label: "Amount Paid" },
+          { key: "outstanding", label: "Outstanding" },
+          { key: "status", label: "Status" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  hostel_vacated: {
+    title: "Vacated Students",
+    category: "Hostel",
+    permission: "hostel:reports",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT s.admission_no AS "admissionNo", s.first_name || ' ' || s.last_name AS student,
+                h.name AS hostel, r.room_number AS room,
+                a.allocation_date AS "allocationDate", a.vacate_date AS "vacateDate", a.status
+         FROM hostel_allocations a
+         JOIN students s ON s.id = a.student_id
+         JOIN hostels h ON h.id = a.hostel_id
+         JOIN hostel_rooms r ON r.id = a.room_id
+         WHERE a.institution_id = $1 AND a.status IN ('vacated', 'transferred')
+         ORDER BY a.vacate_date DESC NULLS LAST`,
+        [inst]
+      );
+      return {
+        title: "Vacated Students",
+        columns: [
+          { key: "admissionNo", label: "Admission No" },
+          { key: "student", label: "Student" },
+          { key: "hostel", label: "Hostel" },
+          { key: "room", label: "Room" },
+          { key: "allocationDate", label: "Allocated" },
+          { key: "vacateDate", label: "Vacated" },
+          { key: "status", label: "Status" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  hostel_maintenance: {
+    title: "Maintenance Rooms",
+    category: "Hostel",
+    permission: "hostel:reports",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT h.name AS hostel, r.room_number AS room, r.room_type AS "roomType", r.status
+         FROM hostel_rooms r JOIN hostels h ON h.id = r.hostel_id
+         WHERE r.institution_id = $1 AND r.status IN ('maintenance', 'inactive')
+         ORDER BY h.name, r.room_number`,
+        [inst]
+      );
+      return {
+        title: "Maintenance Rooms",
+        columns: [
+          { key: "hostel", label: "Hostel" },
+          { key: "room", label: "Room" },
+          { key: "roomType", label: "Type" },
+          { key: "status", label: "Status" },
+        ],
+        rows,
       };
     },
   },

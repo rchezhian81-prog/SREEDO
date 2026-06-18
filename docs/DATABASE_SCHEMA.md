@@ -165,7 +165,11 @@ used when `institutions.type = 'college'`; the school flow is unaffected.
   pickup/drop times, zone, distance), `student_transport` (route/stop allocation),
   `transport_fees` (route- or stop-level, partial-unique), `transport_trips`
   (daily log), `transport_invoices` (links generated fee invoices → routes/dues).
-- **Hostel:** `hostels`, `hostel_rooms`, `hostel_allocations` (+ fee → invoices).
+- **Hostel:** ✅ (migration `0026`, all tenant-scoped) `hostels` (type, warden,
+  capacity), `hostel_blocks`, `hostel_rooms` (floor, type, capacity, status),
+  `hostel_allocations` (room/bed, active/vacated/transferred; partial-unique on
+  active student + active bed), `hostel_fees` (hostel- or room-type-level,
+  partial-unique), `hostel_invoices` (links generated fee invoices → hostel/dues).
 - **Inventory:** `inventory_items`, `vendors`, `purchases`, `stock_issues`.
 - **Payroll:** `salary_structures`, `salary_components`, `payslips`,
   `staff_attendance`, `leave_requests`.
