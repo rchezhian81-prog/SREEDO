@@ -171,10 +171,16 @@ the service and by race-safe partial unique indexes). Tenant-scoped, with
 Teacher assigns; student views/submits; parent monitors; attachment upload;
 status tracking. (Uses object storage for attachments.)
 
-### 4.12 Communication — 🟡 Partial
+### 4.12 Communication — ✅ Built (base)
 - ✅ Notice board / announcements with audience targeting and pinning.
-- ⬜ Circulars, **SMS** adapter, **email** notifications (SMTP wired for
-  receipts; generalize), **FCM push**, internal 1:1/threaded messaging.
+- ✅ **In-app messaging** with per-recipient read/unread inbox, audience targeting
+  (all students/parents, staff, class, section, individual student/parent/user),
+  sent history + delivery (read) counts, and a staff console + portal/staff inbox.
+- ✅ **Email/SMS/FCM-push adapters** (all optional, degrade gracefully when
+  unconfigured) + **device-token** registration; **fee reminders** (from invoices)
+  and **absence alerts** (from attendance, de-duplicated per student/day).
+  Tenant-scoped + owner-scoped; `communication:*` / `notifications:send` permissions.
+- ⬜ Threaded 1:1 messaging and scheduled campaigns.
 
 ### 4.13 Library Management — ⬜ Planned (Phase D)
 Book master, issue/return, fine calculation, member (student/staff) history,

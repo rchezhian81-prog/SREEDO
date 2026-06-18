@@ -56,8 +56,9 @@ exams (API), announcements, AI assistant, Swagger, seed, Docker, CI, unit tests.
 1. **Object storage** adapter + secure uploads (documents, photos, attachments).
 2. **PDFs:** ✅ **report cards** + **mark sheets** (pdfkit) shipped; remaining: fee
    **receipts**, ID cards, transfer certificates.
-3. **Communication:** generalize SMTP email, add **SMS** + **FCM push** adapters,
-   internal messaging, notifications + device-token registration.
+3. **Communication:** ✅ in-app messaging (audience targeting + read/unread inbox),
+   **email/SMS/FCM-push** adapters (optional, graceful), device-token registration,
+   **fee reminders** + **absence alerts** (migration `0018`). Threaded messaging ⬜.
 4. **Parent & Student portals** — ✅ base shipped (web): cookie auth (`/auth/portal/*`),
    `guardians` parent⇄child links (migration `0016`), `/portal/*` owner-scoped
    endpoints, and portal UI (dashboard, profile, attendance, timetable, fees,
