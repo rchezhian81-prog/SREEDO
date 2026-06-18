@@ -246,9 +246,17 @@ the resulting balance). 7 reports (stock register, low stock, purchases, issues,
 vendor-wise purchases, item movement history, damaged/lost). `inventory:*`
 permissions, tenant-scoped (migration `0027`).
 
-### 4.17 Payroll Management — ⬜ Planned (Phase D)
-Salary structure, allowances/deductions, monthly salary generation, payslip PDF,
-salary reports. (Reuses staff records + finance patterns.)
+### 4.17 Payroll Management — ✅ Built (Phase D)
+Salary components (earnings/deductions, fixed or % of basic), per-staff salary
+structures with **revision history**, and a monthly **payroll run** that pulls the
+staff-attendance/leave summary to prorate pay (auto **unpaid-leave deduction**),
+computing gross/deductions/net per staff. Runs are **idempotent per staff/month**
+(recalc needs `payroll:update`) and can be **finalized/locked**. **Payslip PDFs**
+(pdfkit: institution+logo, staff, month, earnings/deductions, attendance, net,
+signature) are **owner-scoped** (staff download only their own). 6 reports
+(payroll register, staff-wise salary, deductions, payslip status, attendance vs
+payroll, unpaid-leave deductions). `payroll:*` permissions, tenant-scoped
+(migration `0029`).
 
 ### 4.18 AI Features — 🟡 Partial
 - ✅ AI **admin assistant** (GPT-4o) grounded in live school statistics, with

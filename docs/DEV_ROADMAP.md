@@ -83,9 +83,10 @@ exams (API), announcements, AI assistant, Swagger, seed, Docker, CI, unit tests.
    performance summaries.
 
 ### Phase D — Operations modules + reporting 🟡
-✅ **Reports Center** — 49 cross-module reports with filters + CSV/PDF export
+✅ **Reports Center** — 55 cross-module reports with filters + CSV/PDF export
 (migration `0022`, `/report-center`, permission-gated; includes 6 college, 6
-library, 7 transport, 6 hostel, 7 inventory, 7 staff-attendance/leave reports). ✅ **Library Management** —
+library, 7 transport, 6 hostel, 7 inventory, 7 staff-attendance/leave, 6 payroll
+reports). ✅ **Library Management** —
 catalogue, members, issue/return/renew with auto late-fines (→ Fees), settings, 6
 reports (migration `0024`). ✅ **Transport Management** — vehicle & driver masters
 (expiry tracking), routes + stops, student allocation, fee mapping with idempotent
@@ -101,9 +102,13 @@ Attendance + Leave** — daily/bulk staff attendance (monthly summary), leave ty
 + balances, leave request → approve/reject/cancel (approval deducts balance +
 auto-marks attendance), a **payroll-attendance summary** foundation, and 7
 reports (migration `0028`, `/staff` + `/leave`, `staff_attendance:*` / `leave:*`,
-tenant-scoped + owner-scoped for staff). Remaining: **Payroll** (salary
-structures → payroll run → payslips, building on the staff summary) · **custom
-report builder**.
+tenant-scoped + owner-scoped for staff). ✅ **Payroll Management** — salary
+components (fixed/%), per-staff salary structures (with revision history), a
+monthly **payroll run** that pulls the staff summary to prorate pay (auto
+unpaid-leave deduction) computing gross/deductions/net, idempotent per
+staff/month with **finalize/lock**, **owner-scoped payslip PDFs**, and 6 reports
+(migration `0029`, `/payroll`, `payroll:*`, tenant-scoped). **Phase D operations
+are complete.** Remaining (cross-phase): **custom report builder**.
 
 ### Phase E — Scale & polish ⬜
 Caching, read replicas if needed, background job queue, observability/metrics,

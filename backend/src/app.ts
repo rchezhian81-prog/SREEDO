@@ -27,6 +27,7 @@ import { inventoryRouter } from "./modules/inventory/inventory.routes";
 import { libraryRouter } from "./modules/library/library.routes";
 import { transportRouter } from "./modules/transport/transport.routes";
 import { feeReceiptsRouter, idCardsRouter } from "./modules/pdfs/pdfs.routes";
+import { payrollRouter } from "./modules/payroll/payroll.routes";
 import { portalRouter } from "./modules/portal/portal.routes";
 import { reportCenterRouter } from "./modules/reportcenter/reportcenter.routes";
 import { reportsRouter } from "./modules/reports/reports.routes";
@@ -92,6 +93,7 @@ export function createApp(): express.Express {
   api.use("/inventory", inventoryRouter);
   api.use("/staff", staffAttendanceRouter);
   api.use("/leave", leaveRouter);
+  api.use("/payroll", payrollRouter);
   api.use("/announcements", announcementsRouter);
   api.use("/dashboard", dashboardRouter);
   api.use("/portal", portalRouter);

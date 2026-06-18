@@ -179,18 +179,29 @@ Deliverable **#5 Module-wise workflow**. Step-by-step flows for each module.
    reports` — admin full; accountant read+purchase+reports; teacher read+reports.
    Tenant-scoped.
 
-## Q. Payroll ⬜ (Phase D)
-1. Define **salary structures** (allowances/deductions).
-2. Run monthly **payroll** (factor staff attendance/leave) → **payslip PDF**.
-3. Salary register / reports.
+## Q. Payroll ✅ (Phase D)
+1. Define **salary components** (earnings/deductions, fixed or % of basic) and
+   assign per-staff **salary structures** (a new one supersedes the active → kept
+   as revision history).
+2. **Run** monthly payroll: it pulls the staff-attendance/leave summary (working/
+   present/absent/paid+unpaid leave), computes gross/deductions/net, and auto-adds
+   an **unpaid-leave deduction** (per-day of gross × unpaid days). Runs are
+   idempotent per staff/month (recalc needs `payroll:update`); **finalize** locks
+   the run + payslips and blocks re-runs.
+3. **Payslip PDFs** (pdfkit) are owner-scoped — staff download only their own
+   (`/payroll/payslips/mine`); admin/accountant download any. Reports (Reports
+   Center): payroll register, staff-wise salary, deductions, payslip status,
+   attendance vs payroll, unpaid-leave deductions. Permissions: `payroll:read|
+   create|update|delete|run|finalize|payslip|reports` (admin full; accountant all
+   but delete; teacher = own payslip). Tenant-scoped.
 
 ## R. Reports 🟡
 1. Each module exposes list/summary views ✅ where built.
-2. ✅ A **Reports Center** offers 49 cross-module reports with filters and
+2. ✅ A **Reports Center** offers 55 cross-module reports with filters and
    **CSV/PDF export + print** (`/report-center`), permission-gated + tenant-scoped
    — incl. 6 **college**, 6 **library**, 7 **transport**, 6 **hostel**, 7
-   **inventory**, and 7 **staff-attendance/leave** reports (daily/monthly/summary
-   attendance, leave register, leave balance, pending approvals, payroll summary).
+   **inventory**, 7 **staff-attendance/leave**, and 6 **payroll** reports (register,
+   staff-wise salary, deductions, payslip status, attendance-vs-payroll, unpaid leave).
    *(⬜)* Scheduled reports + a **custom report builder** (saved definitions).
 
 ## S. College mode ✅ (Phase B)

@@ -864,6 +864,87 @@ export interface LeaveType {
   isActive: boolean;
 }
 
+// --- Payroll ---
+
+export type PayrollComponentType = "earning" | "deduction";
+export type PayrollCalcType = "fixed" | "percent";
+
+export interface SalaryComponent {
+  id: string;
+  name: string;
+  code: string;
+  type: PayrollComponentType;
+  calcType: PayrollCalcType;
+  defaultValue: number | string | null;
+  isActive: boolean;
+}
+
+export interface SalaryStructure {
+  id: string;
+  teacherId: string;
+  teacherName: string;
+  employeeNo: string;
+  effectiveDate: string | null;
+  isActive: boolean;
+  fixedEarnings: number | string;
+}
+
+export interface SalaryStructureLine {
+  id: string;
+  componentId: string;
+  name: string;
+  code: string;
+  type: PayrollComponentType;
+  calcType: PayrollCalcType;
+  value: number | string;
+}
+
+export interface SalaryStructureDetail extends SalaryStructure {
+  components: SalaryStructureLine[];
+}
+
+export type PayrollRunStatus = "draft" | "finalized";
+
+export interface PayrollRun {
+  id: string;
+  month: string;
+  status: PayrollRunStatus;
+  notes: string | null;
+  finalizedAt: string | null;
+  payslipCount: number | string;
+  netTotal: number | string;
+}
+
+export type PayslipStatus = "draft" | "finalized";
+
+export interface Payslip {
+  id: string;
+  teacherId: string;
+  teacherName: string;
+  employeeNo: string;
+  month: string;
+  workingDays: number;
+  presentDays: number;
+  absentDays: number;
+  paidLeave: number;
+  unpaidLeave: number;
+  halfDays: number;
+  gross: number | string;
+  deductions: number | string;
+  net: number | string;
+  status: PayslipStatus;
+}
+
+export interface PayslipLine {
+  name: string;
+  type: PayrollComponentType;
+  amount: number | string;
+}
+
+export interface PayslipDetail extends Payslip {
+  lines: PayslipLine[];
+}
+
 export interface LeaveBalance {
   id: string;
   teacherId: string;
