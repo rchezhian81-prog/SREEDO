@@ -48,11 +48,14 @@ exams (API), announcements, AI assistant, Swagger, seed, Docker, CI, unit tests.
    teacher/room/section **conflict checking** (service 409s + race-safe partial
    unique indexes, migration `0015`), teacher-timetable view, CSV export, and
    `timetable:*` permissions. Tenant-scoped; web UI shipped (`/timetable`).
-3. **Grading:** grade bands + report-card computation (sets up PDF in Phase C).
+3. **Grading:** ✅ grade-band scale (migration `0017`), total/%/grade computation,
+   and **report-card + mark-sheet PDFs** (pdfkit) generated from exam results —
+   owner-scoped, permission-guarded, with a staff Reports page + portal download.
 
 ### Phase C — Engagement (portals, homework, comms, AI+) ⬜
 1. **Object storage** adapter + secure uploads (documents, photos, attachments).
-2. **PDFs:** fee **receipts**, **report cards**, ID cards, transfer certificates.
+2. **PDFs:** ✅ **report cards** + **mark sheets** (pdfkit) shipped; remaining: fee
+   **receipts**, ID cards, transfer certificates.
 3. **Communication:** generalize SMTP email, add **SMS** + **FCM push** adapters,
    internal messaging, notifications + device-token registration.
 4. **Parent & Student portals** — ✅ base shipped (web): cookie auth (`/auth/portal/*`),

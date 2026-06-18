@@ -151,11 +151,14 @@ server-side. Homework/results detail and study materials remain ⬜.
   online-payment gateway adapter, **receipt PDF**, class-wise/student-wise dues
   reports as printable documents.
 
-### 4.9 Exam & Result Management — 🟡 Partial
+### 4.9 Exam & Result Management — ✅ Built
 - ✅ Exam creation, bulk mark entry (web **Exams & Results** page with a
   per-section/subject grid), per-exam results, per-student report.
-- ⬜ Grade-band setup table, weighted/total computation, **report-card PDF**,
-  printable mark sheets, subject-wise analytics screens.
+- ✅ **Grade-band scale** setup, total/percentage/grade computation, **report-card
+  PDF** (per student) and printable **mark-sheet PDF** (per section), generated
+  with pdfkit from the exam results. Owner-scoped downloads (student→self,
+  parent→linked child) + `report_cards:*` / `mark_sheets:export` permissions.
+- ⬜ Weighted/CGPA computation and subject-wise analytics screens.
 
 ### 4.10 Timetable Management — ✅ Built (Phase B)
 Period & room masters, per-section timetable entries (subject/teacher/room per
