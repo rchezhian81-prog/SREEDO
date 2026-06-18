@@ -128,6 +128,18 @@ export interface Invoice {
   status: "pending" | "partially_paid" | "paid" | "cancelled";
 }
 
+export interface Payment {
+  id: string;
+  amount: string;
+  method: string;
+  reference: string | null;
+  paidAt: string;
+}
+
+export interface InvoiceWithPayments extends Invoice {
+  payments: Payment[];
+}
+
 export interface FeeSummary {
   totalInvoiced: number;
   totalCollected: number;

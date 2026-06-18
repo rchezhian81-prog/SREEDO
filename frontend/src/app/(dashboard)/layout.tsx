@@ -20,6 +20,7 @@ const SCHOOL_NAV: NavItem[] = [
   { href: "/reports", label: "Reports", icon: "📄" },
   { href: "/documents", label: "Documents", icon: "📁" },
   { href: "/homework", label: "Homework", icon: "📚" },
+  { href: "/id-cards", label: "ID Cards", icon: "🪪" },
   { href: "/fees", label: "Fees", icon: "💳" },
   { href: "/announcements", label: "Announcements", icon: "📣" },
   { href: "/communication", label: "Communication", icon: "📨" },
