@@ -553,3 +553,89 @@ export interface LibraryHistoryRow {
   fineStatus: string | null;
   overdue: boolean;
 }
+
+// --- Transport ---
+
+export interface Vehicle {
+  id: string;
+  registrationNo: string;
+  type: string | null;
+  capacity: number | null;
+  insuranceExpiry: string | null;
+  fitnessExpiry: string | null;
+  permitExpiry: string | null;
+  isActive: boolean;
+  routeCount: number;
+}
+
+export interface Driver {
+  id: string;
+  name: string;
+  phone: string | null;
+  licenseNumber: string | null;
+  licenseExpiry: string | null;
+  helperName: string | null;
+  helperPhone: string | null;
+  isActive: boolean;
+  routeCount: number;
+}
+
+export interface TransportRoute {
+  id: string;
+  name: string;
+  code: string;
+  isActive: boolean;
+  vehicleId: string | null;
+  vehicleNo: string | null;
+  driverId: string | null;
+  driverName: string | null;
+  stopCount: number;
+  studentCount: number;
+}
+
+export interface RouteStop {
+  id: string;
+  routeId: string;
+  name: string;
+  stopOrder: number;
+  pickupTime: string | null;
+  dropTime: string | null;
+  distanceKm: number | string | null;
+  zone: string | null;
+}
+
+export type TransportTripType = "pickup" | "drop" | "both";
+
+export interface TransportAllocation {
+  id: string;
+  studentId: string;
+  studentName: string;
+  admissionNo: string;
+  routeId: string;
+  routeName: string;
+  stopId: string | null;
+  stopName: string | null;
+  tripType: string;
+  effectiveDate: string | null;
+  status: string;
+}
+
+export interface TransportFee {
+  id: string;
+  routeId: string;
+  routeName: string;
+  stopId: string | null;
+  stopName: string | null;
+  amount: number | string;
+  frequency: string;
+}
+
+export interface TransportTrip {
+  id: string;
+  routeId: string;
+  tripDate: string;
+  tripType: "pickup" | "drop";
+  vehicleId: string | null;
+  driverId: string | null;
+  status: string;
+}

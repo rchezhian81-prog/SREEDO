@@ -10,6 +10,14 @@ export { query };
 export const app = createApp();
 
 const TABLES = [
+  "transport_invoices",
+  "transport_trips",
+  "transport_fees",
+  "student_transport",
+  "route_stops",
+  "transport_routes",
+  "vehicles",
+  "drivers",
   "book_issues",
   "book_copies",
   "books",

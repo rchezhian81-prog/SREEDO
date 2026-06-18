@@ -43,6 +43,8 @@ function parseFilters(q: Request["query"]): Filters {
     semesterId: s(q.semesterId),
     departmentId: s(q.departmentId),
     memberId: s(q.memberId),
+    routeId: s(q.routeId),
+    stopId: s(q.stopId),
   };
 }
 

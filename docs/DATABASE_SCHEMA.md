@@ -159,8 +159,12 @@ used when `institutions.type = 'college'`; the school flow is unaffected.
   (status available|issued|lost|damaged|retired, unique accession), `library_members`
   (student or staff), `book_issues` (issue/return/renew, fine_amount + fine_status,
   optional `invoice_id` → Fees), `library_settings` (loan days, fine/day, limits).
-- **Transport:** `vehicles`, `drivers`, `transport_routes`, `route_stops`,
-  `student_transport` (allocation + fee mapping → invoices).
+- **Transport:** ✅ (migration `0025`, all tenant-scoped) `vehicles`
+  (insurance/fitness/permit expiry, capacity), `drivers` (license + expiry +
+  helper), `transport_routes` (assigned vehicle/driver), `route_stops` (order,
+  pickup/drop times, zone, distance), `student_transport` (route/stop allocation),
+  `transport_fees` (route- or stop-level, partial-unique), `transport_trips`
+  (daily log), `transport_invoices` (links generated fee invoices → routes/dues).
 - **Hostel:** `hostels`, `hostel_rooms`, `hostel_allocations` (+ fee → invoices).
 - **Inventory:** `inventory_items`, `vendors`, `purchases`, `stock_issues`.
 - **Payroll:** `salary_structures`, `salary_components`, `payslips`,

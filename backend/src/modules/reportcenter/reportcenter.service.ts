@@ -27,6 +27,8 @@ export interface Filters {
   semesterId?: string;
   departmentId?: string;
   memberId?: string;
+  routeId?: string;
+  stopId?: string;
 }
 
 interface Report {
@@ -888,6 +890,253 @@ export const REPORTS: Record<string, Report> = {
           { key: "returnDate", label: "Returned" },
         ],
         rows,
+      };
+    },
+  },
+
+  // --- Transport (Phase D) reports — empty without transport set up. ---
+
+  transport_route_students: {
+    title: "Route-wise Students",
+    category: "Transport",
+    permission: "transport:reports",
+    run: async (f, inst) => {
+      const params: unknown[] = [inst];
+      const where = ["st.institution_id = $1"];
+      if (f.routeId) {
+        params.push(f.routeId);
+        where.push(`st.route_id = $${params.length}`);
+      }
+      const rows = await rowsOf(
+        `SELECT r.name AS route, s.admission_no AS "admissionNo",
+                s.first_name || ' ' || s.last_name AS student,
+                rs.name AS stop, st.trip_type AS "tripType", st.status
+         FROM student_transport st
+         JOIN students s ON s.id = st.student_id
+         JOIN transport_routes r ON r.id = st.route_id
+         LEFT JOIN route_stops rs ON rs.id = st.stop_id
+         WHERE ${where.join(" AND ")}
+         ORDER BY r.name, student`,
+        params
+      );
+      return {
+        title: "Route-wise Students",
+        columns: [
+          { key: "route", label: "Route" },
+          { key: "admissionNo", label: "Admission No" },
+          { key: "student", label: "Student" },
+          { key: "stop", label: "Stop" },
+          { key: "tripType", label: "Trip" },
+          { key: "status", label: "Status" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  transport_stop_students: {
+    title: "Stop-wise Students",
+    category: "Transport",
+    permission: "transport:reports",
+    run: async (f, inst) => {
+      const params: unknown[] = [inst];
+      const where = ["st.institution_id = $1"];
+      if (f.stopId) {
+        params.push(f.stopId);
+        where.push(`st.stop_id = $${params.length}`);
+      }
+      const rows = await rowsOf(
+        `SELECT rs.name AS stop, r.name AS route, s.admission_no AS "admissionNo",
+                s.first_name || ' ' || s.last_name AS student, st.trip_type AS "tripType"
+         FROM student_transport st
+         JOIN students s ON s.id = st.student_id
+         JOIN transport_routes r ON r.id = st.route_id
+         LEFT JOIN route_stops rs ON rs.id = st.stop_id
+         WHERE ${where.join(" AND ")}
+         ORDER BY rs.name NULLS LAST, student`,
+        params
+      );
+      return {
+        title: "Stop-wise Students",
+        columns: [
+          { key: "stop", label: "Stop" },
+          { key: "route", label: "Route" },
+          { key: "admissionNo", label: "Admission No" },
+          { key: "student", label: "Student" },
+          { key: "tripType", label: "Trip" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  transport_vehicles: {
+    title: "Vehicles",
+    category: "Transport",
+    permission: "transport:reports",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT registration_no AS "registrationNo", type, capacity,
+                insurance_expiry AS "insuranceExpiry", fitness_expiry AS "fitnessExpiry",
+                permit_expiry AS "permitExpiry", is_active AS active
+         FROM vehicles WHERE institution_id = $1 ORDER BY registration_no`,
+        [inst]
+      );
+      return {
+        title: "Vehicles",
+        columns: [
+          { key: "registrationNo", label: "Registration" },
+          { key: "type", label: "Type" },
+          { key: "capacity", label: "Capacity" },
+          { key: "insuranceExpiry", label: "Insurance" },
+          { key: "fitnessExpiry", label: "Fitness" },
+          { key: "permitExpiry", label: "Permit" },
+          { key: "active", label: "Active" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  transport_drivers: {
+    title: "Drivers",
+    category: "Transport",
+    permission: "transport:reports",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT name, phone, license_number AS "licenseNumber",
+                license_expiry AS "licenseExpiry", helper_name AS "helperName",
+                is_active AS active
+         FROM drivers WHERE institution_id = $1 ORDER BY name`,
+        [inst]
+      );
+      return {
+        title: "Drivers",
+        columns: [
+          { key: "name", label: "Name" },
+          { key: "phone", label: "Phone" },
+          { key: "licenseNumber", label: "License" },
+          { key: "licenseExpiry", label: "License Expiry" },
+          { key: "helperName", label: "Helper" },
+          { key: "active", label: "Active" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  transport_fee_dues: {
+    title: "Transport Fee Dues",
+    category: "Transport",
+    permission: "transport:reports",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT i.invoice_no AS "invoiceNo", s.first_name || ' ' || s.last_name AS student,
+                r.name AS route, ti.period,
+                i.amount_due AS "amountDue", i.amount_paid AS "amountPaid",
+                (i.amount_due - i.amount_paid) AS outstanding, i.status
+         FROM transport_invoices ti
+         JOIN invoices i ON i.id = ti.invoice_id
+         JOIN students s ON s.id = ti.student_id
+         LEFT JOIN transport_routes r ON r.id = ti.route_id
+         WHERE ti.institution_id = $1 AND i.status IN ('pending', 'partially_paid')
+         ORDER BY i.due_date NULLS LAST`,
+        [inst]
+      );
+      return {
+        title: "Transport Fee Dues",
+        columns: [
+          { key: "invoiceNo", label: "Invoice" },
+          { key: "student", label: "Student" },
+          { key: "route", label: "Route" },
+          { key: "period", label: "Period" },
+          { key: "amountDue", label: "Amount Due" },
+          { key: "amountPaid", label: "Amount Paid" },
+          { key: "outstanding", label: "Outstanding" },
+          { key: "status", label: "Status" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  transport_occupancy: {
+    title: "Route Occupancy",
+    category: "Transport",
+    permission: "transport:reports",
+    run: async (_f, inst) => {
+      const raw = await rowsOf(
+        `SELECT r.name AS route, v.registration_no AS "vehicleNo", v.capacity,
+                count(st.id) FILTER (WHERE st.status = 'active')::int AS allocated
+         FROM transport_routes r
+         LEFT JOIN vehicles v ON v.id = r.vehicle_id
+         LEFT JOIN student_transport st ON st.route_id = r.id
+         WHERE r.institution_id = $1
+         GROUP BY r.id, v.registration_no, v.capacity
+         ORDER BY r.name`,
+        [inst]
+      );
+      const rows = raw.map((r) => {
+        const cap = r.capacity == null ? null : Number(r.capacity);
+        const allocated = Number(r.allocated);
+        return {
+          ...r,
+          free: cap == null ? "—" : cap - allocated,
+          utilization: cap && cap > 0 ? `${Math.round((allocated / cap) * 100)}%` : "—",
+        };
+      });
+      return {
+        title: "Route Occupancy",
+        columns: [
+          { key: "route", label: "Route" },
+          { key: "vehicleNo", label: "Vehicle" },
+          { key: "capacity", label: "Capacity" },
+          { key: "allocated", label: "Allocated" },
+          { key: "free", label: "Free" },
+          { key: "utilization", label: "Utilization" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  transport_expiry: {
+    title: "Document Expiry",
+    category: "Transport",
+    permission: "transport:reports",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT * FROM (
+           SELECT 'Vehicle' AS entity, registration_no AS identifier, 'Insurance' AS document,
+                  insurance_expiry AS "expiryDate", (insurance_expiry - CURRENT_DATE) AS "daysToExpiry"
+           FROM vehicles WHERE institution_id = $1 AND insurance_expiry IS NOT NULL
+           UNION ALL
+           SELECT 'Vehicle', registration_no, 'Fitness', fitness_expiry, (fitness_expiry - CURRENT_DATE)
+           FROM vehicles WHERE institution_id = $1 AND fitness_expiry IS NOT NULL
+           UNION ALL
+           SELECT 'Vehicle', registration_no, 'Permit', permit_expiry, (permit_expiry - CURRENT_DATE)
+           FROM vehicles WHERE institution_id = $1 AND permit_expiry IS NOT NULL
+           UNION ALL
+           SELECT 'Driver', name, 'License', license_expiry, (license_expiry - CURRENT_DATE)
+           FROM drivers WHERE institution_id = $1 AND license_expiry IS NOT NULL
+         ) e ORDER BY e."daysToExpiry"`,
+        [inst]
+      );
+      const out = rows.map((r) => ({
+        ...r,
+        status: Number(r.daysToExpiry) < 0 ? "Expired" : Number(r.daysToExpiry) <= 30 ? "Expiring soon" : "Valid",
+      }));
+      return {
+        title: "Document Expiry",
+        columns: [
+          { key: "entity", label: "Entity" },
+          { key: "identifier", label: "Identifier" },
+          { key: "document", label: "Document" },
+          { key: "expiryDate", label: "Expiry" },
+          { key: "daysToExpiry", label: "Days Left" },
+          { key: "status", label: "Status" },
+        ],
+        rows: out,
       };
     },
   },
