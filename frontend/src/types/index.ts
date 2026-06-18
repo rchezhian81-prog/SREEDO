@@ -132,6 +132,27 @@ export interface Announcement {
   createdByName: string | null;
 }
 
+export interface InboxMessage {
+  id: string;
+  readAt: string | null;
+  category: string;
+  subject: string;
+  body: string;
+  createdAt: string;
+  senderName: string | null;
+}
+
+export interface SentMessage {
+  id: string;
+  category: string;
+  subject: string;
+  audienceType: string | null;
+  createdAt: string;
+  senderName: string | null;
+  recipientCount: number;
+  readCount: number;
+}
+
 export interface Subject {
   id: string;
   name: string;
