@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { authenticate } from "../../middleware/auth";
+import { permissionsForRole } from "../../middleware/permissions";
 import { authRateLimiter } from "../../middleware/rate-limit";
 import {
   changePasswordSchema,
@@ -101,6 +102,22 @@ authRouter.post("/logout", async (req, res) => {
 authRouter.get("/me", authenticate, async (req, res) => {
   const profile = await authService.getProfile(req.user!.id);
   res.json(profile);
+});
+
+/**
+ * @openapi
+ * /auth/permissions:
+ *   get:
+ *     tags: [Auth]
+ *     summary: Effective permission keys for the authenticated user's role
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ role, permissions: string[] }" }
+ *       401: { description: Not authenticated }
+ */
+authRouter.get("/permissions", authenticate, async (req, res) => {
+  const role = req.user!.role;
+  res.json({ role, permissions: await permissionsForRole(role) });
 });
 
 /**

@@ -84,10 +84,14 @@ Legend: **F** full (CRUD) · **W** write (create/update) · **R** read ·
 
 ## 4. Implementation plan for the matrix
 
-1. **Phase A:** add `permissions` + `role_permissions` tables, a
-   `requirePermission('module:action')` middleware, seed the matrix above, and
-   add owner-scoping to student/parent reads. Keep `authorize(...roles)` working
-   during migration (role → permission set).
-2. Add the 8 missing roles to the `user_role` enum (or move to a `roles` table to
-   avoid enum churn — decided in Phase A design).
-3. Per-institution overrides come from `role_permissions.institution_id`.
+1. **Phase A:** ✅ `permissions` + `role_permissions` tables, the
+   `requirePermission('module:action')` middleware (cached, with `super_admin`
+   bypass), and the seeded role matrix shipped (migration `0012`); owner-scoping
+   of student reads is already live (utils/scope.ts). `authorize(...roles)`
+   still works — routes migrate to `requirePermission` incrementally (the users
+   module is the first). `GET /auth/permissions` exposes a user's effective keys.
+2. ⬜ Add the remaining roles (`super_admin` done) — for the rest, grant via the
+   matrix now (TEXT-keyed `role_permissions`) and add to the `user_role` enum
+   when those logins are issued.
+3. ⬜ Per-institution overrides via `role_permissions.institution_id` (with the
+   `institution_id` scoping work).

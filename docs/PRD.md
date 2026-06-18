@@ -226,7 +226,10 @@ All 11 requirements from the brief, with status:
 
 1. **JWT authentication** ✅ — 15-min access tokens + rotating SHA-256-hashed refresh tokens.
 2. **Role-based access control** ✅ — `authorize(...roles)` middleware on routes.
-3. **Permission-based access** ⬜ — granular permissions layer planned (Phase A).
+3. **Permission-based access** 🟡 — granular `permissions`/`role_permissions`
+   with a `requirePermission` middleware and a seeded role matrix (migration
+   `0012`, `GET /auth/permissions`); routes migrate to it incrementally (the
+   users module is the first consumer).
 4. **Rate limiting** ✅ — global API limiter + stricter login limiter.
 5. **Input validation** ✅ — zod schemas on every request body/query.
 6. **Password hashing** ✅ — bcrypt; all sessions revoked on password change.

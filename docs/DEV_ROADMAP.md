@@ -22,8 +22,11 @@ exams (API), announcements, AI assistant, Swagger, seed, Docker, CI, unit tests.
    students, ✅ invoice `amount_paid`, ✅ sequence-based numbering, ✅ Swagger
    off in production — all done. Remaining: httpOnly-cookie token storage
    (deferred to the public-portal phase).
-2. **Permissions layer:** `permissions` + `role_permissions`,
-   `requirePermission()`, seed the role matrix.
+2. **Permissions layer:** ✅ `permissions` + `role_permissions` (migration
+   `0012`), `requirePermission()` middleware with a cached role→permission map,
+   seeded role matrix, `GET /auth/permissions`, and `super_admin` bypass. The
+   users module is wired to it; remaining routes migrate from `authorize(...)`
+   to `requirePermission(...)` incrementally.
 3. **Multi-tenancy:** 🟡 `institutions`/`branches`/`subscription_packages`/
    `institution_subscriptions` tables + `super_admin` role shipped (migration
    `0011`). Remaining: add `institution_id` to tenant-scoped tables (add →
