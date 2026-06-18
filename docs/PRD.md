@@ -333,12 +333,17 @@ storage, sequence-based numbering, invoice `amount_paid` column).
 
 - **Assistant** ✅ — GPT-4o with a system prompt seeded by live KPIs (counts,
   dues, attendance), history in Mongo. Endpoint: `POST /api/v1/ai/assistant`.
-- **Embeddings search** ⬜ — OpenAI embeddings over students/notices/documents
-  stored in a vector index (pgvector or Mongo Atlas), surfaced as semantic
-  search.
-- **Analytical summaries & risk alerts** ⬜ — scheduled jobs that summarize fees
-  due, attendance risk (consecutive absences), and performance dips into the
-  dashboard and notifications.
+- **Embeddings search** ✅ — OpenAI embeddings over document metadata, ranked by
+  cosine similarity (computed on the fly, tenant-scoped, metadata only), with an
+  automatic **keyword fallback** when embeddings are unconfigured. Endpoint:
+  `GET /api/v1/ai-insights/search`.
+- **Analytical summaries & risk alerts** ✅ — the **AI Insights** module
+  (`/ai-insights`, `ai:*`): report/KPI summaries across 9 modules,
+  **attendance-risk alerts** (low attendance over a window), **fee
+  pending/collection risk** (overdue + outstanding, manual reminder only), and
+  deterministic **workflow suggestions**. Metrics are computed deterministically
+  and always returned; OpenAI only adds an optional narrative. AI usage is logged
+  best-effort to Mongo. No auto-send, no cross-tenant access.
 
 See [`ARCHITECTURE.md`](./ARCHITECTURE.md) §AI for data flow. Every AI feature is
 **optional** and degrades gracefully when `OPENAI_API_KEY` is unset.

@@ -99,12 +99,30 @@ Deliverable **#5 Module-wise workflow**. Step-by-step flows for each module.
    de-duplicated per student/day) to students + guardians.
 5. *(⬜)* Threaded 1:1 messaging, scheduled campaigns.
 
-## J. AI assistant ✅ / ⬜ advanced
+## J. AI assistant ✅ / AI advanced ✅
 1. Staff asks a question → `POST /ai/assistant`.
 2. Service injects **live KPIs** into the system prompt, calls **GPT-4o**, saves
    the turn to Mongo; returns the answer (history via `/ai/conversations`).
-3. *(⬜)* Report summaries, **attendance-risk alerts**, fee-pending summaries,
-   **embeddings document search**, workflow suggestions.
+3. ✅ **AI Insights** (`/ai-insights`, `ai:*`, tenant-scoped, permission-guarded):
+   - **Report/KPI summaries** (`/ai-insights/summary/{report}`) for attendance,
+     fees, exams, homework, payroll, library, transport, hostel, inventory —
+     deterministic metrics always; optional GPT narrative when configured.
+   - **Attendance-risk alerts** (`/ai-insights/risk/attendance`) — active
+     students below a threshold over a window (suggests a non-intrusive action;
+     parent alerts are a suggestion only, never auto-sent).
+   - **Fee pending/collection risk** (`/ai-insights/risk/fees`) — overdue +
+     outstanding invoices with a follow-up suggestion; reminders go through
+     Communication on **explicit** action only.
+   - **Document search** (`/ai-insights/search`) — semantic (OpenAI embeddings
+     over metadata, cosine-ranked) when configured, **keyword fallback**
+     otherwise. Metadata only — never file contents or storage keys.
+   - **Workflow suggestions** (`/ai-insights/suggestions`) — deterministic
+     tenant-scoped prompts: fee reminders, pending leave, overdue books, low
+     stock, transport/hostel dues.
+   - **Dashboard** (`/ai-insights/dashboard`) — headline KPIs + suggestions.
+   - **Guardrails:** every query is `institution_id`-scoped; each endpoint is
+     `requirePermission`-guarded; AI usage logged best-effort to Mongo; degrades
+     gracefully when OpenAI/Mongo/embeddings are unconfigured.
 
 ## K. Timetable ✅ (Phase B)
 1. Admin defines **periods** and **rooms** (`/timetable/periods`, `/timetable/rooms`).

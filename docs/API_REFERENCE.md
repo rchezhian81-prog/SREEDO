@@ -116,6 +116,16 @@ Auth column legend: **public** · **auth** (any logged-in) · or explicit role(s
 | GET | `/conversations` | List conversation history |
 | GET | `/conversations/:id` | Get a conversation |
 
+### AI Insights — `/api/v1/ai-insights` *(tenant-scoped; `ai:*` permissions; metrics always returned, narrative only when OpenAI configured)*
+| Method | Path | Permission | Purpose |
+|--------|------|------------|---------|
+| GET | `/dashboard` | `ai:read` | Headline KPIs + workflow suggestions |
+| GET | `/summary/:report` | `ai:summarize` | KPI summary for a report (attendance, fees, exams, homework, payroll, library, transport, hostel, inventory) |
+| GET | `/risk/attendance` | `ai:risk_alerts` | Low-attendance students over a window (`threshold`, `windowDays`) |
+| GET | `/risk/fees` | `ai:risk_alerts` | Overdue + outstanding invoices (manual reminder only) |
+| GET | `/search` | `ai:document_search` | Semantic document search (keyword fallback); `q` required |
+| GET | `/suggestions` | `ai:workflow_suggestions` | Deterministic workflow suggestions |
+
 ---
 
 ## Part 2 — Planned endpoints (by phase)
