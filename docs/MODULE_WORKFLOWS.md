@@ -100,10 +100,14 @@ Deliverable **#5 Module-wise workflow**. Step-by-step flows for each module.
 4. Teacher timetable is the same data sliced by `teacherId`; both class and
    teacher views export to CSV (`/timetable/export`).
 
-## L. Homework / assignment ⬜ (Phase C)
-1. Teacher creates homework (section, subject, due date, attachment).
-2. Student views in portal, uploads submission before due date.
-3. Teacher marks status/grade; parent monitors; notifications on assign/submit.
+## L. Homework / assignment ✅ (Phase C)
+1. Teacher creates homework (section, subject, due date, attachment) → section is
+   notified (in-app + best-effort email/SMS/push).
+2. Student views in portal, submits text and/or a file (marked `late` past due);
+   the teacher is notified on submit.
+3. Teacher lists submissions and marks status/grade (reviewed/completed/late/
+   resubmit + marks/remarks); parent monitors via the portal. Attachments use the
+   protected, owner-scoped download route.
 
 ## M. Library ⬜ (Phase D)
 1. Librarian adds **books** + copies (catalogue).
