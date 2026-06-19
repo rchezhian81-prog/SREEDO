@@ -191,6 +191,25 @@ Auth column legend: **public** · **auth** (any logged-in) · or explicit role(s
 | GET | `:id/run` | `custom_reports:run` | Run a saved report (underlying permission enforced) |
 | GET | `:id/export` | `custom_reports:export` | Export a saved report CSV/PDF (`?format=csv\|pdf`) |
 
+### Disciplinary Records — `/api/v1/disciplinary` *(tenant-scoped; `disciplinary:*`; student/parent read is owner-scoped via the portal only)*
+| Method | Path | Permission | Purpose |
+|--------|------|------------|---------|
+| GET | `/` | `disciplinary:read` | Incident register (filter: status, severity, studentId, category, dateFrom/dateTo, search) |
+| POST | `/` | `disciplinary:create` | Log an incident (snapshots the student) |
+| GET | `/settings` | `disciplinary:read` | Portal-visibility setting `{ portalEnabled }` |
+| PATCH | `/settings` | `disciplinary:update` | Enable/disable portal visibility (OFF by default) |
+| GET | `/student/:studentId` | `disciplinary:read` | A student's disciplinary history |
+| GET | `:id` | `disciplinary:read` | Record detail |
+| PATCH | `:id` | `disciplinary:update` | Edit details (open records only) |
+| DELETE | `:id` | `disciplinary:delete` | Hard-delete (entered wrongly) |
+| GET | `:id/actions` | `disciplinary:read` | Audit timeline |
+| POST | `:id/review` | `disciplinary:action` | Mark under review |
+| POST | `:id/action` | `disciplinary:action` | Record action taken (→ action_taken) |
+| POST | `:id/close` | `disciplinary:close` | Close a record |
+| POST | `:id/cancel` | `disciplinary:delete` | Cancel a record (retained for audit) |
+| GET | `/portal/students/:studentId/disciplinary` | `disciplinary:portal_read` | Own / linked-child records (only when portal visibility enabled; owner-scoped) |
+| GET | `/report-center/disciplinary_*` | `disciplinary:reports` | Disciplinary reports (Reports Center) |
+
 ---
 
 ## Part 2 — Planned endpoints (by phase)

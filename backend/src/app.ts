@@ -21,6 +21,7 @@ import { collegeRouter } from "./modules/college/college.routes";
 import { communicationRouter } from "./modules/communication/communication.routes";
 import { customReportsRouter } from "./modules/customreports/customreports.routes";
 import { dashboardRouter } from "./modules/dashboard/dashboard.routes";
+import { disciplinaryRouter } from "./modules/disciplinary/disciplinary.routes";
 import { documentsRouter } from "./modules/documents/documents.routes";
 import { examsRouter } from "./modules/exams/exams.routes";
 import { feesRouter } from "./modules/fees/fees.routes";
@@ -115,6 +116,7 @@ export function createApp(): express.Express {
   api.use("/reports", reportsRouter);
   api.use("/report-center", reportCenterRouter);
   api.use("/custom-reports", customReportsRouter);
+  api.use("/disciplinary", disciplinaryRouter);
   api.use("/communication", communicationRouter);
   api.use("/documents", documentsRouter);
   api.use("/homework", homeworkRouter);

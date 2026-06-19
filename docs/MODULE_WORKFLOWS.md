@@ -336,3 +336,31 @@ Deliverable **#5 Module-wise workflow**. Step-by-step flows for each module.
 6. **Reports** (Reports Center, `transfer_certificates:read`): TC issued register,
    cancelled TCs, student-leaving report, pending/draft TCs. Tenant-scoped
    throughout; cross-institution access is denied.
+
+## V. Disciplinary Records ✅ (Phase D)
+1. Staff **log an incident** (`/disciplinary`, `disciplinary:create`) for a
+   school or college student: incident date, **category**, **severity**
+   (low/medium/high/critical), description, reported-by, involved staff,
+   optional action + follow-up. The student's class/section or program/semester
+   is **snapshotted** at creation; every record opens an **audit timeline**.
+2. **Lifecycle** (each step appends to the timeline): edit details
+   (`disciplinary:update`, blocked once terminal) → **mark under review** and
+   **record action taken** (`disciplinary:action`, moves to `under_review` /
+   `action_taken`) → **close** (`disciplinary:close`) or **cancel** if entered
+   wrongly (`disciplinary:delete`, retained for audit). A hard **delete** also
+   needs `disciplinary:delete`. Closed/cancelled records are immutable.
+3. **Student history** (`/disciplinary/student/:id`) lists a student's incidents
+   for staff. `GET /disciplinary/:id/actions` returns the audit trail.
+4. **Portal (safe default OFF)**: students/parents read **only their own /
+   linked child's** records via `/portal/students/:id/disciplinary`, and only
+   when (a) an admin has enabled portal visibility (`PATCH /disciplinary/settings`,
+   an institution feature flag) AND (b) the caller holds `disciplinary:portal_read`
+   AND (c) the student is owner-accessible — otherwise 403. Staff endpoints are
+   permission-based; students/parents (who hold only `portal_read`) and
+   unprivileged staff (e.g. accountant) are blocked from the admin register, so
+   sensitive records never leak.
+5. **Reports** (Reports Center, `disciplinary:reports`): incident register,
+   student-wise history, category-wise, severity-wise, open/pending, and
+   action-taken. Permissions: `disciplinary:read|create|update|delete|action|
+   close|reports|portal_read` — admin full; teacher read/create/update/action/
+   reports. Tenant-scoped; cross-institution access is denied.

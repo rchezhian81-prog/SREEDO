@@ -252,14 +252,27 @@ used when `institutions.type = 'college'`; the school flow is unaffected.
   custom report can never widen access. Adds `custom_reports:*` permissions
   (admin full incl. `share`; accountant all except `share`; teacher
   read/run/export). No new data tables — it composes the existing report registry.
+- **Disciplinary records:** ✅ (migration `0037`, tenant-scoped) `disciplinary_records`
+  (`student_id` + class/section/program/semester **snapshots**, `incident_date`,
+  `category`, `severity` low|medium|high|critical, `description`, `reported_by`,
+  `involved_staff`, `action_taken`, `follow_up_date`, `status`
+  open|under_review|action_taken|closed|cancelled, `remarks`, closed/cancelled
+  audit columns, `created_by`, `set_updated_at` trigger) and `disciplinary_actions`
+  (an append-only **audit timeline**: `record_id`, `action`, `note`, `from_status`,
+  `to_status`, `created_by`). Student rows are never deleted. Adds `disciplinary:*`
+  permissions (admin full; teacher read/create/update/action/reports; student &
+  parent only `portal_read`; accountant none). **Portal visibility is OFF by
+  default** — gated by an institution feature flag (`institutions.settings ->
+  featureFlags -> disciplinaryPortal`) PLUS `disciplinary:portal_read` PLUS
+  owner-scoping.
 
 ### Phase C/D supporting
 - **fee_categories**, **fee_discounts/scholarships**, **fee_fines** — extend the
   fee engine (categories, term schedules, fines, discounts).
 - **grade_bands** — `id`, `name`, `min_percent`, `max_percent`, `grade`, `points`
   for report-card generation.
-- **disciplinary_records** — extend student records (planned). (`transfer_certificates`
-  and `id_cards` are shipped — see above.)
+- **disciplinary_records** — ✅ shipped (migration `0037`, see above).
+  (`transfer_certificates` and `id_cards` are shipped too.)
 
 ### Multi-tenancy migration note
 Adding `institution_id` to live tables is a breaking change done carefully in

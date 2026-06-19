@@ -2700,6 +2700,212 @@ export const REPORTS: Record<string, Report> = {
       };
     },
   },
+
+  // --- Disciplinary (Phase D) reports — empty without disciplinary records. ---
+
+  disciplinary_register: {
+    title: "Disciplinary Incident Register",
+    category: "Disciplinary",
+    permission: "disciplinary:reports",
+    run: async (f, inst) => {
+      const params: unknown[] = [inst];
+      const where = ["dr.institution_id = $1"];
+      if (f.status) {
+        params.push(f.status);
+        where.push(`dr.status = $${params.length}`);
+      }
+      if (f.category) {
+        params.push(f.category);
+        where.push(`dr.category = $${params.length}`);
+      }
+      if (f.sectionId) {
+        params.push(f.sectionId);
+        where.push(`s.section_id = $${params.length}`);
+      }
+      if (f.dateFrom) {
+        params.push(f.dateFrom);
+        where.push(`dr.incident_date >= $${params.length}`);
+      }
+      if (f.dateTo) {
+        params.push(f.dateTo);
+        where.push(`dr.incident_date <= $${params.length}`);
+      }
+      const rows = await rowsOf(
+        `SELECT to_char(dr.incident_date, 'YYYY-MM-DD') AS date,
+                s.admission_no AS "admissionNo", s.first_name || ' ' || s.last_name AS student,
+                COALESCE(dr.class_name, dr.program_name) AS class,
+                dr.category, dr.severity, dr.status
+         FROM disciplinary_records dr JOIN students s ON s.id = dr.student_id
+         WHERE ${where.join(" AND ")}
+         ORDER BY dr.incident_date DESC`,
+        params
+      );
+      return {
+        title: "Disciplinary Incident Register",
+        columns: [
+          { key: "date", label: "Date" },
+          { key: "admissionNo", label: "Admission No" },
+          { key: "student", label: "Student" },
+          { key: "class", label: "Class / Program" },
+          { key: "category", label: "Category" },
+          { key: "severity", label: "Severity" },
+          { key: "status", label: "Status" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  disciplinary_student_history: {
+    title: "Student-wise Disciplinary History",
+    category: "Disciplinary",
+    permission: "disciplinary:reports",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT s.admission_no AS "admissionNo", s.first_name || ' ' || s.last_name AS student,
+                COALESCE(dr.class_name, dr.program_name) AS class,
+                count(*)::int AS incidents,
+                count(*) FILTER (WHERE dr.status IN ('open','under_review'))::int AS open,
+                count(*) FILTER (WHERE dr.severity IN ('high','critical'))::int AS "highCritical",
+                to_char(max(dr.incident_date), 'YYYY-MM-DD') AS "lastIncident"
+         FROM disciplinary_records dr JOIN students s ON s.id = dr.student_id
+         WHERE dr.institution_id = $1 AND dr.status <> 'cancelled'
+         GROUP BY s.id, s.admission_no, s.first_name, s.last_name, COALESCE(dr.class_name, dr.program_name)
+         ORDER BY incidents DESC, student`,
+        [inst]
+      );
+      return {
+        title: "Student-wise Disciplinary History",
+        columns: [
+          { key: "admissionNo", label: "Admission No" },
+          { key: "student", label: "Student" },
+          { key: "class", label: "Class / Program" },
+          { key: "incidents", label: "Incidents" },
+          { key: "open", label: "Open" },
+          { key: "highCritical", label: "High/Critical" },
+          { key: "lastIncident", label: "Last Incident" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  disciplinary_by_category: {
+    title: "Category-wise Incidents",
+    category: "Disciplinary",
+    permission: "disciplinary:reports",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT dr.category, count(*)::int AS total,
+                count(*) FILTER (WHERE dr.status IN ('open','under_review'))::int AS open,
+                count(*) FILTER (WHERE dr.status = 'closed')::int AS closed
+         FROM disciplinary_records dr
+         WHERE dr.institution_id = $1 AND dr.status <> 'cancelled'
+         GROUP BY dr.category ORDER BY total DESC`,
+        [inst]
+      );
+      return {
+        title: "Category-wise Incidents",
+        columns: [
+          { key: "category", label: "Category" },
+          { key: "total", label: "Total" },
+          { key: "open", label: "Open" },
+          { key: "closed", label: "Closed" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  disciplinary_by_severity: {
+    title: "Severity-wise Incidents",
+    category: "Disciplinary",
+    permission: "disciplinary:reports",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT dr.severity, count(*)::int AS total,
+                count(*) FILTER (WHERE dr.status IN ('open','under_review'))::int AS open,
+                count(*) FILTER (WHERE dr.status = 'closed')::int AS closed
+         FROM disciplinary_records dr
+         WHERE dr.institution_id = $1 AND dr.status <> 'cancelled'
+         GROUP BY dr.severity
+         ORDER BY CASE dr.severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END`,
+        [inst]
+      );
+      return {
+        title: "Severity-wise Incidents",
+        columns: [
+          { key: "severity", label: "Severity" },
+          { key: "total", label: "Total" },
+          { key: "open", label: "Open" },
+          { key: "closed", label: "Closed" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  disciplinary_open_pending: {
+    title: "Open / Pending Incidents",
+    category: "Disciplinary",
+    permission: "disciplinary:reports",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT to_char(dr.incident_date, 'YYYY-MM-DD') AS date,
+                s.first_name || ' ' || s.last_name AS student,
+                COALESCE(dr.class_name, dr.program_name) AS class,
+                dr.category, dr.severity, dr.status,
+                to_char(dr.follow_up_date, 'YYYY-MM-DD') AS "followUp"
+         FROM disciplinary_records dr JOIN students s ON s.id = dr.student_id
+         WHERE dr.institution_id = $1 AND dr.status IN ('open','under_review','action_taken')
+         ORDER BY dr.incident_date`,
+        [inst]
+      );
+      return {
+        title: "Open / Pending Incidents",
+        columns: [
+          { key: "date", label: "Date" },
+          { key: "student", label: "Student" },
+          { key: "class", label: "Class / Program" },
+          { key: "category", label: "Category" },
+          { key: "severity", label: "Severity" },
+          { key: "status", label: "Status" },
+          { key: "followUp", label: "Follow-up" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  disciplinary_action_taken: {
+    title: "Action-taken Report",
+    category: "Disciplinary",
+    permission: "disciplinary:reports",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT to_char(dr.incident_date, 'YYYY-MM-DD') AS date,
+                s.first_name || ' ' || s.last_name AS student,
+                dr.category, dr.severity, dr.action_taken AS "actionTaken", dr.status
+         FROM disciplinary_records dr JOIN students s ON s.id = dr.student_id
+         WHERE dr.institution_id = $1 AND dr.action_taken IS NOT NULL
+           AND dr.status IN ('action_taken','closed')
+         ORDER BY dr.incident_date DESC`,
+        [inst]
+      );
+      return {
+        title: "Action-taken Report",
+        columns: [
+          { key: "date", label: "Date" },
+          { key: "student", label: "Student" },
+          { key: "category", label: "Category" },
+          { key: "severity", label: "Severity" },
+          { key: "actionTaken", label: "Action Taken" },
+          { key: "status", label: "Status" },
+        ],
+        rows,
+      };
+    },
+  },
 };
 
 export function listReports() {
