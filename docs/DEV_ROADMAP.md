@@ -164,8 +164,17 @@ hostel) that blocks issue unless an authorised user records a **dues override**,
 **TC PDF** (cancelled = watermarked) re-downloadable, owner-scoped portal
 download, student lifecycle (issuing flips the student to `transferred`, data
 retained), and 4 reports (migration `0034`, `/transfer-certificates`,
-`transfer_certificates:*`, tenant + owner-scoped). **Phase D operations are
-complete.** Remaining (cross-phase): **custom report builder**.
+`transfer_certificates:*`, tenant + owner-scoped). ✅ **Custom Report Builder**
+— saved + ad-hoc report definitions over the Reports Center registry: pick a
+source, choose columns (discovered by previewing the source), apply reusable
+filters (date range, class/section, status, category, search) and sorting, then
+preview/run/export **CSV + PDF** without leaving the page. Saved definitions
+support edit/duplicate/delete and **private vs shared** visibility (sharing is a
+separate permission). Crucially a custom report **never widens access** — running,
+previewing or exporting re-checks the *underlying* report's own permission, and
+everything is tenant-scoped with no cross-institution access; students/parents are
+blocked entirely (migration `0036`, `/custom-reports`, `custom_reports:*`).
+**Phase D operations are complete.**
 
 ### Phase E — Scale & polish ⬜
 Caching, read replicas if needed, background job queue, observability/metrics,
@@ -181,7 +190,7 @@ of E2E. Every PR must keep CI green.
 | Layer | Tooling | Scope | Status |
 |-------|---------|-------|--------|
 | **Unit** | Vitest | utils (jwt, password, pagination) | ✅ 11 tests (`npm test`) |
-| **API integration** | Supertest + real Postgres | auth/RBAC, owner-scoping, tenant isolation, sequence numbering, invoice `amount_paid` + overpay, per-module flows (incl. AI insights fallback, online-payment webhook idempotency + signature, fee schedule generation/fines/discounts, TC issue/dues-override/owner-scoped download, thread participant-scoping/read-state + permission guards), Swagger gating | ✅ 205 tests (`npm run test:integration`, in CI) |
+| **API integration** | Supertest + real Postgres | auth/RBAC, owner-scoping, tenant isolation, sequence numbering, invoice `amount_paid` + overpay, per-module flows (incl. AI insights fallback, online-payment webhook idempotency + signature, fee schedule generation/fines/discounts, TC issue/dues-override/owner-scoped download, thread participant-scoping/read-state + permission guards, custom-report saved/ad-hoc run + column projection + CSV/PDF export + share/private access + underlying-report permission enforcement), Swagger gating | ✅ 213 tests (`npm run test:integration`, in CI) |
 | **Contract** | Validate responses against the generated OpenAPI spec | drift between code and Swagger | ⬜ |
 | **Frontend** | React Testing Library (components), Playwright (E2E) | login → dashboard → create student → record payment | ⬜ |
 | **Mobile** | `flutter analyze` + `flutter test` | parent/student (Phase 1) + **staff (Phase 2)**: attendance/marks/homework/communication/reports/payslips/timetable + quick views | 🟡 analyze in CI + smoke tests; widget/provider tests ⬜ |

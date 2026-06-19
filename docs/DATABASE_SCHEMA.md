@@ -243,6 +243,15 @@ used when `institutions.type = 'college'`; the school flow is unaffected.
   read/create/reply/delete; student & parent read+reply). Attachment foundation:
   thread messages can later carry documents (deferred to avoid changing the
   documents owner-type enum).
+- **Custom report builder:** ✅ (migration `0036`, tenant-scoped) `custom_reports`
+  (`name`, `report_key` — a Reports Center registry key, `columns` JSONB array of
+  selected column keys, `filters` JSONB, `sort` JSONB `{key,dir}`, `group_by`,
+  `visibility` private|shared, `created_by`, timestamps with a `set_updated_at`
+  trigger). A saved definition stores *what to run*, never a data snapshot — every
+  run re-executes the underlying report live and re-checks its permission, so a
+  custom report can never widen access. Adds `custom_reports:*` permissions
+  (admin full incl. `share`; accountant all except `share`; teacher
+  read/run/export). No new data tables — it composes the existing report registry.
 
 ### Phase C/D supporting
 - **fee_categories**, **fee_discounts/scholarships**, **fee_fines** — extend the

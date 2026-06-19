@@ -249,7 +249,24 @@ Deliverable **#5 Module-wise workflow**. Step-by-step flows for each module.
    — incl. 6 **college**, 6 **library**, 7 **transport**, 6 **hostel**, 7
    **inventory**, 7 **staff-attendance/leave**, and 6 **payroll** reports (register,
    staff-wise salary, deductions, payslip status, attendance-vs-payroll, unpaid leave).
-   *(⬜)* Scheduled reports + a **custom report builder** (saved definitions).
+3. ✅ **Custom Report Builder** (`/custom-reports`, `custom_reports:*`,
+   tenant-scoped). Over the Reports Center registry a user can:
+   - **Ad-hoc**: pick a source, preview it to discover columns, choose columns +
+     reusable filters (date range, class/section, status, category, search) + sort,
+     and **export CSV/PDF** without saving (`POST /preview`, `POST /export`).
+   - **Saved definitions**: persist the above as a named report (run/edit/
+     duplicate/delete; `GET|POST|PATCH|DELETE /:id`, `POST /:id/duplicate`,
+     `GET /:id/run`, `GET /:id/export`). Each is **private** (creator-only, no
+     existence leak) or **shared** (visible to others with `custom_reports:read`);
+     sharing requires `custom_reports:share`, so accountants can create but not
+     share. Creator or an admin may edit/delete.
+   - **Access is never widened**: running, previewing or exporting re-checks the
+     *underlying* report's own permission (e.g. a fee report still needs
+     `fee_reports:read`), everything is tenant-scoped (no cross-institution), and
+     students/parents have no `custom_reports` permissions at all. Permissions:
+     `custom_reports:read|create|update|delete|run|export|share` — admin full;
+     accountant all except `share`; teacher read/run/export.
+   *(⬜)* Scheduled reports.
 
 ## S. College mode ✅ (Phase B)
 1. Admin sets the institution to **college** mode (`PATCH /college/settings`,
