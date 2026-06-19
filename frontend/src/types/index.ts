@@ -1426,3 +1426,64 @@ export interface DisciplinaryAction {
 export interface DisciplinarySettings {
   portalEnabled: boolean;
 }
+
+// --- Scheduled Reports ---
+
+export type ScheduleFrequency = "daily" | "weekly" | "monthly";
+
+export type ScheduleChannel = "in_app" | "email";
+
+export type ScheduleExportFormat = "csv" | "pdf" | "both";
+
+export type ScheduledReportRunStatus =
+  | "pending"
+  | "running"
+  | "success"
+  | "failed"
+  | "skipped";
+
+export type ScheduledReportTrigger = "manual" | "scheduled";
+
+export interface ScheduledReportLastRun {
+  status: ScheduledReportRunStatus;
+  completedAt: string | null;
+}
+
+export interface ScheduledReport {
+  id: string;
+  reportId: string;
+  reportName: string;
+  name: string;
+  frequency: ScheduleFrequency;
+  runTime: string;
+  timezone: string;
+  dayOfWeek: number | null;
+  dayOfMonth: number | null;
+  recipients: string[];
+  channels: ScheduleChannel[];
+  exportFormat: ScheduleExportFormat;
+  enabled: boolean;
+  lastRunAt: string | null;
+  nextRunAt: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  lastRun: ScheduledReportLastRun | null;
+}
+
+export interface ScheduledReportRun {
+  id: string;
+  scheduleId: string;
+  status: ScheduledReportRunStatus;
+  trigger: ScheduledReportTrigger;
+  startedAt: string | null;
+  completedAt: string | null;
+  errorMessage: string | null;
+  exportFormat: ScheduleExportFormat;
+  exportBytes: number | null;
+  rowCount: number | null;
+  recipientCount: number | null;
+  deliveryStatus: string | null;
+  triggeredBy: string | null;
+  createdAt: string;
+}
