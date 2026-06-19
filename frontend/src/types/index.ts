@@ -1147,3 +1147,18 @@ export interface AiDocSearch {
   mode: "semantic" | "keyword";
   results: AiDocSearchResult[];
 }
+
+// --- Online Fee Gateway ---
+
+export interface PaymentOrder {
+  id: string; orderNo: string; invoiceId: string; invoiceNo: string;
+  studentId: string; studentName: string; amount: number | string; currency: string;
+  status: "created" | "pending" | "success" | "failed" | "cancelled" | "expired" | "refunded";
+  provider: string; gatewayRef: string | null; gatewayPaymentId: string | null;
+  paymentId: string | null; checkoutUrl: string | null; createdAt: string; updatedAt: string;
+}
+
+export interface GatewayStatus {
+  configured: boolean; provider: string | null; currency: string;
+  institutionEnabled: boolean; enabled: boolean;
+}
