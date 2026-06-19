@@ -1301,3 +1301,44 @@ export interface StudentDues {
   library: { books: number; fines: number | string };
   hasDues: boolean;
 }
+
+// --- Threaded Messaging ---
+
+export type ThreadType = "direct" | "group";
+
+export interface Thread {
+  id: string;
+  subject: string | null;
+  type: ThreadType;
+  lastMessageAt: string | null;
+  createdAt: string;
+  lastMessage: string | null;
+  unreadCount: number;
+  participants: string;
+}
+
+export interface ThreadParticipant {
+  userId: string;
+  name: string;
+  role: string;
+  lastReadAt: string | null;
+}
+
+export interface ThreadMessage {
+  id: string;
+  senderId: string | null;
+  senderName: string | null;
+  body: string;
+  createdAt: string;
+}
+
+export interface ThreadDetail {
+  id: string;
+  subject: string | null;
+  type: ThreadType;
+  createdBy: string | null;
+  lastMessageAt: string | null;
+  createdAt: string;
+  participants: ThreadParticipant[];
+  messages: ThreadMessage[];
+}

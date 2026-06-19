@@ -20,6 +20,7 @@ const NAV = [
   { href: "/portal/fees", label: "Fees", icon: "💳" },
   { href: "/portal/announcements", label: "Notices", icon: "📣" },
   { href: "/portal/inbox", label: "Inbox", icon: "📨" },
+  { href: "/portal/messages", label: "Messages", icon: "💬" },
 ];
 
 export default function PortalLayout({

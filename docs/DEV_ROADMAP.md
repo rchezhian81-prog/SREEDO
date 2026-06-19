@@ -75,7 +75,13 @@ exams (API), announcements, AI assistant, Swagger, seed, Docker, CI, unit tests.
    transfer certificates.
 3. **Communication:** ✅ in-app messaging (audience targeting + read/unread inbox),
    **email/SMS/FCM-push** adapters (optional, graceful), device-token registration,
-   **fee reminders** + **absence alerts** (migration `0018`). Threaded messaging ⬜.
+   **fee reminders** + **absence alerts** (migration `0018`). ✅ **Threaded
+   messaging** — conversation **threads** (one-to-one + group), replies, and
+   **per-participant read state** (unread counts, mark-read) with strict
+   participant-scoped access, same-institution participant validation, best-effort
+   reply notifications (reuse the channel adapters), archive, and 4 messaging
+   reports (migration `0035`, `/communication/threads`, `threads:*`). Legacy
+   inbox untouched.
 4. **Parent & Student portals** — ✅ base shipped (web): cookie auth (`/auth/portal/*`),
    `guardians` parent⇄child links (migration `0016`), `/portal/*` owner-scoped
    endpoints, and portal UI (dashboard, profile, attendance, timetable, fees,
@@ -175,7 +181,7 @@ of E2E. Every PR must keep CI green.
 | Layer | Tooling | Scope | Status |
 |-------|---------|-------|--------|
 | **Unit** | Vitest | utils (jwt, password, pagination) | ✅ 11 tests (`npm test`) |
-| **API integration** | Supertest + real Postgres | auth/RBAC, owner-scoping, tenant isolation, sequence numbering, invoice `amount_paid` + overpay, per-module flows (incl. AI insights fallback, online-payment webhook idempotency + signature, fee schedule generation/fines/discounts, TC issue/dues-override/owner-scoped download + permission guards), Swagger gating | ✅ 196 tests (`npm run test:integration`, in CI) |
+| **API integration** | Supertest + real Postgres | auth/RBAC, owner-scoping, tenant isolation, sequence numbering, invoice `amount_paid` + overpay, per-module flows (incl. AI insights fallback, online-payment webhook idempotency + signature, fee schedule generation/fines/discounts, TC issue/dues-override/owner-scoped download, thread participant-scoping/read-state + permission guards), Swagger gating | ✅ 205 tests (`npm run test:integration`, in CI) |
 | **Contract** | Validate responses against the generated OpenAPI spec | drift between code and Swagger | ⬜ |
 | **Frontend** | React Testing Library (components), Playwright (E2E) | login → dashboard → create student → record payment | ⬜ |
 | **Mobile** | `flutter analyze` + `flutter test` | parent/student (Phase 1) + **staff (Phase 2)**: attendance/marks/homework/communication/reports/payslips/timetable + quick views | 🟡 analyze in CI + smoke tests; widget/provider tests ⬜ |

@@ -10,6 +10,9 @@ export { query };
 export const app = createApp();
 
 const TABLES = [
+  "thread_messages",
+  "thread_participants",
+  "threads",
   "transfer_certificates",
   "invoice_discounts",
   "invoice_fines",

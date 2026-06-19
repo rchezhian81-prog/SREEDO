@@ -10,7 +10,13 @@ import {
   inboxQuerySchema,
   sendMessageSchema,
 } from "./communication.schema";
+import {
+  addParticipantsSchema,
+  createThreadSchema,
+  replySchema,
+} from "./threads.schema";
 import * as service from "./communication.service";
+import * as threads from "./threads.service";
 
 export const communicationRouter = Router();
 
@@ -21,6 +27,12 @@ const canCompose = requirePermission("communication:create");
 const canSend = requirePermission("communication:send");
 const canDelete = requirePermission("communication:delete");
 const canNotify = requirePermission("notifications:send");
+
+const canThreadRead = requirePermission("threads:read");
+const canThreadCreate = requirePermission("threads:create");
+const canThreadReply = requirePermission("threads:reply");
+const canThreadDelete = requirePermission("threads:delete");
+const canThreadManage = requirePermission("threads:manage");
 
 /**
  * @openapi
@@ -219,4 +231,72 @@ communicationRouter.delete("/device-tokens", async (req, res) => {
   const { token } = deviceTokenSchema.parse(req.body);
   await service.removeDeviceToken(token, req.user!.id, tenantId(req));
   res.status(204).end();
+});
+
+// --- Threaded messaging (conversation threads + replies + read state) ---
+// Participant-scoped: a thread is visible only to its participants.
+
+/**
+ * @openapi
+ * /communication/threads:
+ *   get: { tags: [Communication], summary: List my conversation threads, security: [{ bearerAuth: [] }], responses: { 200: { description: Threads with unread counts } } }
+ *   post: { tags: [Communication], summary: Start a conversation thread (one-to-one or group), security: [{ bearerAuth: [] }], responses: { 201: { description: Created thread } } }
+ */
+communicationRouter.get("/threads", canThreadRead, async (req, res) => {
+  res.json(await threads.listThreads(req.user!.id, tenantId(req)));
+});
+communicationRouter.post("/threads", canThreadCreate, async (req, res) => {
+  const input = createThreadSchema.parse(req.body);
+  res.status(201).json(await threads.createThread(input, req.user!.id, tenantId(req)));
+});
+
+/**
+ * @openapi
+ * /communication/threads/unread-count:
+ *   get: { tags: [Communication], summary: Total unread messages across my threads, security: [{ bearerAuth: [] }], responses: { 200: { description: "{ count }" } } }
+ */
+communicationRouter.get("/threads/unread-count", canThreadRead, async (req, res) => {
+  res.json(await threads.unreadCount(req.user!.id, tenantId(req)));
+});
+
+/**
+ * @openapi
+ * /communication/threads/{id}:
+ *   get: { tags: [Communication], summary: Thread detail with participants + messages (participant-only), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Thread }, 404: { description: Not a participant } } }
+ *   delete: { tags: [Communication], summary: Archive the thread for me, security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Archived } } }
+ */
+communicationRouter.get("/threads/:id", canThreadRead, async (req, res) => {
+  res.json(await threads.getThread(uuidParam(req), req.user!.id, tenantId(req)));
+});
+communicationRouter.delete("/threads/:id", canThreadDelete, async (req, res) => {
+  res.json(await threads.archiveThread(uuidParam(req), req.user!.id, tenantId(req)));
+});
+
+/**
+ * @openapi
+ * /communication/threads/{id}/messages:
+ *   post: { tags: [Communication], summary: Reply in a thread (participant-only; notifies others), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 201: { description: Reply } } }
+ */
+communicationRouter.post("/threads/:id/messages", canThreadReply, async (req, res) => {
+  const input = replySchema.parse(req.body);
+  res.status(201).json(await threads.reply(uuidParam(req), input, req.user!.id, tenantId(req)));
+});
+
+/**
+ * @openapi
+ * /communication/threads/{id}/read:
+ *   post: { tags: [Communication], summary: Mark a thread read for me, security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: "{ ok }" } } }
+ */
+communicationRouter.post("/threads/:id/read", canThreadRead, async (req, res) => {
+  res.json(await threads.markRead(uuidParam(req), req.user!.id, tenantId(req)));
+});
+
+/**
+ * @openapi
+ * /communication/threads/{id}/participants:
+ *   post: { tags: [Communication], summary: Add participants to a thread (threads:manage), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Updated thread } } }
+ */
+communicationRouter.post("/threads/:id/participants", canThreadManage, async (req, res) => {
+  const input = addParticipantsSchema.parse(req.body);
+  res.json(await threads.addParticipants(uuidParam(req), input, req.user!.id, tenantId(req)));
 });
