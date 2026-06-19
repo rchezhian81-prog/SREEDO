@@ -1262,3 +1262,42 @@ export interface InvoiceBreakdown {
     createdAt: string;
   }[];
 }
+
+// --- Transfer Certificates ---
+
+export interface TransferCertificate {
+  id: string;
+  tcNo: string;
+  studentId: string;
+  studentName: string;
+  admissionNo: string;
+  className: string | null;
+  sectionName: string | null;
+  programName: string | null;
+  semesterName: string | null;
+  academicYear: string | null;
+  dateOfIssue: string | null;
+  lastAttendanceDate: string | null;
+  leavingReason: string | null;
+  conduct: string | null;
+  feeDuesStatus: string | null;
+  libraryDuesStatus: string | null;
+  transportDuesStatus: string | null;
+  hostelDuesStatus: string | null;
+  duesOverride: boolean;
+  duesOverrideReason: string | null;
+  remarks: string | null;
+  status: "draft" | "issued" | "cancelled";
+  issuedAt: string | null;
+  cancelledAt: string | null;
+  cancelReason: string | null;
+  createdAt: string;
+}
+
+export interface StudentDues {
+  fee: { amount: number | string; count: number };
+  transport: { amount: number | string };
+  hostel: { amount: number | string };
+  library: { books: number; fines: number | string };
+  hasDues: boolean;
+}
