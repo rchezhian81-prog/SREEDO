@@ -189,3 +189,116 @@ export function bulkIdCardsPdf(cards: IdCardData[]): Promise<Buffer> {
     }
   });
 }
+
+export interface TcData {
+  institutionName: string;
+  logo: PdfImage | null;
+  tcNo: string;
+  status: string; // draft | issued | cancelled
+  studentName: string;
+  admissionNo: string;
+  className: string | null;
+  sectionName: string | null;
+  programName: string | null;
+  semesterName: string | null;
+  dateOfBirth: string | null;
+  guardianName: string | null;
+  joiningDate: string | null;
+  leavingDate: string | null; // date of issue
+  lastAttendanceDate: string | null;
+  leavingReason: string | null;
+  conduct: string | null;
+  academicYear: string | null;
+  feeDuesStatus: string | null;
+  libraryDuesStatus: string | null;
+  transportDuesStatus: string | null;
+  hostelDuesStatus: string | null;
+  remarks: string | null;
+}
+
+export function tcPdf(data: TcData): Promise<Buffer> {
+  return renderPdf({ size: "A4", margin: 48 }, (doc) => {
+    const left = 48;
+    const width = doc.page.width - 96;
+
+    if (!tryImage(doc, data.logo, left, 44, { fit: [54, 54] })) {
+      doc.rect(left, 44, 54, 54).stroke();
+      doc.fontSize(7).fillColor("#999").text("LOGO", left, 66, { width: 54, align: "center" });
+      doc.fillColor("#000");
+    }
+    doc.font("Helvetica-Bold").fontSize(18).text(data.institutionName, left + 64, 48, {
+      width: width - 64,
+      align: "center",
+    });
+    doc.font("Helvetica").fontSize(13).text("TRANSFER CERTIFICATE", left + 64, 74, {
+      width: width - 64,
+      align: "center",
+    });
+    doc.moveTo(left, 112).lineTo(left + width, 112).stroke();
+
+    // A cancelled TC is watermarked and must not be treated as valid.
+    if (data.status === "cancelled") {
+      doc.save();
+      doc.fillColor("#cc0000").font("Helvetica-Bold").fontSize(60).opacity(0.25);
+      doc.text("CANCELLED", left, 360, { width, align: "center" });
+      doc.opacity(1).fillColor("#000").restore();
+    }
+
+    let y = 126;
+    doc.font("Helvetica").fontSize(10);
+    const row = (label: string, value: string | null, x: number, yy: number) => {
+      doc.font("Helvetica-Bold").text(`${label}: `, x, yy, { continued: true });
+      doc.font("Helvetica").text(value && value.length ? value : "—");
+    };
+    const half = width / 2;
+    row("TC No", data.tcNo, left, y);
+    row("Date of Issue", data.leavingDate, left + half, y);
+    y += 18;
+    row("Student Name", data.studentName, left, y);
+    row("Admission No", data.admissionNo, left + half, y);
+    y += 18;
+    row("Class", `${data.className ?? "—"} ${data.sectionName ?? ""}`.trim(), left, y);
+    row("Date of Birth", data.dateOfBirth, left + half, y);
+    y += 18;
+    if (data.programName || data.semesterName) {
+      row("Program", data.programName, left, y);
+      row("Semester", data.semesterName, left + half, y);
+      y += 18;
+    }
+    row("Guardian", data.guardianName, left, y);
+    row("Academic Year", data.academicYear, left + half, y);
+    y += 18;
+    row("Date of Joining", data.joiningDate, left, y);
+    row("Last Attendance", data.lastAttendanceDate, left + half, y);
+    y += 18;
+    row("Reason for Leaving", data.leavingReason, left, y);
+    y += 18;
+    row("Conduct & Character", data.conduct, left, y);
+    y += 24;
+
+    doc.font("Helvetica-Bold").fontSize(11).text("Dues status", left, y);
+    y += 16;
+    doc.fontSize(10);
+    row("Fees", data.feeDuesStatus, left, y);
+    row("Library", data.libraryDuesStatus, left + half, y);
+    y += 18;
+    row("Transport", data.transportDuesStatus, left, y);
+    row("Hostel", data.hostelDuesStatus, left + half, y);
+    y += 24;
+
+    if (data.remarks && data.remarks.length) {
+      row("Remarks", data.remarks, left, y);
+      y += 24;
+    }
+
+    // Signature placeholders.
+    const sigY = doc.page.height - 120;
+    doc.moveTo(left, sigY).lineTo(left + 180, sigY).stroke();
+    doc.font("Helvetica").fontSize(9).text("Class Teacher", left, sigY + 4, { width: 180, align: "center" });
+    doc.moveTo(left + width - 180, sigY).lineTo(left + width, sigY).stroke();
+    doc.text("Principal / Authorized Signatory", left + width - 180, sigY + 4, {
+      width: 180,
+      align: "center",
+    });
+  });
+}

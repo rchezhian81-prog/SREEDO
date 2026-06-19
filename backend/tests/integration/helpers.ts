@@ -10,6 +10,7 @@ export { query };
 export const app = createApp();
 
 const TABLES = [
+  "transfer_certificates",
   "invoice_discounts",
   "invoice_fines",
   "fee_discounts",

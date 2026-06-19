@@ -129,8 +129,14 @@ reports 🟡.
 - ✅ Admission (create) with auto admission numbers, profile, status lifecycle
   (active/inactive/graduated/transferred), section assignment, guardian fields,
   and **soft-delete** (archive) that preserves attendance/fee history.
-- ⬜ Document upload, ID-card details, disciplinary records, transfer-certificate
-  (TC) generation. Attendance/fees/exam links exist via their modules.
+- ✅ **Transfer-certificate (TC) generation** (`/transfer-certificates`,
+  `transfer_certificates:*`): register with atomic sequence-based TC numbers,
+  draft→issued→cancelled lifecycle, pre-issue **dues check** (fees/library/
+  transport/hostel) with permission-gated **override**, **TC PDF** (watermarked
+  when cancelled, owner-scoped portal download), the `transferred` student
+  lifecycle (data retained), and 4 TC reports.
+- ⬜ Document upload (✅ via Documents module), ID-card details (✅ via ID Cards),
+  disciplinary records. Attendance/fees/exam links exist via their modules.
 
 ### 4.4 Staff / Teacher Management — 🟡 Partial
 - ✅ Profile, auto employee numbers, qualification/specialization, active status,

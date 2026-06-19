@@ -287,3 +287,25 @@ Deliverable **#5 Module-wise workflow**. Step-by-step flows for each module.
    `online_payments:reports`): transactions, successful, failed/cancelled, pending
    orders, and **gateway reconciliation** (order vs credited amount). The Super
    Admin cross-tenant snapshot includes per-institution successful-payment totals.
+
+## U. Transfer Certificates ✅ (Phase D)
+1. Office staff create a **TC draft** (`transfer_certificates:create`) for a
+   student → an atomic, collision-free **TC number** (dedicated sequence, like
+   admission numbers) is assigned and the student's class/section/program/
+   semester/admission-no are **snapshotted** so the record stays faithful.
+2. Before issuing, a **dues check** (`/transfer-certificates/student/:id/dues`)
+   surfaces pending **fees, library, transport and hostel** dues.
+3. **Issue** (`:issue`): blocked when dues exist unless the caller passes an
+   explicit **override** with a reason AND holds `transfer_certificates:
+   override_dues` (admin) — accountants can issue dues-free TCs but not override.
+   Issuing snapshots the dues status, stamps the issue date, and flips the
+   **student to `transferred`** (no data is deleted; records/fees/history remain).
+4. **Cancel** (`:cancel`): the TC stays in the register but is invalid (its PDF
+   is watermarked CANCELLED).
+5. **PDF** (`:download`): institution name/logo, student + guardian details, DOB,
+   joining/leaving dates, reason, conduct, academic year, TC number, dues status,
+   and signature placeholders; re-downloadable after issue. Owner-scoped —
+   a student/parent can download only their own / linked child's **issued** TC.
+6. **Reports** (Reports Center, `transfer_certificates:read`): TC issued register,
+   cancelled TCs, student-leaving report, pending/draft TCs. Tenant-scoped
+   throughout; cross-institution access is denied.

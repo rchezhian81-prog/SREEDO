@@ -146,7 +146,14 @@ and 8 **dues/collection reports** (class/student/category dues, term collection,
 fine collection, discounts, outstanding, defaulters). Built additively —
 `amount_due` stays the net payable so offline payments + the online gateway are
 unchanged (migration `0033`, `/fees/*`, `fee_categories|fee_schedules|fee_fines|
-fee_discounts|fee_reports:*`, tenant + owner-scoped). **Phase D operations are
+fee_discounts|fee_reports:*`, tenant + owner-scoped). ✅ **Transfer Certificates**
+— TC register with atomic **sequence-based numbering**, draft→issued→cancelled
+lifecycle, student/dues **snapshots**, a **dues check** (fees/library/transport/
+hostel) that blocks issue unless an authorised user records a **dues override**,
+**TC PDF** (cancelled = watermarked) re-downloadable, owner-scoped portal
+download, student lifecycle (issuing flips the student to `transferred`, data
+retained), and 4 reports (migration `0034`, `/transfer-certificates`,
+`transfer_certificates:*`, tenant + owner-scoped). **Phase D operations are
 complete.** Remaining (cross-phase): **custom report builder**.
 
 ### Phase E — Scale & polish ⬜
@@ -163,7 +170,7 @@ of E2E. Every PR must keep CI green.
 | Layer | Tooling | Scope | Status |
 |-------|---------|-------|--------|
 | **Unit** | Vitest | utils (jwt, password, pagination) | ✅ 11 tests (`npm test`) |
-| **API integration** | Supertest + real Postgres | auth/RBAC, owner-scoping, tenant isolation, sequence numbering, invoice `amount_paid` + overpay, per-module flows (incl. AI insights fallback, online-payment webhook idempotency + signature, fee schedule generation/fines/discounts + permission guards), Swagger gating | ✅ 187 tests (`npm run test:integration`, in CI) |
+| **API integration** | Supertest + real Postgres | auth/RBAC, owner-scoping, tenant isolation, sequence numbering, invoice `amount_paid` + overpay, per-module flows (incl. AI insights fallback, online-payment webhook idempotency + signature, fee schedule generation/fines/discounts, TC issue/dues-override/owner-scoped download + permission guards), Swagger gating | ✅ 196 tests (`npm run test:integration`, in CI) |
 | **Contract** | Validate responses against the generated OpenAPI spec | drift between code and Swagger | ⬜ |
 | **Frontend** | React Testing Library (components), Playwright (E2E) | login → dashboard → create student → record payment | ⬜ |
 | **Mobile** | `flutter analyze` + `flutter test` | parent/student app (Phase 1): auth, dashboard, attendance, fees + pay online, homework, notices, PDFs | 🟡 analyze in CI + a smoke test; widget/provider tests ⬜ |

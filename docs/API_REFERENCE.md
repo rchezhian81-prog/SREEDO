@@ -119,6 +119,19 @@ Auth column legend: **public** · **auth** (any logged-in) · or explicit role(s
 | GET | `/:id/receipt` | `online_payments:read` | Fee-receipt PDF after success (owner-scoped) |
 | POST | `/:id/refund` | `online_payments:refund` | Gateway refund initiation |
 
+### Transfer Certificates — `/api/v1/transfer-certificates` *(tenant-scoped; `transfer_certificates:*`; owner-scoped for student/parent)*
+| Method | Path | Permission | Purpose |
+|--------|------|------------|---------|
+| GET | `/` | `transfer_certificates:read` | TC register (status/studentId/search; owner-scoped) |
+| POST | `/` | `transfer_certificates:create` | Create a TC draft (snapshots student, assigns TC no) |
+| GET | `/student/:studentId/dues` | `transfer_certificates:read` | Pending fees/library/transport/hostel dues |
+| GET | `/:id` | `transfer_certificates:read` | TC detail (owner-scoped) |
+| PATCH | `/:id` | `transfer_certificates:update` | Edit a draft |
+| POST | `/:id/issue` | `transfer_certificates:issue` (+ `:override_dues` to bypass dues) | Issue a TC |
+| POST | `/:id/cancel` | `transfer_certificates:cancel` | Cancel a TC |
+| GET | `/:id/download` | `transfer_certificates:download` | TC PDF (student/parent: issued only) |
+| GET | `/report-center/tc_*` | `transfer_certificates:read` | TC reports (Reports Center) |
+
 ### Announcements — `/api/v1/announcements` *(write: admin, teacher)*
 | Method | Path | Purpose |
 |--------|------|---------|
