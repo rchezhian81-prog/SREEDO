@@ -334,8 +334,16 @@ payroll, unpaid-leave deductions). `payroll:*` permissions, tenant-scoped
   **run history**. The underlying report's permission is always enforced and
   delivery is filtered to authorised recipients (no leakage); degrades gracefully
   when email is unconfigured; students/parents have no access.
-- ⬜ A real scheduler tick is driven by `run-due` today (a future background
-  job-queue/cron will call it on a timer). (See report list per module in
+- ✅ **Background Job Queue** (`jobs:*`, migration `0040`): a durable,
+  Postgres-backed async queue + worker (no external broker) with atomic claiming
+  (`FOR UPDATE SKIP LOCKED`), exponential-backoff retries, and permanent failure
+  after max attempts. A **scheduler tick** enqueues due Scheduled Reports so they
+  run **automatically** through the worker (manual runs still work). Handlers also
+  cover fee-reminder / absence-alert sweeps. An admin/observability console
+  (list/detail/retry/cancel/run-scheduler/process) is **tenant-scoped** (admins
+  see their own jobs, super_admin platform-wide; other roles denied); payloads and
+  errors never carry secrets. An optional in-process worker runs on a timer when
+  `JOB_WORKER_ENABLED=true`. (See report list per module in
   [`MODULE_WORKFLOWS.md`](./MODULE_WORKFLOWS.md).)
 
 ### 4.20 Security — 🟡 Partial (see §6)

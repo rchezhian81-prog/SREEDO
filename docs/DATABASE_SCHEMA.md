@@ -289,6 +289,20 @@ used when `institutions.type = 'college'`; the school flow is unaffected.
   email, filtered to recipients holding the report's permission. Adds
   `scheduled_reports:*` permissions (admin full; accountant all except `manage`;
   teacher read/create/run/history; student & parent none).
+- **Background job queue:** ✅ (migration `0040`) `jobs` — `type`, `payload` JSONB
+  (**never secrets**), `status` pending|running|success|failed|cancelled,
+  `priority`, `attempts`/`max_attempts`, `run_at` (backoff pushes it forward),
+  `locked_at`/`locked_by`, started/completed, `error` (short message only),
+  `dedupe_key` (UNIQUE — idempotent enqueue, e.g. schedule+window),
+  `institution_id` (tenant scope; null = platform), `created_by`,
+  `set_updated_at` trigger. Claimed atomically via `FOR UPDATE SKIP LOCKED`
+  (no double-processing, no external broker); retried with exponential backoff;
+  permanently failed after `max_attempts`. The scheduler tick enqueues due
+  `scheduled_reports` (handler `scheduled_report_run`); other handlers reuse the
+  fee-reminder / absence-alert services. Adds `jobs:*` permissions (read/manage/
+  retry/cancel/run_scheduler), granted to admin (own institution) + super_admin
+  (platform-wide) only — no other role. An optional in-process worker runs on a
+  timer when `JOB_WORKER_ENABLED=true` (off by default).
 
 ### Phase C/D supporting
 - **fee_categories**, **fee_discounts/scholarships**, **fee_fines** — extend the

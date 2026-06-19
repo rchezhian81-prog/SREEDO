@@ -422,3 +422,25 @@ export async function runDue(institutionId: string) {
   }
   return { processed, skipped, due: due.length };
 }
+
+/** Runs ONE schedule as its creator — used by the job-queue worker. Throws if the
+ *  schedule no longer exists (so the job retries/fails). Advancing next_run_at is
+ *  the scheduler tick's responsibility, not this function's. */
+export async function executeScheduledById(scheduleId: string, institutionId: string) {
+  const schedule = await getSchedule(scheduleId, institutionId); // throws notFound
+  const createdBy = (schedule as { createdBy: string | null }).createdBy;
+  const creator = createdBy
+    ? await query<{ role: UserRole }>("SELECT role FROM users WHERE id = $1", [createdBy])
+    : { rows: [] as { role: UserRole }[] };
+  const role = creator.rows[0]?.role;
+  if (!role) {
+    await query(
+      `INSERT INTO scheduled_report_runs (institution_id, schedule_id, status, trigger, started_at, completed_at, error_message)
+       VALUES ($1,$2,'skipped','scheduled',now(),now(),'No valid creator to authorise the run')`,
+      [institutionId, scheduleId]
+    );
+    return { status: "skipped" as const };
+  }
+  await execute(schedule as never, { id: createdBy!, role }, "scheduled", createdBy, institutionId);
+  return { status: "executed" as const };
+}
