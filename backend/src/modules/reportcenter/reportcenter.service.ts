@@ -2218,6 +2218,257 @@ export const REPORTS: Record<string, Report> = {
       };
     },
   },
+
+  fee_dues_class: {
+    title: "Class-wise Dues",
+    category: "Fees",
+    permission: "fee_reports:read",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT COALESCE(c.name, '—') AS class,
+                count(DISTINCT i.student_id)::int AS students,
+                COALESCE(sum(i.amount_due - i.amount_paid), 0) AS outstanding
+         FROM invoices i
+         JOIN students s ON s.id = i.student_id
+         LEFT JOIN sections sec ON sec.id = s.section_id
+         LEFT JOIN classes c ON c.id = sec.class_id
+         WHERE i.institution_id = $1 AND i.status IN ('pending','partially_paid')
+         GROUP BY c.name ORDER BY outstanding DESC`,
+        [inst]
+      );
+      return {
+        title: "Class-wise Dues",
+        columns: [
+          { key: "class", label: "Class" },
+          { key: "students", label: "Students" },
+          { key: "outstanding", label: "Outstanding" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  fee_dues_student: {
+    title: "Student-wise Dues",
+    category: "Fees",
+    permission: "fee_reports:read",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT s.admission_no AS "admissionNo",
+                s.first_name || ' ' || s.last_name AS student, c.name AS class,
+                count(*)::int AS invoices,
+                COALESCE(sum(i.amount_due - i.amount_paid), 0) AS outstanding
+         FROM invoices i
+         JOIN students s ON s.id = i.student_id
+         LEFT JOIN sections sec ON sec.id = s.section_id
+         LEFT JOIN classes c ON c.id = sec.class_id
+         WHERE i.institution_id = $1 AND i.status IN ('pending','partially_paid')
+         GROUP BY s.id, c.name ORDER BY outstanding DESC`,
+        [inst]
+      );
+      return {
+        title: "Student-wise Dues",
+        columns: [
+          { key: "admissionNo", label: "Admission No" },
+          { key: "student", label: "Student" },
+          { key: "class", label: "Class" },
+          { key: "invoices", label: "Invoices" },
+          { key: "outstanding", label: "Outstanding" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  fee_dues_category: {
+    title: "Category-wise Dues",
+    category: "Fees",
+    permission: "fee_reports:read",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT COALESCE(cat.name, 'Uncategorized') AS category,
+                count(*)::int AS invoices,
+                COALESCE(sum(i.amount_due - i.amount_paid), 0) AS outstanding
+         FROM invoices i
+         LEFT JOIN fee_categories cat ON cat.id = i.category_id
+         WHERE i.institution_id = $1 AND i.status IN ('pending','partially_paid')
+         GROUP BY cat.name ORDER BY outstanding DESC`,
+        [inst]
+      );
+      return {
+        title: "Category-wise Dues",
+        columns: [
+          { key: "category", label: "Category" },
+          { key: "invoices", label: "Invoices" },
+          { key: "outstanding", label: "Outstanding" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  fee_term_collection: {
+    title: "Term-wise Collection",
+    category: "Fees",
+    permission: "fee_reports:read",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT COALESCE(fs.term_label, fs.name, 'Ad-hoc') AS term,
+                COALESCE(sum(i.amount_due), 0) AS billed,
+                COALESCE(sum(i.amount_paid), 0) AS collected,
+                COALESCE(sum(i.amount_due - i.amount_paid), 0) AS outstanding
+         FROM invoices i
+         LEFT JOIN fee_schedules fs ON fs.id = i.fee_schedule_id
+         WHERE i.institution_id = $1 AND i.status <> 'cancelled'
+         GROUP BY COALESCE(fs.term_label, fs.name, 'Ad-hoc') ORDER BY term`,
+        [inst]
+      );
+      return {
+        title: "Term-wise Collection",
+        columns: [
+          { key: "term", label: "Term" },
+          { key: "billed", label: "Billed" },
+          { key: "collected", label: "Collected" },
+          { key: "outstanding", label: "Outstanding" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  fee_fine_collection: {
+    title: "Fine Collection",
+    category: "Fees",
+    permission: "fee_reports:read",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT s.admission_no AS "admissionNo",
+                s.first_name || ' ' || s.last_name AS student,
+                i.invoice_no AS "invoiceNo", f.amount, f.status,
+                f.created_at AS "appliedAt"
+         FROM invoice_fines f
+         JOIN invoices i ON i.id = f.invoice_id
+         JOIN students s ON s.id = i.student_id
+         WHERE f.institution_id = $1 ORDER BY f.created_at DESC`,
+        [inst]
+      );
+      return {
+        title: "Fine Collection",
+        columns: [
+          { key: "admissionNo", label: "Admission No" },
+          { key: "student", label: "Student" },
+          { key: "invoiceNo", label: "Invoice" },
+          { key: "amount", label: "Fine" },
+          { key: "status", label: "Status" },
+          { key: "appliedAt", label: "Applied" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  fee_discount_report: {
+    title: "Discounts & Scholarships",
+    category: "Fees",
+    permission: "fee_reports:read",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT s.admission_no AS "admissionNo",
+                s.first_name || ' ' || s.last_name AS student,
+                i.invoice_no AS "invoiceNo", d.amount, d.status, d.reason,
+                d.created_at AS "appliedAt"
+         FROM invoice_discounts d
+         JOIN invoices i ON i.id = d.invoice_id
+         JOIN students s ON s.id = d.student_id
+         WHERE d.institution_id = $1 ORDER BY d.created_at DESC`,
+        [inst]
+      );
+      return {
+        title: "Discounts & Scholarships",
+        columns: [
+          { key: "admissionNo", label: "Admission No" },
+          { key: "student", label: "Student" },
+          { key: "invoiceNo", label: "Invoice" },
+          { key: "amount", label: "Amount" },
+          { key: "status", label: "Status" },
+          { key: "reason", label: "Reason" },
+          { key: "appliedAt", label: "Applied" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  fee_outstanding: {
+    title: "Outstanding Balances",
+    category: "Fees",
+    permission: "fee_reports:read",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT s.admission_no AS "admissionNo",
+                s.first_name || ' ' || s.last_name AS student,
+                i.invoice_no AS "invoiceNo", i.description,
+                i.amount_due AS "amountDue", i.amount_paid AS "amountPaid",
+                (i.amount_due - i.amount_paid) AS outstanding,
+                to_char(i.due_date, 'YYYY-MM-DD') AS "dueDate", i.status
+         FROM invoices i JOIN students s ON s.id = i.student_id
+         WHERE i.institution_id = $1 AND i.status IN ('pending','partially_paid')
+           AND (i.amount_due - i.amount_paid) > 0
+         ORDER BY i.due_date`,
+        [inst]
+      );
+      return {
+        title: "Outstanding Balances",
+        columns: [
+          { key: "admissionNo", label: "Admission No" },
+          { key: "student", label: "Student" },
+          { key: "invoiceNo", label: "Invoice" },
+          { key: "description", label: "Description" },
+          { key: "amountDue", label: "Due" },
+          { key: "amountPaid", label: "Paid" },
+          { key: "outstanding", label: "Outstanding" },
+          { key: "dueDate", label: "Due Date" },
+          { key: "status", label: "Status" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  fee_defaulters: {
+    title: "Defaulters",
+    category: "Fees",
+    permission: "fee_reports:read",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT s.admission_no AS "admissionNo",
+                s.first_name || ' ' || s.last_name AS student, c.name AS class,
+                count(*)::int AS "overdueInvoices",
+                COALESCE(sum(i.amount_due - i.amount_paid), 0) AS outstanding,
+                min(to_char(i.due_date, 'YYYY-MM-DD')) AS "earliestDue"
+         FROM invoices i
+         JOIN students s ON s.id = i.student_id
+         LEFT JOIN sections sec ON sec.id = s.section_id
+         LEFT JOIN classes c ON c.id = sec.class_id
+         WHERE i.institution_id = $1 AND i.status IN ('pending','partially_paid')
+           AND i.due_date < CURRENT_DATE
+         GROUP BY s.id, c.name ORDER BY outstanding DESC`,
+        [inst]
+      );
+      return {
+        title: "Defaulters",
+        columns: [
+          { key: "admissionNo", label: "Admission No" },
+          { key: "student", label: "Student" },
+          { key: "class", label: "Class" },
+          { key: "overdueInvoices", label: "Overdue Invoices" },
+          { key: "outstanding", label: "Outstanding" },
+          { key: "earliestDue", label: "Earliest Due" },
+        ],
+        rows,
+      };
+    },
+  },
 };
 
 export function listReports() {

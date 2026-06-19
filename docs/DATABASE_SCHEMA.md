@@ -211,6 +211,18 @@ used when `institutions.type = 'college'`; the school flow is unaffected.
   get read+create, owner-scoped). The per-institution on/off switch is a
   `featureFlags.onlinePayments` flag in `institutions.settings`; provider secrets
   come from env only.
+- **Fee Management Depth:** ✅ (migration `0033`, all tenant-scoped) `fee_categories`,
+  `fee_schedules` (category + amount + `term_type`/`term_label`/`due_date` +
+  optional class/section/program/semester/student targets), `fee_fine_rules`
+  (fixed|per_day|percent + grace), `invoice_fines` (applied/waived audit),
+  `fee_discounts` (discount|scholarship, fixed|percent), `invoice_discounts`
+  (pending|approved|rejected, applied_by/approved_by audit). `invoices` is
+  augmented with `category_id`, `fee_schedule_id`, `discount_total`, `fine_total`
+  (unique partial index on `(fee_schedule_id, student_id)` for idempotent
+  generation); `amount_due` remains the **net payable** (base − discounts + fines)
+  so payments/gateway are unchanged. Adds `fee_categories|fee_schedules|fee_fines|
+  fee_discounts:*` + `fee_reports:read` permissions (admin full; accountant all
+  except category delete / fine waive / discount approve).
 
 ### Phase C/D supporting
 - **fee_categories**, **fee_discounts/scholarships**, **fee_fines** — extend the

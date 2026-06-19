@@ -16,11 +16,22 @@ import {
 } from "@/components/ui";
 import type {
   Invoice,
+  InvoiceBreakdown,
   InvoiceWithPayments,
   Paginated,
   PaymentOrder,
   StudentSummary,
 } from "@/types";
+
+const PORTAL_ADJ_TONES: Record<string, "slate" | "green" | "amber" | "red"> = {
+  applied: "green",
+  approved: "green",
+  active: "green",
+  pending: "amber",
+  waived: "slate",
+  rejected: "red",
+  reversed: "slate",
+};
 
 async function downloadPortalPdf(path: string, filename: string) {
   const base =
@@ -93,6 +104,13 @@ export default function PortalFeesPage() {
   const [payError, setPayError] = useState<string | null>(null);
   const [gatewayUnavailable, setGatewayUnavailable] = useState(false);
 
+  // "Breakdown" modal state (read-only).
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
+  const [breakdown, setBreakdown] = useState<InvoiceBreakdown | null>(null);
+  const [breakdownNo, setBreakdownNo] = useState("");
+  const [breakdownLoading, setBreakdownLoading] = useState(false);
+  const [breakdownError, setBreakdownError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!studentId) {
       setSummary(null);
@@ -149,6 +167,27 @@ export default function PortalFeesPage() {
       setReceiptError(
         err instanceof ApiError ? err.message : "Failed to download receipt"
       );
+    }
+  };
+
+  const viewBreakdown = async (invoice: Invoice) => {
+    setBreakdownOpen(true);
+    setBreakdown(null);
+    setBreakdownNo(invoice.invoiceNo);
+    setBreakdownError(null);
+    setBreakdownLoading(true);
+    try {
+      setBreakdown(
+        await portalApi.get<InvoiceBreakdown>(
+          `/fees/invoices/${invoice.id}/breakdown`
+        )
+      );
+    } catch (err) {
+      setBreakdownError(
+        err instanceof ApiError ? err.message : "Failed to load breakdown"
+      );
+    } finally {
+      setBreakdownLoading(false);
     }
   };
 
@@ -267,6 +306,12 @@ export default function PortalFeesPage() {
                         </button>
                       )}
                       <button
+                        onClick={() => viewBreakdown(inv)}
+                        className="text-xs font-medium text-brand-600 hover:text-brand-700"
+                      >
+                        Breakdown
+                      </button>
+                      <button
                         onClick={() => viewPayments(inv)}
                         className="text-xs font-medium text-brand-600 hover:text-brand-700"
                       >
@@ -280,6 +325,123 @@ export default function PortalFeesPage() {
           </table>
         </div>
       )}
+
+      <Modal
+        title={`Breakdown — ${breakdownNo}`}
+        open={breakdownOpen}
+        onClose={() => setBreakdownOpen(false)}
+      >
+        {breakdownLoading ? (
+          <Spinner />
+        ) : breakdownError ? (
+          <ErrorNote message={breakdownError} />
+        ) : breakdown ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="rounded-lg border border-slate-200 p-3">
+                <p className="text-xs text-slate-500">Base</p>
+                <p className="mt-1 text-base font-semibold text-slate-900">
+                  {Number(breakdown.base).toLocaleString()}
+                </p>
+              </div>
+              <div className="rounded-lg border border-slate-200 p-3">
+                <p className="text-xs text-slate-500">Discounts</p>
+                <p className="mt-1 text-base font-semibold text-emerald-600">
+                  {Number(breakdown.discountTotal).toLocaleString()}
+                </p>
+              </div>
+              <div className="rounded-lg border border-slate-200 p-3">
+                <p className="text-xs text-slate-500">Fines</p>
+                <p className="mt-1 text-base font-semibold text-red-600">
+                  {Number(breakdown.fineTotal).toLocaleString()}
+                </p>
+              </div>
+              <div className="rounded-lg border border-slate-200 p-3">
+                <p className="text-xs text-slate-500">Outstanding</p>
+                <p className="mt-1 text-base font-semibold text-slate-900">
+                  {Number(breakdown.outstanding).toLocaleString()}
+                </p>
+              </div>
+            </div>
+
+            {breakdown.fines.length > 0 && (
+              <div>
+                <p className="mb-1 text-sm font-semibold text-slate-900">
+                  Fines
+                </p>
+                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="w-full text-left text-sm">
+                    <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+                      <tr>
+                        <th className="px-4 py-2">Reason</th>
+                        <th className="px-4 py-2 text-right">Amount</th>
+                        <th className="px-4 py-2">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {breakdown.fines.map((fine) => (
+                        <tr key={fine.id}>
+                          <td className="px-4 py-2 text-slate-700">
+                            {fine.reason ?? "Fine"}
+                          </td>
+                          <td className="px-4 py-2 text-right text-slate-900">
+                            {Number(fine.amount).toLocaleString()}
+                          </td>
+                          <td className="px-4 py-2">
+                            <Badge tone={PORTAL_ADJ_TONES[fine.status] ?? "slate"}>
+                              {fine.status}
+                            </Badge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {breakdown.discounts.length > 0 && (
+              <div>
+                <p className="mb-1 text-sm font-semibold text-slate-900">
+                  Discounts
+                </p>
+                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="w-full text-left text-sm">
+                    <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+                      <tr>
+                        <th className="px-4 py-2">Reason</th>
+                        <th className="px-4 py-2 text-right">Amount</th>
+                        <th className="px-4 py-2">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {breakdown.discounts.map((discount) => (
+                        <tr key={discount.id}>
+                          <td className="px-4 py-2 text-slate-700">
+                            {discount.reason ?? "Discount"}
+                          </td>
+                          <td className="px-4 py-2 text-right text-slate-900">
+                            {Number(discount.amount).toLocaleString()}
+                          </td>
+                          <td className="px-4 py-2">
+                            <Badge
+                              tone={PORTAL_ADJ_TONES[discount.status] ?? "slate"}
+                            >
+                              {discount.status}
+                            </Badge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <EmptyState message="No breakdown available" />
+        )}
+      </Modal>
 
       <Modal
         title={`Payments — ${paymentsInvoice?.invoiceNo ?? ""}`}

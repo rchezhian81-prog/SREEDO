@@ -80,14 +80,27 @@ Deliverable **#5 Module-wise workflow**. Step-by-step flows for each module.
 4. *(⬜)* **Grade bands** auto-compute grade/points; **report-card PDF**;
    subject-wise analytics; per-student report via `GET /exams/students/:id/report` ✅.
 
-## H. Fee management 🟡
-1. Accountant defines **fee structures** (class/year, amount, frequency).
-2. Generates **invoices** per student → unique invoice number, status `pending`.
+## H. Fee management ✅
+1. Accountant defines **fee structures** (class/year, amount, frequency) and
+   **fee categories** (`fee_categories:*`).
+2. Generates **invoices** per student → unique invoice number, status `pending` —
+   manually, or from a **term-wise fee schedule** (`fee_schedules:*`) targeting a
+   class/section/program/semester/student. Generation is **idempotent** (one
+   invoice per schedule+student) with a **preview** of who'll be billed.
 3. Records **payments** → server **rejects overpayment**, advances status
-   `pending → partially_paid → paid`.
-4. `GET /fees/summary` → collected vs pending KPIs.
-5. ✅ Payment **receipt PDF** (owner-scoped). *(⬜)* Fee categories, term schedules,
-   **fines**, **discounts/scholarships**, **online gateway** adapter, dues reports.
+   `pending → partially_paid → paid`. Online collection via the gateway (§S').
+4. **Late fines** (`fee_fines:*`): fixed / per-day / percent rules with a grace
+   period; applying a fine raises the invoice's `amount_due` + `fine_total`;
+   **waiver** is permission-gated and reverses it.
+5. **Discounts/scholarships** (`fee_discounts:*`): apply (pending) → **approve**
+   (separate permission) reduces `amount_due` + records `discount_total`; who
+   applied/approved is audited. `amount_due` always stays the **net payable**, so
+   payments + the online gateway need no changes.
+6. `GET /fees/summary` → collected vs pending KPIs; `GET /fees/invoices/:id/breakdown`
+   → base/fines/discounts/outstanding (owner-scoped). **Dues reports** (Reports
+   Center, `fee_reports:read`): class/student/category dues, term collection, fine
+   collection, discounts, outstanding, defaulters.
+7. ✅ Payment **receipt PDF** (owner-scoped).
 
 ## I. Communication ✅
 1. Admin/Teacher posts an **announcement** with **audience** + optional **pin**.

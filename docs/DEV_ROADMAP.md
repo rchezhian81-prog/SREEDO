@@ -138,8 +138,16 @@ fee-receipt PDF after payment, gateway **refund** initiation, per-institution
 **feature-flag** enablement, 5 reports + reconciliation, and graceful degradation
 (offline collection unaffected) when unconfigured (migration `0032`,
 `/online-payments`, `online_payments:*`, tenant-scoped + owner-scoped for
-student/parent). **Phase D operations are complete.** Remaining (cross-phase):
-**custom report builder**.
+student/parent). ✅ **Fee Management Depth** — fee **categories**, **term-wise
+schedules** (class/section/program/semester/student-targeted) with idempotent
+**invoice generation** + preview, **late fines** (fixed/per-day/percent + grace;
+**waiver** permission-gated), **discounts/scholarships** (apply → approve, audited),
+and 8 **dues/collection reports** (class/student/category dues, term collection,
+fine collection, discounts, outstanding, defaulters). Built additively —
+`amount_due` stays the net payable so offline payments + the online gateway are
+unchanged (migration `0033`, `/fees/*`, `fee_categories|fee_schedules|fee_fines|
+fee_discounts|fee_reports:*`, tenant + owner-scoped). **Phase D operations are
+complete.** Remaining (cross-phase): **custom report builder**.
 
 ### Phase E — Scale & polish ⬜
 Caching, read replicas if needed, background job queue, observability/metrics,
@@ -155,7 +163,7 @@ of E2E. Every PR must keep CI green.
 | Layer | Tooling | Scope | Status |
 |-------|---------|-------|--------|
 | **Unit** | Vitest | utils (jwt, password, pagination) | ✅ 11 tests (`npm test`) |
-| **API integration** | Supertest + real Postgres | auth/RBAC, owner-scoping, tenant isolation, sequence numbering, invoice `amount_paid` + overpay, per-module flows (incl. AI insights fallback, online-payment webhook idempotency + signature + permission guards), Swagger gating | ✅ 177 tests (`npm run test:integration`, in CI) |
+| **API integration** | Supertest + real Postgres | auth/RBAC, owner-scoping, tenant isolation, sequence numbering, invoice `amount_paid` + overpay, per-module flows (incl. AI insights fallback, online-payment webhook idempotency + signature, fee schedule generation/fines/discounts + permission guards), Swagger gating | ✅ 187 tests (`npm run test:integration`, in CI) |
 | **Contract** | Validate responses against the generated OpenAPI spec | drift between code and Swagger | ⬜ |
 | **Frontend** | React Testing Library (components), Playwright (E2E) | login → dashboard → create student → record payment | ⬜ |
 | **Mobile** | `flutter analyze` + `flutter test` | parent/student app (Phase 1): auth, dashboard, attendance, fees + pay online, homework, notices, PDFs | 🟡 analyze in CI + a smoke test; widget/provider tests ⬜ |
