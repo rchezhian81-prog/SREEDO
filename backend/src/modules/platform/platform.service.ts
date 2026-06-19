@@ -3,6 +3,7 @@ import { query } from "../../db/postgres";
 import { ApiError } from "../../utils/api-error";
 import { signAccessToken } from "../../utils/jwt";
 import { invalidatePermissionCache } from "../../middleware/permissions";
+import { cached, invalidatePrefix } from "../../cache/cache";
 import * as superadmin from "../superadmin/superadmin.service";
 import { institutionLimits, institutionStats, systemHealth } from "../adminconsole/adminconsole.service";
 import type {
@@ -319,34 +320,45 @@ function isCriticalForSuperAdmin(role: string, permissionKey: string): boolean {
   return role === "super_admin" && permissionKey.startsWith("platform:");
 }
 
+// The RBAC catalogue/matrix are global reference data (permissions +
+// role_permissions are not tenant-scoped) read on every super-admin console
+// load and changed only via grant/revoke below. Cache them under the shared
+// "rbac:" namespace and drop the whole namespace whenever a grant/revoke lands.
+const RBAC_TTL_MS = 60_000;
+const RBAC_CACHE_PREFIX = "rbac:";
+
 /** Full permission catalogue grouped by module, with the roles holding each. */
-export async function permissionCatalogue() {
-  const { rows } = await query<{ key: string; description: string; roles: string[] }>(
-    `SELECT p.key, p.description,
-            COALESCE(array_agg(rp.role ORDER BY rp.role) FILTER (WHERE rp.role IS NOT NULL), '{}') AS roles
-     FROM permissions p
-     LEFT JOIN role_permissions rp ON rp.permission_id = p.id
-     GROUP BY p.id, p.key, p.description
-     ORDER BY p.key`
-  );
-  const groups = new Map<string, Array<{ key: string; description: string; roles: string[] }>>();
-  for (const r of rows) {
-    const moduleKey = r.key.split(":")[0];
-    if (!groups.has(moduleKey)) groups.set(moduleKey, []);
-    groups.get(moduleKey)!.push({ key: r.key, description: r.description, roles: r.roles });
-  }
-  return Array.from(groups.entries()).map(([module, permissions]) => ({ module, permissions }));
+export function permissionCatalogue() {
+  return cached(`${RBAC_CACHE_PREFIX}catalogue`, RBAC_TTL_MS, async () => {
+    const { rows } = await query<{ key: string; description: string; roles: string[] }>(
+      `SELECT p.key, p.description,
+              COALESCE(array_agg(rp.role ORDER BY rp.role) FILTER (WHERE rp.role IS NOT NULL), '{}') AS roles
+       FROM permissions p
+       LEFT JOIN role_permissions rp ON rp.permission_id = p.id
+       GROUP BY p.id, p.key, p.description
+       ORDER BY p.key`
+    );
+    const groups = new Map<string, Array<{ key: string; description: string; roles: string[] }>>();
+    for (const r of rows) {
+      const moduleKey = r.key.split(":")[0];
+      if (!groups.has(moduleKey)) groups.set(moduleKey, []);
+      groups.get(moduleKey)!.push({ key: r.key, description: r.description, roles: r.roles });
+    }
+    return Array.from(groups.entries()).map(([module, permissions]) => ({ module, permissions }));
+  });
 }
 
 /** Role → explicitly granted permission keys (from role_permissions). Note:
  *  super_admin additionally has implicit full access at runtime. */
-export async function roleMatrix() {
-  const { rows } = await query<{ role: string; permissions: string[] }>(
-    `SELECT rp.role, array_agg(p.key ORDER BY p.key) AS permissions
-     FROM role_permissions rp JOIN permissions p ON p.id = rp.permission_id
-     GROUP BY rp.role ORDER BY rp.role`
-  );
-  return rows;
+export function roleMatrix() {
+  return cached(`${RBAC_CACHE_PREFIX}matrix`, RBAC_TTL_MS, async () => {
+    const { rows } = await query<{ role: string; permissions: string[] }>(
+      `SELECT rp.role, array_agg(p.key ORDER BY p.key) AS permissions
+       FROM role_permissions rp JOIN permissions p ON p.id = rp.permission_id
+       GROUP BY rp.role ORDER BY rp.role`
+    );
+    return rows;
+  });
 }
 
 async function permissionIdByKey(permissionKey: string): Promise<string> {
@@ -370,7 +382,8 @@ export async function grantRolePermission(
     [role, permissionId]
   );
   const added = (rowCount ?? 0) > 0;
-  invalidatePermissionCache(); // changes apply immediately
+  invalidatePermissionCache(); // runtime authz changes apply immediately
+  invalidatePrefix(RBAC_CACHE_PREFIX); // catalogue/matrix now stale
   await recordAudit(actor, {
     action: "rbac.grant",
     targetType: "role_permission",
@@ -397,6 +410,7 @@ export async function revokeRolePermission(
   );
   const removed = (rowCount ?? 0) > 0;
   invalidatePermissionCache();
+  invalidatePrefix(RBAC_CACHE_PREFIX); // catalogue/matrix now stale
   await recordAudit(actor, {
     action: "rbac.revoke",
     targetType: "role_permission",

@@ -352,6 +352,13 @@ payroll, unpaid-leave deductions). `payroll:*` permissions, tenant-scoped
   errors never carry secrets. An optional in-process worker runs on a timer when
   `JOB_WORKER_ENABLED=true`. (See report list per module in
   [`MODULE_WORKFLOWS.md`](./MODULE_WORKFLOWS.md).)
+- ✅ **Caching** (no migration): a per-instance **in-process TTL cache** for hot
+  reads — the **dashboard stats** (tenant-scoped key, 30 s TTL, invalidated on
+  student writes) and the super-admin **RBAC catalogue/matrix** (60 s TTL, dropped
+  on grant/revoke). Keys always carry the `institution_id`; no secrets or
+  per-request private data are cached; a role change never yields stale access (the
+  runtime permission cache is invalidated too). **Cache metrics**
+  (hits/misses/invalidations/entries) ride the existing `/observability` surface.
 
 ### 4.20 Security — 🟡 Partial (see §6)
 - ✅ JWT auth, role-based access, rate limiting, zod input validation, bcrypt
@@ -365,8 +372,8 @@ payroll, unpaid-leave deductions). `payroll:*` permissions, tenant-scoped
 
 | Area | Requirement |
 |------|-------------|
-| **Performance** | P95 API < 300 ms for list/detail at seed scale; pagination on all list endpoints (✅ pattern exists). |
-| **Scalability** | Stateless API (horizontal scale behind nginx); connection-pooled Postgres; multi-tenant data partitioning by `institution_id`. |
+| **Performance** | P95 API < 300 ms for list/detail at seed scale; pagination on all list endpoints (✅ pattern exists); ✅ **hot-path read cache** — a short-TTL in-process cache for the dashboard stats and super-admin RBAC catalogue/matrix, tenant-scoped keys, explicit invalidation on writes, with hit/miss/invalidation counters on `/observability`. |
+| **Scalability** | Stateless API (horizontal scale behind nginx; the read cache is per-instance with short TTLs + explicit invalidation, so it stays correct across replicas — a shared cache (e.g. Redis) is a later option if needed); connection-pooled Postgres; multi-tenant data partitioning by `institution_id`. |
 | **Availability** | `/health` + `/live` liveness ✅, `/ready` readiness probe ✅ (fails only on critical deps DB+migrations); target 99.5% on a single VPS; graceful degradation when Mongo/OpenAI/SMTP are down ✅. |
 | **Security** | See §6. |
 | **Usability** | Soft-3D premium UI, responsive (desktop/tablet/mobile), ≤3 clicks to core tasks, consistent search/filter/export/print. |

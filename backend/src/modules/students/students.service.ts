@@ -2,6 +2,7 @@ import { query } from "../../db/postgres";
 import { ApiError } from "../../utils/api-error";
 import { assertWithinPlanLimit } from "../../utils/plan-limits";
 import { paginatedResponse, type Pagination } from "../../utils/pagination";
+import { invalidateDashboard } from "../dashboard/dashboard.routes";
 import type { z } from "zod";
 import type {
   createStudentSchema,
@@ -119,6 +120,7 @@ export async function createStudent(
       input.address ?? null,
     ]
   );
+  invalidateDashboard(institutionId); // student count changed
   return getStudent(rows[0].id, institutionId);
 }
 
@@ -160,6 +162,8 @@ export async function updateStudent(
     params
   );
   if (!rowCount) throw ApiError.notFound("Student not found");
+  // A status change (e.g. active ↔ archived) shifts the active-student count.
+  if (input.status !== undefined) invalidateDashboard(institutionId);
   return getStudent(id, institutionId);
 }
 
@@ -173,6 +177,7 @@ export async function archiveStudent(
     [id, institutionId]
   );
   if (!rowCount) throw ApiError.notFound("Student not found");
+  invalidateDashboard(institutionId); // active-student count changed
 }
 
 /** Hard delete: removes the row and cascades to attendance/invoices/payments. */
@@ -185,6 +190,7 @@ export async function hardDeleteStudent(
     [id, institutionId]
   );
   if (!rowCount) throw ApiError.notFound("Student not found");
+  invalidateDashboard(institutionId); // student + cascaded attendance/fees removed
 }
 
 /** Resolves the student record linked to a user account, if any. */
