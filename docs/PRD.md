@@ -172,8 +172,15 @@ server-side. Homework/results detail and study materials remain ⬜.
   idempotent webhook that credits the invoice + issues the receipt, refunds,
   per-institution feature flag, 5 reports + reconciliation, and graceful
   degradation (offline collection unaffected) when unconfigured.
-- ⬜ Fee categories, term-wise schedules, **fine** rules, **discount/scholarship**,
-  class-wise/student-wise dues reports.
+- ✅ **Fee Management Depth** (`fee_categories:*`, `fee_schedules:*`, `fee_fines:*`,
+  `fee_discounts:*`, `fee_reports:read`): fee **categories**; **term-wise schedules**
+  (class/section/program/semester/student-targeted) with idempotent **invoice
+  generation** + preview; **late fines** (fixed/per-day/percent + grace), visible
+  in dues, **waiver** permission-gated; **discounts/scholarships** (apply →
+  approve, audit of who applied/approved); and **dues reports** (class-/student-/
+  category-wise, term collection, fine collection, discounts, outstanding,
+  defaulters). amount_due stays the net payable so payments + the online gateway
+  are unchanged.
 
 ### 4.9 Exam & Result Management — ✅ Built
 - ✅ Exam creation, bulk mark entry (web **Exams & Results** page with a

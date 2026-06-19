@@ -94,6 +94,19 @@ Auth column legend: **public** · **auth** (any logged-in) · or explicit role(s
 | GET | `/invoices/:id` | Invoice detail |
 | POST | `/invoices/:id/payments` | Record payment (overpay-guarded) |
 | GET | `/summary` | Fee summary (collected/pending) |
+| GET | `/invoices/:id/breakdown` | Base / fines / discounts / outstanding (owner-scoped) |
+
+**Fee Management Depth** *(`fee_categories\|fee_schedules\|fee_fines\|fee_discounts:*`, `fee_reports:read`)*
+| Method | Path | Permission | Purpose |
+|--------|------|------------|---------|
+| GET/POST · PATCH/DELETE | `/categories` · `/categories/:id` | `fee_categories:read\|create\|update\|delete` | Fee categories |
+| GET/POST · PATCH | `/schedules` · `/schedules/:id` | `fee_schedules:read\|create\|update` | Term-wise fee schedules |
+| GET · POST | `/schedules/:id/preview` · `/schedules/:id/generate` | `fee_schedules:generate` | Preview targets / generate invoices (idempotent) |
+| GET/POST · POST | `/fine-rules` · `/invoices/:id/fines` · `/fines/apply-overdue` | `fee_fines:read\|apply` | Fine rules + apply late fines |
+| POST | `/applied-fines/:id/waive` | `fee_fines:waive` | Waive an applied fine |
+| GET/POST · POST | `/discounts` · `/invoices/:id/discounts` | `fee_discounts:read\|apply` | Discounts/scholarships + apply |
+| POST | `/applied-discounts/:id/approve` | `fee_discounts:approve` | Approve an applied discount |
+| GET | `/report-center/fee_*` | `fee_reports:read` | Dues/collection reports (Reports Center) |
 
 ### Online Payments — `/api/v1/online-payments` *(tenant-scoped; `online_payments:*`; degrades to 503 when the gateway is unconfigured/disabled)*
 | Method | Path | Permission | Purpose |

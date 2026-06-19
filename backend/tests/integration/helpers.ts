@@ -10,6 +10,12 @@ export { query };
 export const app = createApp();
 
 const TABLES = [
+  "invoice_discounts",
+  "invoice_fines",
+  "fee_discounts",
+  "fee_fine_rules",
+  "fee_schedules",
+  "fee_categories",
   "payment_webhook_events",
   "payment_orders",
   "data_exports",
