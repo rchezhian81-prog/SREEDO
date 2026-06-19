@@ -265,6 +265,21 @@ used when `institutions.type = 'college'`; the school flow is unaffected.
   default** — gated by an institution feature flag (`institutions.settings ->
   featureFlags -> disciplinaryPortal`) PLUS `disciplinary:portal_read` PLUS
   owner-scoping.
+- **Scheduled reports:** ✅ (migration `0038`, tenant-scoped) `scheduled_reports`
+  (`report_id` → `custom_reports` **ON DELETE SET NULL** so a deleted report fails
+  runs cleanly instead of vanishing the schedule, `name`, `frequency`
+  daily|weekly|monthly, `run_time`, `timezone`, `day_of_week`/`day_of_month`,
+  `recipients` JSONB user-id array, `channels` JSONB in_app|email, `export_format`
+  csv|pdf|both, `enabled`, `last_run_at`, `next_run_at`, `created_by`,
+  `set_updated_at` trigger) and `scheduled_report_runs` (audit history:
+  `status` pending|running|success|failed|skipped, `trigger` manual|scheduled,
+  started/completed, `error_message`, `export_format`, `export_bytes`, `row_count`,
+  `recipient_count`, `delivery_status`, `triggered_by`). Generation reuses the
+  Custom Report service (underlying-report permission always enforced); delivery
+  goes to the existing `messages`/`message_recipients` (in-app) + best-effort
+  email, filtered to recipients holding the report's permission. Adds
+  `scheduled_reports:*` permissions (admin full; accountant all except `manage`;
+  teacher read/create/run/history; student & parent none).
 
 ### Phase C/D supporting
 - **fee_categories**, **fee_discounts/scholarships**, **fee_fines** — extend the

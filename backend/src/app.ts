@@ -36,6 +36,7 @@ import { payrollRouter } from "./modules/payroll/payroll.routes";
 import { portalRouter } from "./modules/portal/portal.routes";
 import { reportCenterRouter } from "./modules/reportcenter/reportcenter.routes";
 import { reportsRouter } from "./modules/reports/reports.routes";
+import { scheduledReportsRouter } from "./modules/scheduledreports/scheduledreports.routes";
 import { leaveRouter, staffAttendanceRouter } from "./modules/staffleave/staffleave.routes";
 import { studentsRouter } from "./modules/students/students.routes";
 import { superAdminRouter } from "./modules/superadmin/superadmin.routes";
@@ -116,6 +117,7 @@ export function createApp(): express.Express {
   api.use("/reports", reportsRouter);
   api.use("/report-center", reportCenterRouter);
   api.use("/custom-reports", customReportsRouter);
+  api.use("/scheduled-reports", scheduledReportsRouter);
   api.use("/disciplinary", disciplinaryRouter);
   api.use("/communication", communicationRouter);
   api.use("/documents", documentsRouter);

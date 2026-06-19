@@ -364,3 +364,31 @@ Deliverable **#5 Module-wise workflow**. Step-by-step flows for each module.
    action-taken. Permissions: `disciplinary:read|create|update|delete|action|
    close|reports|portal_read` — admin full; teacher read/create/update/action/
    reports. Tenant-scoped; cross-institution access is denied.
+
+## W. Scheduled Reports ✅ (Phase D)
+1. **Create a schedule** (`/scheduled-reports`, `scheduled_reports:create`) over a
+   **saved Custom Report**: frequency (daily/weekly/monthly), run time + timezone,
+   day-of-week/month, recipients (institution users), channels (in-app / email),
+   export format (CSV/PDF/both), enabled. Creation validates the saved report and
+   that **the creator holds its underlying permission** (you can't schedule data
+   you can't see). `next_run_at` is computed from the cadence.
+2. **Run** — manually (`POST /:id/run`, `scheduled_reports:run`, runs **as the
+   caller**) or via the scheduler tick (`POST /run-due`, `scheduled_reports:manage`,
+   runs each due schedule **as its creator**). Both reuse the Custom Report service,
+   so the underlying report's permission is re-checked at run time; generation
+   produces the CSV/PDF(s).
+3. **Delivery** goes to the existing channels: an **in-app** message
+   (`messages`/`message_recipients`) and best-effort **email** (degrades to a no-op
+   when SMTP is unconfigured). Recipients are **filtered to those who hold the
+   underlying report's permission**, so report data never reaches an unauthorised
+   user.
+4. **Run history** (`GET /:id/runs`, `scheduled_reports:history`): every manual or
+   scheduled execution records status (pending/running/success/failed/skipped),
+   timings, row count, export size/format, recipient count, delivery status, and
+   any error. A deleted saved report or an unauthorised actor produces a recorded
+   **failed** run (no delivery) rather than leaking.
+5. **Lifecycle**: edit, enable/disable (`scheduled_reports:update`), delete
+   (`scheduled_reports:delete`). Permissions: `scheduled_reports:read|create|update|
+   delete|run|history|manage` — admin full; accountant all except `manage`; teacher
+   read/create/run/history; students/parents have no access. Tenant-scoped; no
+   cross-institution access.

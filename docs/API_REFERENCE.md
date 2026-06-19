@@ -210,6 +210,18 @@ Auth column legend: **public** · **auth** (any logged-in) · or explicit role(s
 | GET | `/portal/students/:studentId/disciplinary` | `disciplinary:portal_read` | Own / linked-child records (only when portal visibility enabled; owner-scoped) |
 | GET | `/report-center/disciplinary_*` | `disciplinary:reports` | Disciplinary reports (Reports Center) |
 
+### Scheduled Reports — `/api/v1/scheduled-reports` *(tenant-scoped; `scheduled_reports:*`; generation re-checks the underlying Custom Report's permission; recipients filtered to authorised users)*
+| Method | Path | Permission | Purpose |
+|--------|------|------------|---------|
+| GET | `/` | `scheduled_reports:read` | List schedules (with last-run summary) |
+| POST | `/` | `scheduled_reports:create` | Create a schedule for a saved Custom Report |
+| POST | `/run-due` | `scheduled_reports:manage` | Process due schedules (scheduler tick; runs each as its creator) |
+| GET | `:id` | `scheduled_reports:read` | Get a schedule |
+| PATCH | `:id` | `scheduled_reports:update` | Edit / enable / disable |
+| DELETE | `:id` | `scheduled_reports:delete` | Delete a schedule |
+| POST | `:id/run` | `scheduled_reports:run` | Run now (as the caller; records run history) |
+| GET | `:id/runs` | `scheduled_reports:history` | Run history (`?limit=`) |
+
 ---
 
 ## Part 2 — Planned endpoints (by phase)

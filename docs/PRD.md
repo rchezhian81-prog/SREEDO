@@ -318,7 +318,14 @@ payroll, unpaid-leave deductions). `payroll:*` permissions, tenant-scoped
   are **private or shared** (sharing is a separate permission) and a custom report
   **never widens access** (running/exporting re-checks the underlying report's own
   permission; tenant-scoped; students/parents blocked).
-- ⬜ Scheduled reports. (See report list per module in
+- ✅ **Scheduled Reports** (`scheduled_reports:*`): automate delivery of a saved
+  Custom Report on a daily/weekly/monthly cadence (plus manual "run now"), to
+  chosen recipients via in-app + best-effort email (CSV/PDF/both), with an audit
+  **run history**. The underlying report's permission is always enforced and
+  delivery is filtered to authorised recipients (no leakage); degrades gracefully
+  when email is unconfigured; students/parents have no access.
+- ⬜ A real scheduler tick is driven by `run-due` today (a future background
+  job-queue/cron will call it on a timer). (See report list per module in
   [`MODULE_WORKFLOWS.md`](./MODULE_WORKFLOWS.md).)
 
 ### 4.20 Security — 🟡 Partial (see §6)

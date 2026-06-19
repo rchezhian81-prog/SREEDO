@@ -10,6 +10,8 @@ export { query };
 export const app = createApp();
 
 const TABLES = [
+  "scheduled_report_runs",
+  "scheduled_reports",
   "disciplinary_actions",
   "disciplinary_records",
   "custom_reports",
