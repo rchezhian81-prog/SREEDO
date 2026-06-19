@@ -32,6 +32,7 @@ const SCHOOL_NAV: NavItem[] = [
   { href: "/transfer-certificates", label: "Transfer Certs", icon: "📜" },
   { href: "/reports-center", label: "Reports Center", icon: "📈" },
   { href: "/report-builder", label: "Report Builder", icon: "🧱" },
+  { href: "/scheduled-reports", label: "Scheduled Reports", icon: "⏰" },
   { href: "/disciplinary", label: "Disciplinary", icon: "⚖️" },
   { href: "/fees", label: "Fees", icon: "💳" },
   { href: "/fees/setup", label: "Fee Setup", icon: "🧾" },
