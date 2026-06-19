@@ -1,13 +1,15 @@
 import type { Request } from "express";
 import { Router } from "express";
-import { uuidParam } from "../../utils/params";
+import { param, uuidParam } from "../../utils/params";
 import { authenticate, authorize } from "../../middleware/auth";
 import { requirePermission } from "../../middleware/permissions";
 import {
   assignSubscriptionSchema,
   createInstitutionSchema,
+  grantPermissionSchema,
   impersonateSchema,
   platformAuditQuerySchema,
+  roleParamSchema,
   setLimitsSchema,
   suspendSchema,
   updateInstitutionSchema,
@@ -123,4 +125,46 @@ platformRouter.post("/institutions/:id/subscription", requirePermission("platfor
  */
 platformRouter.patch("/institutions/:id/limits", requirePermission("platform:manage_subscriptions"), async (req, res) => {
   res.json(await service.setLimits(uuidParam(req), setLimitsSchema.parse(req.body), actor(req)));
+});
+
+// --- RBAC console ---
+
+/**
+ * @openapi
+ * /platform/permissions:
+ *   get: { tags: [Platform], summary: Permission catalogue grouped by module (with roles holding each), security: [{ bearerAuth: [] }], responses: { 200: { description: "[{ module, permissions: [{ key, description, roles }] }]" } } }
+ */
+platformRouter.get("/permissions", requirePermission("platform:permissions_read"), async (_req, res) => {
+  res.json(await service.permissionCatalogue());
+});
+
+/**
+ * @openapi
+ * /platform/roles:
+ *   get: { tags: [Platform], summary: Role → permission matrix, security: [{ bearerAuth: [] }], responses: { 200: { description: "[{ role, permissions }]" } } }
+ */
+platformRouter.get("/roles", requirePermission("platform:rbac_read"), async (_req, res) => {
+  res.json(await service.roleMatrix());
+});
+
+/**
+ * @openapi
+ * /platform/roles/{role}/permissions:
+ *   post: { tags: [Platform], summary: Grant a permission to a role (cache-invalidated + audited), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: role, required: true, schema: { type: string } }], responses: { 200: { description: Granted } } }
+ */
+platformRouter.post("/roles/:role/permissions", requirePermission("platform:rbac_manage"), async (req, res) => {
+  const role = roleParamSchema.parse(param(req, "role"));
+  const { permissionKey, reason } = grantPermissionSchema.parse(req.body);
+  res.json(await service.grantRolePermission(role, permissionKey, actor(req), reason));
+});
+
+/**
+ * @openapi
+ * /platform/roles/{role}/permissions/revoke:
+ *   post: { tags: [Platform], summary: Revoke a permission from a role (protects super_admin's platform:*; cache-invalidated + audited), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: role, required: true, schema: { type: string } }], responses: { 200: { description: Revoked }, 400: { description: Critical permission protected } } }
+ */
+platformRouter.post("/roles/:role/permissions/revoke", requirePermission("platform:rbac_manage"), async (req, res) => {
+  const role = roleParamSchema.parse(param(req, "role"));
+  const { permissionKey, reason } = grantPermissionSchema.parse(req.body);
+  res.json(await service.revokeRolePermission(role, permissionKey, actor(req), reason));
 });

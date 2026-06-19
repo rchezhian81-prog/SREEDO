@@ -310,6 +310,12 @@ used when `institutions.type = 'college'`; the school flow is unaffected.
   **super_admin only**, gating `/observability/metrics|health|overview`. Public
   `/health`, `/live`, `/ready` probes need no auth and expose no secrets/tenant
   data.
+- **RBAC console:** ✅ (migration `0042`) — **no new tables**. The super-admin
+  console reads the `permissions` catalogue + `role_permissions` matrix and
+  grants/revokes rows in `role_permissions`, invalidating the runtime permission
+  cache on every change and recording a durable `platform_audit_log` entry. Adds
+  `platform:rbac_read|rbac_manage|permissions_read|permissions_manage` (super_admin
+  only). super_admin's `platform:*` grants cannot be revoked (critical-access guard).
 
 ### Phase C/D supporting
 - **fee_categories**, **fee_discounts/scholarships**, **fee_fines** — extend the

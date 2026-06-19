@@ -2,6 +2,7 @@ import type { z } from "zod";
 import { query } from "../../db/postgres";
 import { ApiError } from "../../utils/api-error";
 import { signAccessToken } from "../../utils/jwt";
+import { invalidatePermissionCache } from "../../middleware/permissions";
 import * as superadmin from "../superadmin/superadmin.service";
 import { institutionLimits, institutionStats, systemHealth } from "../adminconsole/adminconsole.service";
 import type {
@@ -308,4 +309,100 @@ export async function impersonate(
       fullName: target.fullName,
     },
   };
+}
+
+// --- RBAC console (role ↔ permission management) ---
+
+/** Critical permissions that can never be revoked from super_admin (would remove
+ *  the platform's own control surface). All `platform:*` keys are protected. */
+function isCriticalForSuperAdmin(role: string, permissionKey: string): boolean {
+  return role === "super_admin" && permissionKey.startsWith("platform:");
+}
+
+/** Full permission catalogue grouped by module, with the roles holding each. */
+export async function permissionCatalogue() {
+  const { rows } = await query<{ key: string; description: string; roles: string[] }>(
+    `SELECT p.key, p.description,
+            COALESCE(array_agg(rp.role ORDER BY rp.role) FILTER (WHERE rp.role IS NOT NULL), '{}') AS roles
+     FROM permissions p
+     LEFT JOIN role_permissions rp ON rp.permission_id = p.id
+     GROUP BY p.id, p.key, p.description
+     ORDER BY p.key`
+  );
+  const groups = new Map<string, Array<{ key: string; description: string; roles: string[] }>>();
+  for (const r of rows) {
+    const moduleKey = r.key.split(":")[0];
+    if (!groups.has(moduleKey)) groups.set(moduleKey, []);
+    groups.get(moduleKey)!.push({ key: r.key, description: r.description, roles: r.roles });
+  }
+  return Array.from(groups.entries()).map(([module, permissions]) => ({ module, permissions }));
+}
+
+/** Role → explicitly granted permission keys (from role_permissions). Note:
+ *  super_admin additionally has implicit full access at runtime. */
+export async function roleMatrix() {
+  const { rows } = await query<{ role: string; permissions: string[] }>(
+    `SELECT rp.role, array_agg(p.key ORDER BY p.key) AS permissions
+     FROM role_permissions rp JOIN permissions p ON p.id = rp.permission_id
+     GROUP BY rp.role ORDER BY rp.role`
+  );
+  return rows;
+}
+
+async function permissionIdByKey(permissionKey: string): Promise<string> {
+  const { rows } = await query<{ id: string }>("SELECT id FROM permissions WHERE key = $1", [
+    permissionKey,
+  ]);
+  if (!rows[0]) throw ApiError.notFound("Unknown permission");
+  return rows[0].id;
+}
+
+export async function grantRolePermission(
+  role: string,
+  permissionKey: string,
+  actor: Actor,
+  reason?: string
+) {
+  const permissionId = await permissionIdByKey(permissionKey); // 404 for invalid permission
+  const { rowCount } = await query(
+    `INSERT INTO role_permissions (role, permission_id) VALUES ($1, $2)
+     ON CONFLICT (role, permission_id) DO NOTHING`,
+    [role, permissionId]
+  );
+  const added = (rowCount ?? 0) > 0;
+  invalidatePermissionCache(); // changes apply immediately
+  await recordAudit(actor, {
+    action: "rbac.grant",
+    targetType: "role_permission",
+    targetId: permissionId,
+    institutionId: null,
+    detail: { role, permission: permissionKey, alreadyGranted: !added, reason },
+  });
+  return { role, permission: permissionKey, granted: true, alreadyGranted: !added };
+}
+
+export async function revokeRolePermission(
+  role: string,
+  permissionKey: string,
+  actor: Actor,
+  reason?: string
+) {
+  if (isCriticalForSuperAdmin(role, permissionKey)) {
+    throw ApiError.badRequest("Cannot revoke a critical platform permission from super_admin");
+  }
+  const permissionId = await permissionIdByKey(permissionKey); // 404 for invalid permission
+  const { rowCount } = await query(
+    "DELETE FROM role_permissions WHERE role = $1 AND permission_id = $2",
+    [role, permissionId]
+  );
+  const removed = (rowCount ?? 0) > 0;
+  invalidatePermissionCache();
+  await recordAudit(actor, {
+    action: "rbac.revoke",
+    targetType: "role_permission",
+    targetId: permissionId,
+    institutionId: null,
+    detail: { role, permission: permissionKey, removed, reason },
+  });
+  return { role, permission: permissionKey, revoked: true, removed };
 }

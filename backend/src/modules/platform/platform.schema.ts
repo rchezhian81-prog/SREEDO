@@ -37,3 +37,23 @@ export const platformAuditQuerySchema = z.object({
   dateTo: z.string().date().optional(),
   limit: z.coerce.number().int().min(1).max(500).optional(),
 });
+
+// --- RBAC console ---
+
+/** Roles whose grants may be edited (super_admin is protected for platform:*). */
+export const MANAGEABLE_ROLES = [
+  "super_admin",
+  "admin",
+  "teacher",
+  "accountant",
+  "student",
+  "parent",
+] as const;
+
+export const roleParamSchema = z.enum(MANAGEABLE_ROLES);
+
+export const grantPermissionSchema = z.object({
+  permissionKey: z.string().min(1).max(100),
+  reason: z.string().max(500).optional(),
+});
+

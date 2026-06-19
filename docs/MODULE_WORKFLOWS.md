@@ -47,6 +47,20 @@ Deliverable **#5 Module-wise workflow**. Step-by-step flows for each module.
    - **Boundary**: every route is `authorize("super_admin")` (actor
      `institution_id = null`) **plus** `requirePermission`; tenant admins and all
      tenant users are denied (403). Cross-tenant data is reachable only here.
+7. ✅ **Global User-Role Management — RBAC console** (`/platform/permissions|roles`,
+   `platform:rbac_*`/`platform:permissions_*`, super-admin only):
+   - View the permission **catalogue** (`GET /platform/permissions`, grouped by
+     module with the roles holding each) and the **role→permission matrix**
+     (`GET /platform/roles`).
+   - **Grant** (`POST /platform/roles/:role/permissions`) / **revoke**
+     (`POST /platform/roles/:role/permissions/revoke`) a permission for a role,
+     editing `role_permissions`. Each change **invalidates the runtime permission
+     cache** (so it takes effect on the very next request — no restart) and writes
+     a durable `platform_audit_log` entry (`rbac.grant` / `rbac.revoke` with role,
+     permission, actor, reason).
+   - **Safeguards**: invalid/unknown permissions are rejected (404); duplicate
+     grants are idempotent; **super_admin's critical `platform:*` permissions
+     cannot be revoked** (400); tenant admins and all tenant users are denied.
 
 ## C. Academic setup ✅ (school) / ✅ (college extensions)
 1. Admin creates an **academic year** (marks one `is_current`).

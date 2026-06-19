@@ -264,6 +264,10 @@ Auth column legend: **public** · **auth** (any logged-in) · or explicit role(s
 | POST | `/institutions/:id/subscription` | `platform:manage_subscriptions` | Assign package (audited) |
 | PATCH | `/institutions/:id/limits` | `platform:manage_subscriptions` | Set per-institution limits (audited) |
 | POST | `/impersonate` | `platform:impersonate` | Start a support session (audited; scoped token; no secrets) |
+| GET | `/permissions` | `platform:permissions_read` | Permission catalogue grouped by module (with roles holding each) |
+| GET | `/roles` | `platform:rbac_read` | Role → permission matrix |
+| POST | `/roles/:role/permissions` | `platform:rbac_manage` | Grant a permission to a role (cache-invalidated + audited) |
+| POST | `/roles/:role/permissions/revoke` | `platform:rbac_manage` | Revoke a permission (protects super_admin's `platform:*`; audited) |
 
 ---
 
