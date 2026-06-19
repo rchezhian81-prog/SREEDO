@@ -132,6 +132,19 @@ Auth column legend: **public** · **auth** (any logged-in) · or explicit role(s
 | GET | `/:id/download` | `transfer_certificates:download` | TC PDF (student/parent: issued only) |
 | GET | `/report-center/tc_*` | `transfer_certificates:read` | TC reports (Reports Center) |
 
+### Threaded Messaging — `/api/v1/communication/threads` *(tenant + participant-scoped; `threads:*`)*
+| Method | Path | Permission | Purpose |
+|--------|------|------------|---------|
+| GET | `/threads` | `threads:read` | My threads (with unread counts) |
+| POST | `/threads` | `threads:create` | Start a thread (one-to-one/group; same-institution participants) |
+| GET | `/threads/unread-count` | `threads:read` | Total unread across my threads |
+| GET | `/threads/:id` | `threads:read` | Thread detail (participant-only; 404 otherwise) |
+| POST | `/threads/:id/messages` | `threads:reply` | Reply (notifies others, best-effort) |
+| POST | `/threads/:id/read` | `threads:read` | Mark thread read for me |
+| POST | `/threads/:id/participants` | `threads:manage` | Add participants |
+| DELETE | `/threads/:id` | `threads:delete` | Archive the thread for me |
+| GET | `/report-center/thread_*` | `threads:reports` | Messaging reports (Reports Center) |
+
 ### Announcements — `/api/v1/announcements` *(write: admin, teacher)*
 | Method | Path | Purpose |
 |--------|------|---------|

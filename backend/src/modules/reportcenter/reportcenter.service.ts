@@ -2590,6 +2590,116 @@ export const REPORTS: Record<string, Report> = {
       };
     },
   },
+
+  thread_messaging_activity: {
+    title: "Messaging Activity",
+    category: "Messaging",
+    permission: "threads:reports",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT to_char(m.created_at::date, 'YYYY-MM-DD') AS date,
+                count(DISTINCT m.thread_id)::int AS "activeThreads",
+                count(*)::int AS messages
+         FROM thread_messages m WHERE m.institution_id = $1
+         GROUP BY m.created_at::date ORDER BY m.created_at::date DESC`,
+        [inst]
+      );
+      return {
+        title: "Messaging Activity",
+        columns: [
+          { key: "date", label: "Date" },
+          { key: "activeThreads", label: "Active Threads" },
+          { key: "messages", label: "Messages" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  thread_volume_by_user: {
+    title: "Thread Volume by User",
+    category: "Messaging",
+    permission: "threads:reports",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT COALESCE(u.full_name, '(system)') AS "user", u.role,
+                count(*)::int AS messages,
+                count(DISTINCT m.thread_id)::int AS threads
+         FROM thread_messages m LEFT JOIN users u ON u.id = m.sender_id
+         WHERE m.institution_id = $1
+         GROUP BY u.full_name, u.role ORDER BY messages DESC`,
+        [inst]
+      );
+      return {
+        title: "Thread Volume by User",
+        columns: [
+          { key: "user", label: "User" },
+          { key: "role", label: "Role" },
+          { key: "messages", label: "Messages" },
+          { key: "threads", label: "Threads" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  thread_unread_messages: {
+    title: "Unread Messages",
+    category: "Messaging",
+    permission: "threads:reports",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT u.full_name AS "user", u.role, count(m.id)::int AS unread
+         FROM thread_participants tp
+         JOIN users u ON u.id = tp.user_id
+         JOIN thread_messages m ON m.thread_id = tp.thread_id AND m.sender_id <> tp.user_id
+           AND (tp.last_read_at IS NULL OR m.created_at > tp.last_read_at)
+         WHERE tp.institution_id = $1 AND tp.archived_at IS NULL
+         GROUP BY u.id, u.full_name, u.role
+         HAVING count(m.id) > 0 ORDER BY unread DESC`,
+        [inst]
+      );
+      return {
+        title: "Unread Messages",
+        columns: [
+          { key: "user", label: "User" },
+          { key: "role", label: "Role" },
+          { key: "unread", label: "Unread" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  thread_staff_parent: {
+    title: "Staff–Parent Communication",
+    category: "Messaging",
+    permission: "threads:reports",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT t.subject, t.type, to_char(t.created_at, 'YYYY-MM-DD') AS created,
+                (SELECT count(*)::int FROM thread_messages m WHERE m.thread_id = t.id) AS messages
+         FROM threads t
+         WHERE t.institution_id = $1
+           AND EXISTS (SELECT 1 FROM thread_participants p JOIN users u ON u.id = p.user_id
+                       WHERE p.thread_id = t.id AND u.role IN ('admin','teacher','accountant'))
+           AND EXISTS (SELECT 1 FROM thread_participants p JOIN users u ON u.id = p.user_id
+                       WHERE p.thread_id = t.id AND u.role = 'parent')
+         ORDER BY t.last_message_at DESC`,
+        [inst]
+      );
+      return {
+        title: "Staff–Parent Communication",
+        columns: [
+          { key: "subject", label: "Subject" },
+          { key: "type", label: "Type" },
+          { key: "created", label: "Created" },
+          { key: "messages", label: "Messages" },
+        ],
+        rows,
+      };
+    },
+  },
 };
 
 export function listReports() {

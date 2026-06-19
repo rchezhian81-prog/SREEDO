@@ -221,6 +221,11 @@ Tenant + owner scoped; `homework:read|create|update|delete|submit|review` permis
 - ✅ **In-app messaging** with per-recipient read/unread inbox, audience targeting
   (all students/parents, staff, class, section, individual student/parent/user),
   sent history + delivery (read) counts, and a staff console + portal/staff inbox.
+- ✅ **Threaded messaging** (`threads:*`): conversation **threads** (one-to-one +
+  group), replies, **per-participant read state** (unread counts + mark-read),
+  participant-scoped access (same-institution validation; no cross-tenant/leakage),
+  archive, best-effort reply notifications, and 4 messaging reports. Staff start
+  threads (safe default); students/parents reply to threads they're in.
 - ✅ **Email/SMS/FCM-push adapters** (all optional, degrade gracefully when
   unconfigured) + **device-token** registration; **fee reminders** (from invoices)
   and **absence alerts** (from attendance, de-duplicated per student/day).

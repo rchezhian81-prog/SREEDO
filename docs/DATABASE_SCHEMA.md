@@ -233,6 +233,16 @@ used when `institutions.type = 'college'`; the school flow is unaffected.
   Adds `transfer_certificates:*` permissions (admin full incl. `override_dues`;
   accountant all except `override_dues`; student & parent get `read` + `download`,
   owner-scoped).
+- **Threaded messaging:** ✅ (migration `0035`, tenant-scoped) `threads`
+  (`subject`, `type` direct|group, `created_by`, `last_message_at`),
+  `thread_participants` (`thread_id` + `user_id` unique, `last_read_at` for
+  read state, `archived_at` for per-user archive, `added_by`), `thread_messages`
+  (`sender_id`, `body`). Access is **participant-scoped**; the legacy
+  `messages`/`message_recipients` tables are untouched. Adds `threads:*`
+  permissions (admin full incl. manage/reports; teacher/accountant
+  read/create/reply/delete; student & parent read+reply). Attachment foundation:
+  thread messages can later carry documents (deferred to avoid changing the
+  documents owner-type enum).
 
 ### Phase C/D supporting
 - **fee_categories**, **fee_discounts/scholarships**, **fee_fines** — extend the

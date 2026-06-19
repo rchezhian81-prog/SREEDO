@@ -110,7 +110,17 @@ Deliverable **#5 Module-wise workflow**. Step-by-step flows for each module.
    sent history + read counts. **email/SMS/FCM** fan-out (best-effort, optional).
 4. ✅ **Fee reminders** (outstanding invoices) and **absence alerts** (absentees,
    de-duplicated per student/day) to students + guardians.
-5. *(⬜)* Threaded 1:1 messaging, scheduled campaigns.
+5. ✅ **Threaded messaging** (`/communication/threads`, `threads:*`): start a
+   **thread** (one-to-one or group; participants validated same-institution),
+   **reply**, and **per-participant read state** (thread + total unread counts,
+   mark-read). Access is **participant-only** (a non-participant gets 404; no
+   cross-tenant/cross-student leakage). Replies notify the other participants via
+   the existing channel adapters (best-effort; graceful when unconfigured). Archive
+   per-user; admins can add participants (`threads:manage`). Safe default: staff
+   start threads (`threads:create`); students/parents `threads:reply` to threads
+   they're in. Reports (Reports Center, `threads:reports`): messaging activity,
+   volume by user, unread messages, staff–parent communication.
+6. *(⬜)* Scheduled campaigns.
 
 ## J. AI assistant ✅ / AI advanced ✅
 1. Staff asks a question → `POST /ai/assistant`.
