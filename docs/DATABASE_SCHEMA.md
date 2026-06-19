@@ -192,6 +192,14 @@ used when `institutions.type = 'college'`; the school flow is unaffected.
   month, draft|finalized), `payslips` (unique per staff/month; snapshots
   attendance + gross/deductions/net), `payslip_lines` (earning/deduction breakdown).
 
+- **AI Insights:** ✅ (migration `0031`) — **no new tables**. Adds the `ai:*`
+  permissions (`ai:read`, `ai:summarize`, `ai:risk_alerts`, `ai:document_search`,
+  `ai:workflow_suggestions`) and role grants. All insights are computed
+  deterministically from existing tenant-scoped tables (students, attendance_
+  records, invoices, documents, leave_requests, inventory_items, etc.);
+  embeddings are computed on the fly when OpenAI is configured, and AI usage is
+  logged best-effort to the MongoDB `ai_usage` collection.
+
 ### Phase C/D supporting
 - **fee_categories**, **fee_discounts/scholarships**, **fee_fines** — extend the
   fee engine (categories, term schedules, fines, discounts).

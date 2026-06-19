@@ -83,8 +83,18 @@ exams (API), announcements, AI assistant, Swagger, seed, Docker, CI, unit tests.
 5. **Homework/assignments** ✅ — section/subject assignments with attachments,
    student submissions (text + file), teacher review/grading, assign/submit
    notifications (migration `0020`); staff console + portal pages.
-6. **AI advanced:** embeddings document search, attendance-risk alerts, fee/
-   performance summaries.
+6. **AI advanced:** ✅ a dedicated **AI Insights** module (`/ai-insights`,
+   `ai:*`, tenant-scoped + permission-guarded) — **report/KPI summaries** for 9
+   modules (attendance, fees, exams, homework, payroll, library, transport,
+   hostel, inventory), **attendance-risk alerts** (low-attendance students over a
+   window), **fee pending/collection risk** (overdue + outstanding, manual
+   reminder only — no auto-send), **embeddings document search** (semantic via
+   OpenAI when configured, keyword fallback otherwise — metadata only, never file
+   contents/keys), **deterministic workflow suggestions**, and an insights
+   dashboard. All metrics are computed deterministically from tenant data and
+   returned even when OpenAI is unconfigured; OpenAI only adds an optional
+   natural-language narrative + semantic ranking. AI usage is logged best-effort
+   to MongoDB. No new tables (migration `0031` adds the `ai:*` permissions only).
 
 ### Phase D — Operations modules + reporting 🟡
 ✅ **Reports Center** — 55 cross-module reports with filters + CSV/PDF export
@@ -128,7 +138,7 @@ of E2E. Every PR must keep CI green.
 | Layer | Tooling | Scope | Status |
 |-------|---------|-------|--------|
 | **Unit** | Vitest | utils (jwt, password, pagination) | ✅ 11 tests (`npm test`) |
-| **API integration** | Supertest + real Postgres | auth/RBAC, owner-scoping, sequence numbering, invoice `amount_paid` + overpay, Swagger gating | ✅ 18 tests (`npm run test:integration`, in CI) |
+| **API integration** | Supertest + real Postgres | auth/RBAC, owner-scoping, tenant isolation, sequence numbering, invoice `amount_paid` + overpay, per-module flows (incl. AI insights fallback + permission guards), Swagger gating | ✅ 165 tests (`npm run test:integration`, in CI) |
 | **Contract** | Validate responses against the generated OpenAPI spec | drift between code and Swagger | ⬜ |
 | **Frontend** | React Testing Library (components), Playwright (E2E) | login → dashboard → create student → record payment | ⬜ |
 | **Mobile** | `flutter analyze` + `flutter test` | widget/provider tests | 🟡 analyze in CI; tests ⬜ |

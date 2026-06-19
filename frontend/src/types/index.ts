@@ -1069,3 +1069,81 @@ export interface LeaveRequest {
   decidedAt: string | null;
   decisionNote: string | null;
 }
+
+// --- AI Insights ---
+
+export interface AiSuggestion {
+  key: string;
+  label: string;
+  count: number;
+  href: string;
+}
+
+export interface AiDashboard {
+  aiAvailable: boolean;
+  headline: {
+    students: number;
+    staff: number;
+    feesOutstanding: number;
+    attendanceRate: number | null;
+  };
+  suggestionCount: number;
+  suggestions: AiSuggestion[];
+}
+
+export interface AiSummary {
+  report: string;
+  metrics: Record<string, number>;
+  narrative: string | null;
+  aiAvailable: boolean;
+}
+
+export interface AiAttendanceRiskStudent {
+  studentId: string;
+  admissionNo: string;
+  name: string;
+  present: number;
+  total: number;
+  rate: number;
+}
+
+export interface AiAttendanceRisk {
+  threshold: number;
+  windowDays: number;
+  count: number;
+  students: AiAttendanceRiskStudent[];
+  narrative: string | null;
+  aiAvailable: boolean;
+}
+
+export interface AiFeeRiskInvoice {
+  id: string;
+  invoiceNo: string;
+  student: string;
+  outstanding: number;
+  dueDate: string | null;
+  overdue: boolean;
+}
+
+export interface AiFeeRisk {
+  pendingCount: number;
+  overdueCount: number;
+  totalOutstanding: number;
+  invoices: AiFeeRiskInvoice[];
+  suggestedAction: string | null;
+  narrative: string | null;
+  aiAvailable: boolean;
+}
+
+export interface AiDocSearchResult {
+  id: string;
+  name: string;
+  category: string;
+  ownerType: string;
+  score?: number;
+}
+
+export interface AiDocSearch {
+  mode: "semantic" | "keyword";
+  results: AiDocSearchResult[];
+}
