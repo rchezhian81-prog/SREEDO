@@ -2,8 +2,10 @@ import { Router } from "express";
 import { uuidParam } from "../../utils/params";
 import { authenticate, authorize } from "../../middleware/auth";
 import { requireTenant, tenantId } from "../../middleware/tenant";
+import { requirePermission } from "../../middleware/permissions";
 import { accessibleStudentIds, assertStudentAccess } from "../../utils/scope";
 import * as portalService from "./portal.service";
+import * as disciplinaryService from "../disciplinary/disciplinary.service";
 
 export const portalRouter = Router();
 
@@ -65,3 +67,26 @@ portalRouter.get("/students/:studentId/timetable", async (req, res) => {
   assertStudentAccess(await accessibleStudentIds(req), studentId);
   res.json(await portalService.studentTimetable(studentId, tenantId(req)));
 });
+
+/**
+ * @openapi
+ * /portal/students/{studentId}/disciplinary:
+ *   get:
+ *     tags: [Portal]
+ *     summary: The accessible student's disciplinary records (only when the institution has enabled portal visibility)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: studentId, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: Disciplinary records (owner-scoped) }
+ *       403: { description: Not an accessible student / portal visibility disabled }
+ */
+portalRouter.get(
+  "/students/:studentId/disciplinary",
+  requirePermission("disciplinary:portal_read"),
+  async (req, res) => {
+    const studentId = uuidParam(req, "studentId");
+    assertStudentAccess(await accessibleStudentIds(req), studentId);
+    res.json(await disciplinaryService.portalStudentRecords(studentId, tenantId(req)));
+  }
+);

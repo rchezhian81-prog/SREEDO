@@ -135,8 +135,17 @@ reports 🟡.
   transport/hostel) with permission-gated **override**, **TC PDF** (watermarked
   when cancelled, owner-scoped portal download), the `transferred` student
   lifecycle (data retained), and 4 TC reports.
-- ⬜ Document upload (✅ via Documents module), ID-card details (✅ via ID Cards),
-  disciplinary records. Attendance/fees/exam links exist via their modules.
+- ✅ **Disciplinary records** (Phase D, `disciplinary:*`): a behavioural **incident
+  register** (category, severity low→critical, description, reported-by, involved
+  staff, follow-up) with a status lifecycle (open → under_review → action_taken →
+  closed, or cancelled), an **audit-friendly action timeline**, and 6 reports.
+  Class/section or program/semester snapshotted at creation. **Portal visibility
+  is OFF by default** — students/parents read their own / linked child's records
+  only when an admin enables it and they hold `disciplinary:portal_read`
+  (owner-scoped); staff access is permission-based and records never leak to
+  unauthorised users.
+- ✅ Document upload (Documents module), ID-card details (ID Cards).
+  Attendance/fees/exam links exist via their modules.
 
 ### 4.4 Staff / Teacher Management — 🟡 Partial
 - ✅ Profile, auto employee numbers, qualification/specialization, active status,

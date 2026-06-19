@@ -10,6 +10,8 @@ export { query };
 export const app = createApp();
 
 const TABLES = [
+  "disciplinary_actions",
+  "disciplinary_records",
   "custom_reports",
   "thread_messages",
   "thread_participants",
