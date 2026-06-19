@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -27,6 +28,10 @@ class ApiClient {
 
   String? _accessToken;
   String? _refreshToken;
+
+  /// Invoked when a request is unauthorized and the session cannot be refreshed,
+  /// so the app can route back to the login screen (graceful expiry handling).
+  void Function()? onUnauthorized;
 
   bool get hasSession => _refreshToken != null;
   String? get refreshToken => _refreshToken;
@@ -91,6 +96,7 @@ class ApiClient {
     }
 
     if (response.statusCode >= 400) {
+      if (response.statusCode == 401) onUnauthorized?.call();
       var message = 'Request failed (${response.statusCode})';
       try {
         final data = jsonDecode(utf8.decode(response.bodyBytes));
@@ -106,6 +112,58 @@ class ApiClient {
     if (response.statusCode == 204 || response.bodyBytes.isEmpty) {
       return null;
     }
+    return jsonDecode(utf8.decode(response.bodyBytes));
+  }
+
+  /// Downloads raw bytes (e.g. a PDF) with bearer auth + refresh-and-retry.
+  Future<Uint8List> getBytes(String path, {bool allowRetry = true}) async {
+    final headers = <String, String>{
+      if (_accessToken != null) 'Authorization': 'Bearer $_accessToken',
+    };
+    final response = await http.get(Uri.parse('$baseUrl$path'), headers: headers);
+    if (response.statusCode == 401 && allowRetry && _refreshToken != null) {
+      if (await _refreshSession()) return getBytes(path, allowRetry: false);
+    }
+    if (response.statusCode >= 400) {
+      if (response.statusCode == 401) onUnauthorized?.call();
+      throw ApiException(response.statusCode, 'Download failed (${response.statusCode})');
+    }
+    return response.bodyBytes;
+  }
+
+  /// Sends a multipart/form-data POST (text fields only) with bearer auth.
+  /// Used for homework text submission against the existing upload endpoint.
+  Future<dynamic> postMultipart(
+    String path, {
+    required Map<String, String> fields,
+    bool allowRetry = true,
+  }) async {
+    final request = http.MultipartRequest('POST', Uri.parse('$baseUrl$path'));
+    if (_accessToken != null) {
+      request.headers['Authorization'] = 'Bearer $_accessToken';
+    }
+    request.fields.addAll(fields);
+    final response = await http.Response.fromStream(await request.send());
+
+    if (response.statusCode == 401 && allowRetry && _refreshToken != null) {
+      if (await _refreshSession()) {
+        return postMultipart(path, fields: fields, allowRetry: false);
+      }
+    }
+    if (response.statusCode >= 400) {
+      if (response.statusCode == 401) onUnauthorized?.call();
+      var message = 'Request failed (${response.statusCode})';
+      try {
+        final data = jsonDecode(utf8.decode(response.bodyBytes));
+        if (data is Map && data['error'] is String) {
+          message = data['error'] as String;
+        }
+      } catch (_) {
+        // keep generic message for non-JSON bodies
+      }
+      throw ApiException(response.statusCode, message);
+    }
+    if (response.bodyBytes.isEmpty) return null;
     return jsonDecode(utf8.decode(response.bodyBytes));
   }
 

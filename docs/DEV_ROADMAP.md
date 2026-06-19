@@ -79,7 +79,14 @@ exams (API), announcements, AI assistant, Swagger, seed, Docker, CI, unit tests.
 4. **Parent & Student portals** — ✅ base shipped (web): cookie auth (`/auth/portal/*`),
    `guardians` parent⇄child links (migration `0016`), `/portal/*` owner-scoped
    endpoints, and portal UI (dashboard, profile, attendance, timetable, fees,
-   notices, child selector). Mobile + homework/comms remain.
+   notices, child selector). ✅ **Mobile parity (Phase 1)** — the Flutter app now
+   delivers the parent/student experience on mobile (Bearer auth via `/auth/login`
+   with refresh + graceful expiry, role-aware shell with a parent child-selector,
+   dashboard, attendance, fees + **Pay Online** via the gateway + receipt,
+   homework view/submit, announcements + inbox, documents/report-card/ID-card
+   PDFs, profile, best-effort FCM token registration). Reuses the existing
+   owner/tenant-scoped APIs only — no backend changes. (Staff mobile parity is a
+   later phase.)
 5. **Homework/assignments** ✅ — section/subject assignments with attachments,
    student submissions (text + file), teacher review/grading, assign/submit
    notifications (migration `0020`); staff console + portal pages.
@@ -151,7 +158,7 @@ of E2E. Every PR must keep CI green.
 | **API integration** | Supertest + real Postgres | auth/RBAC, owner-scoping, tenant isolation, sequence numbering, invoice `amount_paid` + overpay, per-module flows (incl. AI insights fallback, online-payment webhook idempotency + signature + permission guards), Swagger gating | ✅ 177 tests (`npm run test:integration`, in CI) |
 | **Contract** | Validate responses against the generated OpenAPI spec | drift between code and Swagger | ⬜ |
 | **Frontend** | React Testing Library (components), Playwright (E2E) | login → dashboard → create student → record payment | ⬜ |
-| **Mobile** | `flutter analyze` + `flutter test` | widget/provider tests | 🟡 analyze in CI; tests ⬜ |
+| **Mobile** | `flutter analyze` + `flutter test` | parent/student app (Phase 1): auth, dashboard, attendance, fees + pay online, homework, notices, PDFs | 🟡 analyze in CI + a smoke test; widget/provider tests ⬜ |
 | **Security** | dependency audit, `/security-review` on diffs, authz tests | RBAC, owner-scope, input validation, rate limits | 🟡 |
 | **Performance** | k6/autocannon on hot endpoints | P95 < 300 ms at seed scale | ⬜ |
 

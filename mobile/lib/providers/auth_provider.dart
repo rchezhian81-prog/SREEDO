@@ -24,7 +24,11 @@ class AppUser {
 }
 
 class AuthProvider extends ChangeNotifier {
-  AuthProvider(this._api);
+  AuthProvider(this._api) {
+    // When a request is unauthorized and cannot be refreshed, drop the session
+    // so GoRouter routes back to login (graceful expiry handling).
+    _api.onUnauthorized = _handleExpired;
+  }
 
   final ApiClient _api;
 
@@ -32,6 +36,22 @@ class AuthProvider extends ChangeNotifier {
   bool restoring = true;
 
   bool get isAuthenticated => user != null;
+
+  String get role => user?.role ?? '';
+  bool get isParent => role == 'parent';
+  bool get isPortal => role == 'student' || role == 'parent';
+  bool get isStaff =>
+      role == 'admin' ||
+      role == 'teacher' ||
+      role == 'accountant' ||
+      role == 'super_admin';
+
+  void _handleExpired() {
+    if (user != null) {
+      user = null;
+      notifyListeners();
+    }
+  }
 
   /// Restores a persisted session on app start by validating the stored
   /// tokens against /auth/me.
