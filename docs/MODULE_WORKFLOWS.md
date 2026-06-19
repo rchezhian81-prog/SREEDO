@@ -27,6 +27,26 @@ Deliverable **#5 Module-wise workflow**. Step-by-step flows for each module.
    safe **data export** (counts/metadata only — no secrets) with history, a
    read-only **cross-tenant snapshot** switch, and a **system-health** summary.
    All actions run through the audit middleware.
+6. ✅ **Platform Hardening** (`/platform/*`, `platform:*`, super-admin-only) — the
+   consolidated, permission-gated, durably-audited platform surface:
+   - **KPIs/health** (`/platform/kpis`, `/platform/health`, `platform:usage_read`/
+     `platform:health_read`): institutions active/suspended, students/staff/users,
+     fees outstanding, online-payment + storage usage, module adoption.
+   - **Institution lifecycle** (`platform:manage_institutions`): create, update
+     profile/type, **suspend** (`/:id/suspend`) and **activate** (`/:id/activate`),
+     with per-institution **limits** and **subscription** assignment
+     (`platform:manage_subscriptions`). Every action writes a durable
+     `platform_audit_log` row.
+   - **Cross-tenant audit viewer** (`/platform/audit`, `platform:audit_read`):
+     read-only, filterable by institution/actor/action/target/date — built on the
+     durable Postgres trail (always available, unlike the optional Mongo log).
+   - **Support impersonation** (`/platform/impersonate`, `platform:impersonate`):
+     issues a scoped session token for a tenant user, audited, with a clear
+     banner + exit on the client; **refuses to impersonate a super admin** and
+     never returns passwords/secrets/tokens/payment data.
+   - **Boundary**: every route is `authorize("super_admin")` (actor
+     `institution_id = null`) **plus** `requirePermission`; tenant admins and all
+     tenant users are denied (403). Cross-tenant data is reachable only here.
 
 ## C. Academic setup ✅ (school) / ✅ (college extensions)
 1. Admin creates an **academic year** (marks one `is_current`).

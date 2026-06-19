@@ -222,6 +222,22 @@ Auth column legend: **public** · **auth** (any logged-in) · or explicit role(s
 | POST | `:id/run` | `scheduled_reports:run` | Run now (as the caller; records run history) |
 | GET | `:id/runs` | `scheduled_reports:history` | Run history (`?limit=`) |
 
+### Platform (Super Admin) — `/api/v1/platform` *(super-admin only — `authorize("super_admin")` + `platform:*`; tenant users denied; cross-tenant data lives only here)*
+| Method | Path | Permission | Purpose |
+|--------|------|------------|---------|
+| GET | `/kpis` | `platform:usage_read` | Platform-wide KPIs + module adoption |
+| GET | `/health` | `platform:health_read` | Platform health (DB/Mongo/counts/uptime) |
+| GET | `/audit` | `platform:audit_read` | Durable cross-tenant audit log (filters: institutionId, actorId, action, targetType, date range) |
+| GET | `/institutions` | `platform:read` | Institutions with status + usage |
+| POST | `/institutions` | `platform:manage_institutions` | Create an institution (audited) |
+| GET | `/institutions/:id` | `platform:read` | Institution detail (profile + limits + usage) |
+| PATCH | `/institutions/:id` | `platform:manage_institutions` | Update profile/type (audited) |
+| POST | `/institutions/:id/suspend` | `platform:manage_institutions` | Suspend (audited) |
+| POST | `/institutions/:id/activate` | `platform:manage_institutions` | Activate (audited) |
+| POST | `/institutions/:id/subscription` | `platform:manage_subscriptions` | Assign package (audited) |
+| PATCH | `/institutions/:id/limits` | `platform:manage_subscriptions` | Set per-institution limits (audited) |
+| POST | `/impersonate` | `platform:impersonate` | Start a support session (audited; scoped token; no secrets) |
+
 ---
 
 ## Part 2 — Planned endpoints (by phase)

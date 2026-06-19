@@ -116,6 +116,16 @@ flows are in [`MODULE_WORKFLOWS.md`](./MODULE_WORKFLOWS.md).
   degrades gracefully), safe **data-export** (counts + metadata only — no
   secrets) with history, a read-only **cross-tenant snapshot** ("switch"), and a
   **system-health** summary.
+- ✅ **Platform Hardening** (`/api/v1/platform/*`, migration `0039`,
+  `platform:*`, super-admin-only): a consolidated, permission-gated platform
+  surface — **platform-wide KPIs** (active/suspended institutions, students/staff/
+  users, fees outstanding, online-payment + storage usage, module adoption),
+  **institution lifecycle** (create / update / **suspend** / **activate** / assign
+  subscription / set per-institution limits), a **durable cross-tenant audit
+  trail** (`platform_audit_log`) with a read-only filterable viewer recording every
+  platform action, and **support impersonation** (audited, scoped token, refuses
+  super admins, never returns secrets/payment data). Tenant users are denied;
+  cross-tenant data is reachable **only** through these super-admin endpoints.
 - ⬜ Global user-role management; scheduled backup/restore automation.
 
 ### 4.2 School / College Admin Panel — 🟡 Partial

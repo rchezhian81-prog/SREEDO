@@ -40,8 +40,21 @@ exams (API), announcements, AI assistant, Swagger, seed, Docker, CI, unit tests.
    (migration `0030`, `/admin/*`): global institution settings + feature
    flags/modules, **plan-limit enforcement**, a global **audit-log viewer**
    (Mongo, CSV, graceful), safe **data export** + history, read-only
-   **cross-tenant snapshot**, and **system health**. Remaining: scheduled
-   backup/restore automation, global user-role management.
+   **cross-tenant snapshot**, and **system health**. ✅ **Platform Hardening**
+   (migration `0039`, `/platform/*`, `platform:*`) — a consolidated super-admin
+   surface with an explicit permission set (`platform:read|manage_institutions|
+   manage_subscriptions|audit_read|health_read|impersonate|usage_read`, granted to
+   super_admin only), **platform-wide KPIs** (institutions active/suspended,
+   students/staff/users, fees outstanding, online-payment + storage usage, module
+   adoption), **institution lifecycle** (create / update / **suspend** /
+   **activate** / assign subscription / set per-institution limits), a **durable
+   Postgres cross-tenant audit trail** (`platform_audit_log`) recording every
+   lifecycle/subscription/impersonation action with a read-only filterable viewer,
+   and **support impersonation** (audited, scoped token, never returns secrets,
+   refuses to impersonate a super admin). All routes are `authorize("super_admin")`
+   + `requirePermission`; tenant users are denied; no secret/payment fields are
+   exposed. Remaining: scheduled backup/restore automation, global user-role
+   management.
 5. ✅ **MVP UI gaps filled:** Exams & Results page and Users/account-management
    page shipped.
 
@@ -215,7 +228,7 @@ of E2E. Every PR must keep CI green.
 | Layer | Tooling | Scope | Status |
 |-------|---------|-------|--------|
 | **Unit** | Vitest | utils (jwt, password, pagination) | ✅ 11 tests (`npm test`) |
-| **API integration** | Supertest + real Postgres | auth/RBAC, owner-scoping, tenant isolation, sequence numbering, invoice `amount_paid` + overpay, per-module flows (incl. AI insights fallback, online-payment webhook idempotency + signature, fee schedule generation/fines/discounts, TC issue/dues-override/owner-scoped download, thread participant-scoping/read-state + permission guards, custom-report saved/ad-hoc run + column projection + CSV/PDF export + share/private access + underlying-report permission enforcement, disciplinary incident workflow + cancel/delete/close permission gating + portal-default-off owner-scoped read + reports, scheduled-report manual/scheduled run + run-history success/failure + CSV/PDF delivery + recipient & underlying-report permission enforcement + email graceful fallback), Swagger gating | ✅ 233 tests (`npm run test:integration`, in CI) |
+| **API integration** | Supertest + real Postgres | auth/RBAC, owner-scoping, tenant isolation, sequence numbering, invoice `amount_paid` + overpay, per-module flows (incl. AI insights fallback, online-payment webhook idempotency + signature, fee schedule generation/fines/discounts, TC issue/dues-override/owner-scoped download, thread participant-scoping/read-state + permission guards, custom-report saved/ad-hoc run + column projection + CSV/PDF export + share/private access + underlying-report permission enforcement, disciplinary incident workflow + cancel/delete/close permission gating + portal-default-off owner-scoped read + reports, scheduled-report manual/scheduled run + run-history success/failure + CSV/PDF delivery + recipient & underlying-report permission enforcement + email graceful fallback, platform super-admin lifecycle/suspend/activate/subscription/limits + durable audit trail + KPIs + audited impersonation + tenant-denied boundary + no-secret-leak), Swagger gating | ✅ 243 tests (`npm run test:integration`, in CI) |
 | **Contract** | Validate responses against the generated OpenAPI spec | drift between code and Swagger | ⬜ |
 | **Frontend** | React Testing Library (components), Playwright (E2E) | login → dashboard → create student → record payment | ⬜ |
 | **Mobile** | `flutter analyze` + `flutter test` | parent/student (Phase 1) + **staff (Phase 2)**: attendance/marks/homework/communication/reports/payslips/timetable + quick views | 🟡 analyze in CI + smoke tests; widget/provider tests ⬜ |
