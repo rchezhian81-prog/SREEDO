@@ -223,14 +223,24 @@ used when `institutions.type = 'college'`; the school flow is unaffected.
   so payments/gateway are unchanged. Adds `fee_categories|fee_schedules|fee_fines|
   fee_discounts:*` + `fee_reports:read` permissions (admin full; accountant all
   except category delete / fine waive / discount approve).
+- **Transfer Certificates:** ✅ (migration `0034`, tenant-scoped) `transfer_certificates`
+  (`tc_no` unique via the atomic `transfer_certificate_seq` sequence, `student_id`,
+  snapshotted `admission_no`/`class_name`/`section_name`/`program_name`/
+  `semester_name`/`academic_year`, `date_of_issue`, `last_attendance_date`,
+  `leaving_reason`, `conduct`, per-area dues-status strings, `dues_override` +
+  reason, `remarks`, `status` draft|issued|cancelled, issued/cancelled audit
+  columns). Issuing flips `students.status` to `transferred` (no rows deleted).
+  Adds `transfer_certificates:*` permissions (admin full incl. `override_dues`;
+  accountant all except `override_dues`; student & parent get `read` + `download`,
+  owner-scoped).
 
 ### Phase C/D supporting
 - **fee_categories**, **fee_discounts/scholarships**, **fee_fines** — extend the
   fee engine (categories, term schedules, fines, discounts).
 - **grade_bands** — `id`, `name`, `min_percent`, `max_percent`, `grade`, `points`
   for report-card generation.
-- **disciplinary_records**, **transfer_certificates**, **id_cards** — extend
-  student records.
+- **disciplinary_records** — extend student records (planned). (`transfer_certificates`
+  and `id_cards` are shipped — see above.)
 
 ### Multi-tenancy migration note
 Adding `institution_id` to live tables is a breaking change done carefully in

@@ -39,6 +39,7 @@ import { studentsRouter } from "./modules/students/students.routes";
 import { superAdminRouter } from "./modules/superadmin/superadmin.routes";
 import { teachersRouter } from "./modules/teachers/teachers.routes";
 import { timetableRouter } from "./modules/timetable/timetable.routes";
+import { transferCertificatesRouter } from "./modules/tc/tc.routes";
 import { usersRouter } from "./modules/users/users.routes";
 
 export function createApp(): express.Express {
@@ -98,6 +99,7 @@ export function createApp(): express.Express {
   api.use("/exams", examsRouter);
   api.use("/fees", feesRouter);
   api.use("/online-payments", onlinePaymentsRouter);
+  api.use("/transfer-certificates", transferCertificatesRouter);
   api.use("/college", collegeRouter);
   api.use("/library", libraryRouter);
   api.use("/transport", transportRouter);

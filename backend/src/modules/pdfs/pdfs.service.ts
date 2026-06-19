@@ -37,6 +37,10 @@ async function getImage(
 const logoFor = (institutionId: string) =>
   getImage("institution", institutionId, "logo", institutionId);
 
+/** The institution's logo as an embeddable PDF image (null when none). Shared
+ * with the transfer-certificate PDF builder. */
+export const institutionLogo = logoFor;
+
 const shortId = (id: string) => id.replace(/-/g, "").slice(0, 10).toUpperCase();
 
 // --- Fee receipt ---

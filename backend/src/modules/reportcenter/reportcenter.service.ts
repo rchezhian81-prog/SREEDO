@@ -2469,6 +2469,127 @@ export const REPORTS: Record<string, Report> = {
       };
     },
   },
+
+  tc_issued_register: {
+    title: "TC Issued Register",
+    category: "Transfer Certificates",
+    permission: "transfer_certificates:read",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT tc.tc_no AS "tcNo", s.first_name || ' ' || s.last_name AS student,
+                tc.admission_no AS "admissionNo", tc.class_name AS class,
+                tc.section_name AS section,
+                to_char(tc.date_of_issue, 'YYYY-MM-DD') AS "issueDate",
+                tc.leaving_reason AS reason
+         FROM transfer_certificates tc JOIN students s ON s.id = tc.student_id
+         WHERE tc.institution_id = $1 AND tc.status = 'issued'
+         ORDER BY tc.date_of_issue DESC NULLS LAST`,
+        [inst]
+      );
+      return {
+        title: "TC Issued Register",
+        columns: [
+          { key: "tcNo", label: "TC No" },
+          { key: "student", label: "Student" },
+          { key: "admissionNo", label: "Admission No" },
+          { key: "class", label: "Class" },
+          { key: "section", label: "Section" },
+          { key: "issueDate", label: "Issue Date" },
+          { key: "reason", label: "Reason" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  tc_cancelled: {
+    title: "Cancelled TCs",
+    category: "Transfer Certificates",
+    permission: "transfer_certificates:read",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT tc.tc_no AS "tcNo", s.first_name || ' ' || s.last_name AS student,
+                tc.admission_no AS "admissionNo",
+                to_char(tc.cancelled_at, 'YYYY-MM-DD') AS "cancelledAt",
+                tc.cancel_reason AS reason
+         FROM transfer_certificates tc JOIN students s ON s.id = tc.student_id
+         WHERE tc.institution_id = $1 AND tc.status = 'cancelled'
+         ORDER BY tc.cancelled_at DESC NULLS LAST`,
+        [inst]
+      );
+      return {
+        title: "Cancelled TCs",
+        columns: [
+          { key: "tcNo", label: "TC No" },
+          { key: "student", label: "Student" },
+          { key: "admissionNo", label: "Admission No" },
+          { key: "cancelledAt", label: "Cancelled" },
+          { key: "reason", label: "Reason" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  tc_student_leaving: {
+    title: "Student Leaving Report",
+    category: "Transfer Certificates",
+    permission: "transfer_certificates:read",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT s.admission_no AS "admissionNo",
+                s.first_name || ' ' || s.last_name AS student,
+                tc.class_name AS class, tc.section_name AS section,
+                to_char(tc.date_of_issue, 'YYYY-MM-DD') AS "leavingDate",
+                tc.leaving_reason AS reason, s.status AS "studentStatus"
+         FROM transfer_certificates tc JOIN students s ON s.id = tc.student_id
+         WHERE tc.institution_id = $1 AND tc.status = 'issued'
+         ORDER BY tc.date_of_issue DESC NULLS LAST`,
+        [inst]
+      );
+      return {
+        title: "Student Leaving Report",
+        columns: [
+          { key: "admissionNo", label: "Admission No" },
+          { key: "student", label: "Student" },
+          { key: "class", label: "Class" },
+          { key: "section", label: "Section" },
+          { key: "leavingDate", label: "Leaving Date" },
+          { key: "reason", label: "Reason" },
+          { key: "studentStatus", label: "Student Status" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  tc_pending_draft: {
+    title: "Pending / Draft TCs",
+    category: "Transfer Certificates",
+    permission: "transfer_certificates:read",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT tc.tc_no AS "tcNo", s.first_name || ' ' || s.last_name AS student,
+                tc.admission_no AS "admissionNo", tc.class_name AS class,
+                to_char(tc.created_at, 'YYYY-MM-DD') AS "createdAt"
+         FROM transfer_certificates tc JOIN students s ON s.id = tc.student_id
+         WHERE tc.institution_id = $1 AND tc.status = 'draft'
+         ORDER BY tc.created_at DESC`,
+        [inst]
+      );
+      return {
+        title: "Pending / Draft TCs",
+        columns: [
+          { key: "tcNo", label: "TC No" },
+          { key: "student", label: "Student" },
+          { key: "admissionNo", label: "Admission No" },
+          { key: "class", label: "Class" },
+          { key: "createdAt", label: "Created" },
+        ],
+        rows,
+      };
+    },
+  },
 };
 
 export function listReports() {
