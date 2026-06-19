@@ -42,6 +42,7 @@ const SCHOOL_NAV: NavItem[] = [
   { href: "/messaging", label: "Messaging", icon: "💬" },
   { href: "/assistant", label: "AI Assistant", icon: "✨" },
   { href: "/ai-insights", label: "AI Insights", icon: "🧠" },
+  { href: "/jobs", label: "Jobs", icon: "⚙️", adminOnly: true },
   { href: "/users", label: "Users", icon: "👥", adminOnly: true },
 ];
 
@@ -60,6 +61,7 @@ const SUPER_ADMIN_NAV: NavItem[] = [
   { href: "/super-admin/audit-logs", label: "Audit Logs", icon: "📜" },
   { href: "/super-admin/exports", label: "Backups", icon: "💾" },
   { href: "/super-admin/health", label: "System Health", icon: "❤️‍🩹" },
+  { href: "/super-admin/jobs", label: "Jobs", icon: "⚙️" },
 ];
 
 export default function DashboardLayout({
