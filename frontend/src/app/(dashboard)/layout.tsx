@@ -56,6 +56,7 @@ const SUPER_ADMIN_NAV: NavItem[] = [
   },
   { href: "/super-admin/platform/audit", label: "Platform Audit", icon: "🧾" },
   { href: "/super-admin/platform/support", label: "Support Access", icon: "🛟" },
+  { href: "/super-admin/rbac", label: "Roles & Permissions", icon: "🔐" },
   { href: "/super-admin/packages", label: "Packages", icon: "📦" },
   { href: "/super-admin/settings", label: "Inst. Settings", icon: "⚙️" },
   { href: "/super-admin/audit-logs", label: "Audit Logs", icon: "📜" },

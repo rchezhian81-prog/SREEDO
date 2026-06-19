@@ -126,7 +126,14 @@ flows are in [`MODULE_WORKFLOWS.md`](./MODULE_WORKFLOWS.md).
   platform action, and **support impersonation** (audited, scoped token, refuses
   super admins, never returns secrets/payment data). Tenant users are denied;
   cross-tenant data is reachable **only** through these super-admin endpoints.
-- ⬜ Global user-role management; scheduled backup/restore automation.
+- ✅ **Global user-role management (RBAC console)** (`/api/v1/platform/permissions|roles`,
+  `platform:rbac_*`/`platform:permissions_*`, super-admin only): view the permission
+  **catalogue** (grouped by module, with the roles holding each) and the
+  **role→permission matrix**, and **grant/revoke** permissions per role. Each change
+  invalidates the runtime permission cache (applies immediately) and is recorded in
+  the durable platform audit log. Invalid permissions rejected, duplicate grants
+  idempotent, and **super_admin's critical `platform:*` access cannot be revoked**.
+- ⬜ Scheduled backup/restore automation.
 
 ### 4.2 School / College Admin Panel — 🟡 Partial
 Dashboard ✅; academic-year/class/section/subject setup ✅; **department,
