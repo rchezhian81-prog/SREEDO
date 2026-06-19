@@ -47,6 +47,14 @@ const SCHOOL_NAV: NavItem[] = [
 
 const SUPER_ADMIN_NAV: NavItem[] = [
   { href: "/super-admin", label: "Institutions", icon: "🏢" },
+  { href: "/super-admin/platform", label: "Platform Overview", icon: "🛰️" },
+  {
+    href: "/super-admin/platform/institutions",
+    label: "Platform Tenants",
+    icon: "🏬",
+  },
+  { href: "/super-admin/platform/audit", label: "Platform Audit", icon: "🧾" },
+  { href: "/super-admin/platform/support", label: "Support Access", icon: "🛟" },
   { href: "/super-admin/packages", label: "Packages", icon: "📦" },
   { href: "/super-admin/settings", label: "Inst. Settings", icon: "⚙️" },
   { href: "/super-admin/audit-logs", label: "Audit Logs", icon: "📜" },
@@ -117,17 +125,26 @@ export default function DashboardLayout({
           </span>
         </div>
         <nav className="flex-1 space-y-1 p-3">
-          {navItems.map((item) => (
+          {navItems.map((item) => {
+            // Section landing pages (`/super-admin`, `/super-admin/platform`)
+            // have child routes with their own nav entries, so they only count
+            // as active on an exact match; deeper items use prefix matching.
+            const hasDeeperEntry = navItems.some(
+              (other) =>
+                other.href !== item.href &&
+                other.href.startsWith(`${item.href}/`)
+            );
+            const active = hasDeeperEntry
+              ? pathname === item.href
+              : pathname === item.href ||
+                pathname.startsWith(`${item.href}/`);
+            return (
             <Link
               key={item.href}
               href={item.href}
               className={cx(
                 "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
-                (
-                  item.href === "/super-admin"
-                    ? pathname === item.href
-                    : pathname.startsWith(item.href)
-                )
+                active
                   ? "bg-brand-50 text-brand-700"
                   : "text-slate-600 hover:bg-slate-100"
               )}
@@ -135,7 +152,8 @@ export default function DashboardLayout({
               <span aria-hidden>{item.icon}</span>
               {item.label}
             </Link>
-          ))}
+            );
+          })}
         </nav>
         <div className="border-t border-slate-200 p-4">
           <p className="truncate text-sm font-medium text-slate-900">

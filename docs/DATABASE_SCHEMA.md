@@ -109,8 +109,17 @@ multi-tenancy.
 - **data_exports** ✅ (migration `0030`) — `id`, `institution_id`, `kind`,
   `status`, `summary` (JSONB; counts + metadata only, no secrets), `requested_by`
   — the super-admin backup/export history.
-- *(Audit logs live in MongoDB `audit_logs` — best-effort; the super-admin viewer
-  reads them and degrades gracefully when Mongo is unconfigured.)*
+- *(Request-level audit logs live in MongoDB `audit_logs` — best-effort; the
+  super-admin viewer reads them and degrades gracefully when Mongo is unconfigured.)*
+- **platform_audit_log** ✅ (migration `0039`) — `id`, `action` (e.g.
+  `institution.suspend`, `subscription.assign`, `impersonate.start`),
+  `target_type`, `target_id`, `institution_id`, `actor_id`→users, `actor_email`,
+  `actor_role`, `detail` (JSONB — curated, **no secrets**), `ip`, `created_at`. A
+  **durable** (always-available) cross-tenant trail of super-admin platform
+  actions, written by the `/platform/*` module and surfaced by its filterable
+  read-only audit viewer. Adds `platform:*` permissions (read/manage_institutions/
+  manage_subscriptions/audit_read/health_read/impersonate/usage_read), granted to
+  **super_admin only**.
 - **branches** — `id`, `institution_id`→institutions, `name`, `address`,
   `timezone`.
 - **subscription_packages** — `id`, `name`, `limits` (JSONB), `price`,

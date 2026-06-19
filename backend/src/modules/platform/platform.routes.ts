@@ -1,0 +1,126 @@
+import type { Request } from "express";
+import { Router } from "express";
+import { uuidParam } from "../../utils/params";
+import { authenticate, authorize } from "../../middleware/auth";
+import { requirePermission } from "../../middleware/permissions";
+import {
+  assignSubscriptionSchema,
+  createInstitutionSchema,
+  impersonateSchema,
+  platformAuditQuerySchema,
+  setLimitsSchema,
+  suspendSchema,
+  updateInstitutionSchema,
+} from "./platform.schema";
+import * as service from "./platform.service";
+
+// The platform console sits ABOVE any tenant: super-admin-only (actor
+// institution_id = null). authorize("super_admin") is the hard role boundary;
+// requirePermission documents/enforces the granular platform:* model on top.
+export const platformRouter = Router();
+platformRouter.use(authenticate, authorize("super_admin"));
+
+const actor = (req: Request) => ({
+  id: req.user!.id,
+  email: req.user!.email,
+  role: req.user!.role,
+  ip: req.ip ?? null,
+});
+
+/**
+ * @openapi
+ * /platform/kpis:
+ *   get: { tags: [Platform], summary: Platform-wide KPIs (all institutions), security: [{ bearerAuth: [] }], responses: { 200: { description: KPIs + module adoption } } }
+ */
+platformRouter.get("/kpis", requirePermission("platform:usage_read"), async (_req, res) => {
+  res.json(await service.platformKpis());
+});
+
+/**
+ * @openapi
+ * /platform/health:
+ *   get: { tags: [Platform], summary: Platform health (DB/Mongo/counts/uptime), security: [{ bearerAuth: [] }], responses: { 200: { description: Health } } }
+ */
+platformRouter.get("/health", requirePermission("platform:health_read"), async (_req, res) => {
+  res.json(await service.health());
+});
+
+/**
+ * @openapi
+ * /platform/audit:
+ *   get: { tags: [Platform], summary: Cross-tenant platform audit log (read-only; durable), security: [{ bearerAuth: [] }], parameters: [{ in: query, name: institutionId, schema: { type: string, format: uuid } }, { in: query, name: actorId, schema: { type: string, format: uuid } }, { in: query, name: action, schema: { type: string } }, { in: query, name: targetType, schema: { type: string } }, { in: query, name: dateFrom, schema: { type: string } }, { in: query, name: dateTo, schema: { type: string } }], responses: { 200: { description: Audit rows } } }
+ */
+platformRouter.get("/audit", requirePermission("platform:audit_read"), async (req, res) => {
+  res.json(await service.listAudit(platformAuditQuerySchema.parse(req.query)));
+});
+
+/**
+ * @openapi
+ * /platform/impersonate:
+ *   post: { tags: [Platform], summary: Start a support impersonation session (audited; returns a scoped token, never secrets), security: [{ bearerAuth: [] }], responses: { 200: { description: "{ impersonating, token, user }" } } }
+ */
+platformRouter.post("/impersonate", requirePermission("platform:impersonate"), async (req, res) => {
+  res.json(await service.impersonate(impersonateSchema.parse(req.body), actor(req)));
+});
+
+/**
+ * @openapi
+ * /platform/institutions:
+ *   get: { tags: [Platform], summary: List institutions with status + usage, security: [{ bearerAuth: [] }], responses: { 200: { description: Institutions } } }
+ *   post: { tags: [Platform], summary: Create an institution (audited), security: [{ bearerAuth: [] }], responses: { 201: { description: Created } } }
+ */
+platformRouter.get("/institutions", requirePermission("platform:read"), async (_req, res) => {
+  res.json(await service.listInstitutions());
+});
+platformRouter.post("/institutions", requirePermission("platform:manage_institutions"), async (req, res) => {
+  res.status(201).json(await service.createInstitution(createInstitutionSchema.parse(req.body), actor(req)));
+});
+
+/**
+ * @openapi
+ * /platform/institutions/{id}:
+ *   get: { tags: [Platform], summary: Institution detail (profile + limits + usage), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Detail }, 404: { description: Not found } } }
+ *   patch: { tags: [Platform], summary: Update institution profile/type (audited), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Updated } } }
+ */
+platformRouter.get("/institutions/:id", requirePermission("platform:read"), async (req, res) => {
+  res.json(await service.getInstitutionDetail(uuidParam(req)));
+});
+platformRouter.patch("/institutions/:id", requirePermission("platform:manage_institutions"), async (req, res) => {
+  res.json(await service.updateInstitution(uuidParam(req), updateInstitutionSchema.parse(req.body), actor(req)));
+});
+
+/**
+ * @openapi
+ * /platform/institutions/{id}/suspend:
+ *   post: { tags: [Platform], summary: Suspend an institution (audited), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Suspended } } }
+ */
+platformRouter.post("/institutions/:id/suspend", requirePermission("platform:manage_institutions"), async (req, res) => {
+  res.json(await service.suspendInstitution(uuidParam(req), suspendSchema.parse(req.body ?? {}), actor(req)));
+});
+
+/**
+ * @openapi
+ * /platform/institutions/{id}/activate:
+ *   post: { tags: [Platform], summary: Activate an institution (audited), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Activated } } }
+ */
+platformRouter.post("/institutions/:id/activate", requirePermission("platform:manage_institutions"), async (req, res) => {
+  res.json(await service.activateInstitution(uuidParam(req), actor(req)));
+});
+
+/**
+ * @openapi
+ * /platform/institutions/{id}/subscription:
+ *   post: { tags: [Platform], summary: Assign a subscription/package (audited), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 201: { description: Assigned } } }
+ */
+platformRouter.post("/institutions/:id/subscription", requirePermission("platform:manage_subscriptions"), async (req, res) => {
+  res.status(201).json(await service.assignSubscription(uuidParam(req), assignSubscriptionSchema.parse(req.body), actor(req)));
+});
+
+/**
+ * @openapi
+ * /platform/institutions/{id}/limits:
+ *   patch: { tags: [Platform], summary: Set per-institution feature limits (audited), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Updated limits } } }
+ */
+platformRouter.patch("/institutions/:id/limits", requirePermission("platform:manage_subscriptions"), async (req, res) => {
+  res.json(await service.setLimits(uuidParam(req), setLimitsSchema.parse(req.body), actor(req)));
+});

@@ -1487,3 +1487,131 @@ export interface ScheduledReportRun {
   triggeredBy: string | null;
   createdAt: string;
 }
+
+// --- Super Admin Console: Platform Hardening (/platform/*) ---
+
+export interface PlatformModuleAdoption {
+  withStudents: number;
+  withFees: number;
+  withOnlinePayments: number;
+  withLibrary: number;
+  withScheduledReports: number;
+}
+
+/** Aggregate platform metrics from GET /platform/kpis. */
+export interface PlatformKpis {
+  totalInstitutions: number;
+  activeInstitutions: number;
+  suspendedInstitutions: number;
+  totalStudents: number;
+  totalStaff: number;
+  totalUsers: number;
+  feesOutstanding: number | string;
+  onlinePaymentsTotal: number | string;
+  totalDocuments: number;
+  storageBytes: number | string;
+  scheduledReports: number;
+  customReports: number;
+  activeSessions: number;
+  moduleAdoption: PlatformModuleAdoption;
+}
+
+/** Platform-level health from GET /platform/health (mirrors SystemHealth). */
+export type PlatformHealth = SystemHealth;
+
+/** Institution row from GET /platform/institutions. */
+export interface PlatformInstitution {
+  id: string;
+  name: string;
+  code: string;
+  type: "school" | "college";
+  isActive: boolean;
+  createdAt: string;
+  students: number;
+  staff: number;
+  users: number;
+  packageName: string | null;
+}
+
+export interface PlatformInstitutionBranch {
+  id: string;
+  name: string;
+  address?: string | null;
+  timezone?: string | null;
+}
+
+export interface PlatformInstitutionSubscription {
+  id?: string;
+  packageId?: string | null;
+  packageName: string | null;
+  status: string;
+  startsAt?: string | null;
+  endsAt?: string | null;
+}
+
+/** Plan usage block returned in institution detail (`limits`). */
+export interface PlatformInstitutionLimits {
+  packageName: string | null;
+  maxStudents: number | null;
+  students: number;
+  maxStaff: number | null;
+  staff: number;
+  maxBranches: number | null;
+  branches: number;
+  storageLimitMb: number | null;
+  reportsQuota: number | null;
+  withinLimits?: boolean;
+}
+
+/** Operational stats block returned in institution detail (`stats`). */
+export interface PlatformInstitutionStats {
+  students: number;
+  teachers: number;
+  classes: number;
+  users: number;
+  feesOutstanding: number | string;
+  [key: string]: number | string;
+}
+
+/** Full institution detail from GET /platform/institutions/:id. */
+export interface PlatformInstitutionDetail {
+  id: string;
+  name: string;
+  code: string;
+  type: "school" | "college";
+  isActive: boolean;
+  createdAt?: string;
+  settings: Record<string, unknown> | null;
+  branches: PlatformInstitutionBranch[];
+  subscription: PlatformInstitutionSubscription | null;
+  limits: PlatformInstitutionLimits | null;
+  stats: PlatformInstitutionStats | null;
+}
+
+/** Durable cross-tenant audit row from GET /platform/audit. */
+export interface PlatformAuditEntry {
+  id: string;
+  action: string;
+  targetType: string | null;
+  targetId: string | null;
+  institutionId: string | null;
+  actorId: string | null;
+  actorEmail: string | null;
+  actorRole: string | null;
+  detail: unknown;
+  ip: string | null;
+  createdAt: string;
+}
+
+/** Scoped support session from POST /platform/impersonate. */
+export interface ImpersonationResult {
+  impersonating: boolean;
+  token: string;
+  user: {
+    id: string;
+    email: string;
+    role: UserRole;
+    institutionId: string | null;
+    fullName: string;
+  };
+}

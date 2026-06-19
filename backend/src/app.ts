@@ -33,6 +33,7 @@ import { onlinePaymentsRouter } from "./modules/onlinepayments/onlinepayments.ro
 import { transportRouter } from "./modules/transport/transport.routes";
 import { feeReceiptsRouter, idCardsRouter } from "./modules/pdfs/pdfs.routes";
 import { payrollRouter } from "./modules/payroll/payroll.routes";
+import { platformRouter } from "./modules/platform/platform.routes";
 import { portalRouter } from "./modules/portal/portal.routes";
 import { reportCenterRouter } from "./modules/reportcenter/reportcenter.routes";
 import { reportsRouter } from "./modules/reports/reports.routes";
@@ -127,6 +128,7 @@ export function createApp(): express.Express {
   api.use("/ai", aiRouter);
   api.use("/ai-insights", aiInsightsRouter);
   api.use("/admin", adminConsoleRouter); // super-admin platform console
+  api.use("/platform", platformRouter); // super-admin platform hardening
   api.use("/", superAdminRouter); // /institutions, /branches, /packages
   app.use("/api/v1", api);
 
