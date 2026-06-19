@@ -19,8 +19,19 @@ entirely on the existing owner/tenant-scoped backend APIs (Bearer auth via
 - **Documents / Report cards / ID card** — authenticated PDF download + view.
 - **Profile** for the selected student/child.
 
-Staff keep the existing dashboard/notices/profile. Staff mobile parity is a
-later phase.
+## Staff parity (Phase 2)
+
+Admin / teacher / accountant users get a **permission-gated** staff experience
+(tiles appear only when `auth.can(<permission>)`, loaded from
+`/auth/permissions`), all on the existing tenant/permission-scoped APIs:
+
+- **Dashboard hub** — KPI cards + quick-action tiles.
+- **Mark attendance** (class → section → date, present/absent/late/excused).
+- **Exam marks entry** (exam → section → subject roster).
+- **Homework** — create, list, review submissions, open attachments.
+- **Communication** — staff inbox/sent + compose (audience-targeted).
+- **My timetable** (teacher), **Reports** (export PDF), **My payslips** (PDF).
+- **Quick views** — student search, staff directory, fee dues, TC register.
 
 ## Getting started
 

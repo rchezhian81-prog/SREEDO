@@ -84,9 +84,14 @@ exams (API), announcements, AI assistant, Swagger, seed, Docker, CI, unit tests.
    with refresh + graceful expiry, role-aware shell with a parent child-selector,
    dashboard, attendance, fees + **Pay Online** via the gateway + receipt,
    homework view/submit, announcements + inbox, documents/report-card/ID-card
-   PDFs, profile, best-effort FCM token registration). Reuses the existing
-   owner/tenant-scoped APIs only — no backend changes. (Staff mobile parity is a
-   later phase.)
+   PDFs, profile, best-effort FCM token registration). ✅ **Mobile parity
+   (Phase 2)** — the **staff** experience: permission-gated dashboard hub
+   (`auth.can(...)` from `/auth/permissions`) with KPI cards + action tiles to
+   mark **attendance**, enter **exam marks**, create/review **homework**, send/
+   read **communication**, view **my timetable**, run **reports**, download **my
+   payslips**, and quick views (student/staff search, fee dues, TC register).
+   Reuses the existing owner/tenant/permission-scoped APIs only — **no backend
+   changes**.
 5. **Homework/assignments** ✅ — section/subject assignments with attachments,
    student submissions (text + file), teacher review/grading, assign/submit
    notifications (migration `0020`); staff console + portal pages.
@@ -173,7 +178,7 @@ of E2E. Every PR must keep CI green.
 | **API integration** | Supertest + real Postgres | auth/RBAC, owner-scoping, tenant isolation, sequence numbering, invoice `amount_paid` + overpay, per-module flows (incl. AI insights fallback, online-payment webhook idempotency + signature, fee schedule generation/fines/discounts, TC issue/dues-override/owner-scoped download + permission guards), Swagger gating | ✅ 196 tests (`npm run test:integration`, in CI) |
 | **Contract** | Validate responses against the generated OpenAPI spec | drift between code and Swagger | ⬜ |
 | **Frontend** | React Testing Library (components), Playwright (E2E) | login → dashboard → create student → record payment | ⬜ |
-| **Mobile** | `flutter analyze` + `flutter test` | parent/student app (Phase 1): auth, dashboard, attendance, fees + pay online, homework, notices, PDFs | 🟡 analyze in CI + a smoke test; widget/provider tests ⬜ |
+| **Mobile** | `flutter analyze` + `flutter test` | parent/student (Phase 1) + **staff (Phase 2)**: attendance/marks/homework/communication/reports/payslips/timetable + quick views | 🟡 analyze in CI + smoke tests; widget/provider tests ⬜ |
 | **Security** | dependency audit, `/security-review` on diffs, authz tests | RBAC, owner-scope, input validation, rate limits | 🟡 |
 | **Performance** | k6/autocannon on hot endpoints | P95 < 300 ms at seed scale | ⬜ |
 
