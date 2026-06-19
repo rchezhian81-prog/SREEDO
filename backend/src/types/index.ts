@@ -20,6 +20,8 @@ declare global {
       user?: AuthenticatedUser;
       /** Raw request body bytes, captured for webhook signature verification. */
       rawBody?: Buffer;
+      /** Correlation id (incoming x-request-id or generated); echoed in responses. */
+      requestId?: string;
     }
   }
 }

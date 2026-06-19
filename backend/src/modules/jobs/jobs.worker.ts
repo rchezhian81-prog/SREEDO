@@ -1,5 +1,6 @@
 import { query } from "../../db/postgres";
 import { env } from "../../config/env";
+import { recordJob } from "../../observability/metrics";
 import { executeScheduledById } from "../scheduledreports/scheduledreports.service";
 import {
   generateAbsenceAlerts,
@@ -100,6 +101,7 @@ export async function runJob(job: ClaimedJob): Promise<"success" | "retry" | "fa
     await query("UPDATE jobs SET status='success', completed_at=now(), error=NULL WHERE id=$1", [
       job.id,
     ]);
+    recordJob("success");
     return "success";
   } catch (err) {
     const safe = (err instanceof Error ? err.message : "Job failed").slice(0, 500);
@@ -108,6 +110,7 @@ export async function runJob(job: ClaimedJob): Promise<"success" | "retry" | "fa
         "UPDATE jobs SET status='failed', completed_at=now(), error=$2 WHERE id=$1",
         [job.id, safe]
       );
+      recordJob("failed");
       return "failed";
     }
     await query(
@@ -115,6 +118,7 @@ export async function runJob(job: ClaimedJob): Promise<"success" | "retry" | "fa
        WHERE id=$1`,
       [job.id, new Date(Date.now() + backoffMs(job.attempts)), safe]
     );
+    recordJob("retry");
     return "retry";
   }
 }

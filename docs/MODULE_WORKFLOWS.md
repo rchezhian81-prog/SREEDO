@@ -437,3 +437,27 @@ Deliverable **#5 Module-wise workflow**. Step-by-step flows for each module.
    management actions flow through the audit middleware. Permissions:
    `jobs:read|manage|retry|cancel|run_scheduler` — admin (own institution) +
    super_admin (platform-wide) only.
+
+## Y. Observability ✅ (Phase E)
+1. **Correlation id**: every request reuses a sane incoming `x-request-id` or gets
+   a generated one; it is echoed in the response header and included in the log
+   line so a request can be traced end-to-end.
+2. **Structured logging**: one JSON line per request with curated, safe fields
+   only (request id, method, path *without query string*, status, duration, and
+   — when authenticated — user id / institution id / role, plus ip / user-agent).
+   Bodies, headers, tokens, passwords and payment data are **never** logged; errors
+   include a stack only outside production.
+3. **Probes** (public, no auth, no secrets/tenant data): `GET /health` + `GET /live`
+   (liveness) and `GET /ready` (readiness — 503 until critical deps **DB +
+   migrations** are ready; optional deps like the job queue / storage / Mongo are
+   reported but never fail readiness).
+4. **Metrics** (`GET /observability/metrics`, `observability:metrics`): Prometheus
+   text — http request/error/duration counters, `jobs_processed_total` by result,
+   live `jobs_queue_depth`, and `scheduled_report_runs_total`. The worker records
+   job success/failure/retry counters.
+5. **Admin view** (`GET /observability/overview`, `observability:read`; detailed
+   `GET /observability/health`, `observability:health`): request/error summary,
+   job counters + queue depth, scheduled-report delivery summary, recent failures,
+   worker status, and DB/Mongo/migrations/uptime — surfaced in a super-admin
+   dashboard. All protected observability endpoints are **super_admin only**
+   (`observability:read|metrics|health|logs`); no tenant data or secrets leak.

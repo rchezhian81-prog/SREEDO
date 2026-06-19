@@ -1660,3 +1660,45 @@ export interface JobProcessResult {
   failed: number;
   retried: number;
 }
+
+// --- Phase E: Observability (super-admin, /observability/*) ---
+
+/** A recently failed background job, from observability overview. */
+export interface ObservabilityRecentFailure {
+  id: string;
+  type: string;
+  error: string | null;
+  institutionId: string | null;
+  completedAt: string | null;
+}
+
+/** Aggregate request/job/report metrics from GET /observability/overview. */
+export interface ObservabilityOverview {
+  requests: {
+    total: number;
+    errors: number;
+    byStatusClass: Record<string, number>;
+    avgDurationMs: number;
+  };
+  jobs: {
+    success: number;
+    failed: number;
+    retried: number;
+    queue: Record<string, number>;
+  };
+  scheduledReports: Record<string, number>;
+  recentFailures: ObservabilityRecentFailure[];
+  worker: { enabled: boolean; intervalMs: number };
+}
+
+/** Live health snapshot from GET /observability/health. */
+export interface ObservabilityHealth {
+  status: string;
+  postgres: boolean;
+  mongo: boolean;
+  migrations: number;
+  queue: Record<string, number>;
+  jobWorkerEnabled: boolean;
+  storageConfigured: boolean;
+  uptimeSeconds: number;
+}

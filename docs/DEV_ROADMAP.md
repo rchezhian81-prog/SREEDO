@@ -228,9 +228,20 @@ work. Handlers: `scheduled_report_run`, `fee_reminder_sweep`, `absence_alert_swe
 on an interval; otherwise the queue is driven via the API. Admin/observability:
 `/jobs` list/detail + retry/cancel + run-scheduler/process, **tenant-scoped**
 (admins see only their institution; super_admin platform-wide; staff/portal users
-denied), no secrets in payloads/errors (migration `0040`, `jobs:*`). Remaining:
-caching, read replicas if needed, observability/metrics, accessibility audit,
-i18n, load testing.
+denied), no secrets in payloads/errors (migration `0040`, `jobs:*`).
+✅ **Observability** — **structured JSON request logging** (curated, safe fields
+only — never bodies/headers/tokens/secrets; query strings dropped), a
+**correlation id** (`x-request-id` honoured or generated, echoed in the response,
+flows into logs), **Prometheus metrics** (`/api/v1/observability/metrics`:
+http request/error/duration counters, `jobs_processed_total` by result,
+`jobs_queue_depth`, `scheduled_report_runs_total`), public **liveness/readiness**
+probes (`/health`, `/live`, `/ready` — readiness fails only on critical deps DB +
+migrations; optional deps reported, never fail it; no secrets/tenant data), and a
+super-admin **overview + detailed health** (`/observability/overview|health`,
+queue depth, recent failures, request/error summary, worker + scheduled-report
+delivery status). Protected endpoints are super-admin-only (`observability:*`);
+the worker records job metrics (migration `0041`). Remaining: caching, read
+replicas if needed, accessibility audit, i18n, load testing.
 
 ---
 
@@ -242,7 +253,7 @@ of E2E. Every PR must keep CI green.
 | Layer | Tooling | Scope | Status |
 |-------|---------|-------|--------|
 | **Unit** | Vitest | utils (jwt, password, pagination) | ✅ 11 tests (`npm test`) |
-| **API integration** | Supertest + real Postgres | auth/RBAC, owner-scoping, tenant isolation, sequence numbering, invoice `amount_paid` + overpay, per-module flows (incl. AI insights fallback, online-payment webhook idempotency + signature, fee schedule generation/fines/discounts, TC issue/dues-override/owner-scoped download, thread participant-scoping/read-state + permission guards, custom-report saved/ad-hoc run + column projection + CSV/PDF export + share/private access + underlying-report permission enforcement, disciplinary incident workflow + cancel/delete/close permission gating + portal-default-off owner-scoped read + reports, scheduled-report manual/scheduled run + run-history success/failure + CSV/PDF delivery + recipient & underlying-report permission enforcement + email graceful fallback, platform super-admin lifecycle/suspend/activate/subscription/limits + durable audit trail + KPIs + audited impersonation + tenant-denied boundary + no-secret-leak, job-queue enqueue/dedupe + safe claim + retry-backoff/permanent-failure + scheduler-tick enqueues+runs scheduled reports + retry/cancel permission gates + tenant isolation + no-secret-leak), Swagger gating | ✅ 254 tests (`npm run test:integration`, in CI) |
+| **API integration** | Supertest + real Postgres | auth/RBAC, owner-scoping, tenant isolation, sequence numbering, invoice `amount_paid` + overpay, per-module flows (incl. AI insights fallback, online-payment webhook idempotency + signature, fee schedule generation/fines/discounts, TC issue/dues-override/owner-scoped download, thread participant-scoping/read-state + permission guards, custom-report saved/ad-hoc run + column projection + CSV/PDF export + share/private access + underlying-report permission enforcement, disciplinary incident workflow + cancel/delete/close permission gating + portal-default-off owner-scoped read + reports, scheduled-report manual/scheduled run + run-history success/failure + CSV/PDF delivery + recipient & underlying-report permission enforcement + email graceful fallback, platform super-admin lifecycle/suspend/activate/subscription/limits + durable audit trail + KPIs + audited impersonation + tenant-denied boundary + no-secret-leak, job-queue enqueue/dedupe + safe claim + retry-backoff/permanent-failure + scheduler-tick enqueues+runs scheduled reports + retry/cancel permission gates + tenant isolation + no-secret-leak, observability correlation-id generate/preserve + structured-log no-secret/safe-fields + /health + /ready DB-readiness + Prometheus metrics + metrics permission gate + job-failure metric increment + student/parent blocked), Swagger gating | ✅ 264 tests (`npm run test:integration`, in CI) |
 | **Contract** | Validate responses against the generated OpenAPI spec | drift between code and Swagger | ⬜ |
 | **Frontend** | React Testing Library (components), Playwright (E2E) | login → dashboard → create student → record payment | ⬜ |
 | **Mobile** | `flutter analyze` + `flutter test` | parent/student (Phase 1) + **staff (Phase 2)**: attendance/marks/homework/communication/reports/payslips/timetable + quick views | 🟡 analyze in CI + smoke tests; widget/provider tests ⬜ |

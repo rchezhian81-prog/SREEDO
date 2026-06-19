@@ -303,6 +303,13 @@ used when `institutions.type = 'college'`; the school flow is unaffected.
   retry/cancel/run_scheduler), granted to admin (own institution) + super_admin
   (platform-wide) only — no other role. An optional in-process worker runs on a
   timer when `JOB_WORKER_ENABLED=true` (off by default).
+- **Observability:** ✅ (migration `0041`) — **no new tables**. Structured request
+  logs ship to stdout (curated safe fields only); metrics are in-process counters
+  with live DB gauges (queue depth, scheduled-report run counts) read at scrape
+  time. Adds `observability:*` permissions (read/metrics/health/logs), granted to
+  **super_admin only**, gating `/observability/metrics|health|overview`. Public
+  `/health`, `/live`, `/ready` probes need no auth and expose no secrets/tenant
+  data.
 
 ### Phase C/D supporting
 - **fee_categories**, **fee_discounts/scholarships**, **fee_fines** — extend the
