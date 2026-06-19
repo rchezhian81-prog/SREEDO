@@ -4,6 +4,7 @@ import { closeMongo, connectMongo } from "./db/mongo";
 import { assertPostgresConnection, pool } from "./db/postgres";
 import { runMigrations } from "./db/migrate";
 import { seedIfEmpty } from "./db/seed";
+import { startWorker, stopWorker } from "./modules/jobs/jobs.worker";
 
 async function main(): Promise<void> {
   await assertPostgresConnection();
@@ -21,8 +22,12 @@ async function main(): Promise<void> {
     console.log(`Swagger UI: http://localhost:${env.port}/api/docs`);
   });
 
+  // Optional in-process background worker (off unless JOB_WORKER_ENABLED=true).
+  startWorker();
+
   const shutdown = (signal: string) => {
     console.log(`${signal} received — shutting down`);
+    stopWorker();
     server.close(async () => {
       await Promise.allSettled([pool.end(), closeMongo()]);
       process.exit(0);

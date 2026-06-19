@@ -412,3 +412,28 @@ Deliverable **#5 Module-wise workflow**. Step-by-step flows for each module.
    delete|run|history|manage` — admin full; accountant all except `manage`; teacher
    read/create/run/history; students/parents have no access. Tenant-scoped; no
    cross-institution access.
+
+## X. Background Job Queue ✅ (Phase E)
+1. A durable Postgres `jobs` queue (no external broker). Jobs carry a type +
+   non-secret payload, `priority`, `attempts`/`max_attempts`, `run_at`, and an
+   optional `dedupe_key` for idempotent enqueues.
+2. **Worker** (`POST /jobs/process`, `jobs:manage`, or the optional in-process
+   timer when `JOB_WORKER_ENABLED=true`): atomically **claims** one due job with
+   `FOR UPDATE SKIP LOCKED` (no two workers take the same job), runs its handler,
+   and on error **retries with exponential backoff** until `max_attempts`, then
+   marks a **permanent failure**. Tenant-aware: each job runs within its
+   `institution_id`.
+3. **Scheduler tick** (`POST /jobs/run-scheduler`, `jobs:run_scheduler`): enqueues
+   a `scheduled_report_run` job for each **due Scheduled Report** (deduped per
+   schedule+window) and advances its `next_run_at`, so reports run **automatically**
+   via the worker — manual runs are unaffected. Handlers also cover
+   `fee_reminder_sweep` / `absence_alert_sweep` (reusing the communication service)
+   and a `noop` liveness job.
+4. **Admin / observability** (`/jobs`, `jobs:read`): list + filter (status/type/
+   date/institution), detail, **retry** a failed job (`jobs:retry`), **cancel** a
+   pending job (`jobs:cancel`). **Scoping**: a tenant admin sees and acts on only
+   their institution's jobs; **super_admin** sees platform-wide; teacher/accountant/
+   student/parent are denied. Payloads and error output never contain secrets;
+   management actions flow through the audit middleware. Permissions:
+   `jobs:read|manage|retry|cancel|run_scheduler` — admin (own institution) +
+   super_admin (platform-wide) only.

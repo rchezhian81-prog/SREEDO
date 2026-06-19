@@ -1615,3 +1615,48 @@ export interface ImpersonationResult {
     fullName: string;
   };
 }
+
+// --- Background Job Queue ---
+
+export type JobStatus =
+  | "pending"
+  | "running"
+  | "success"
+  | "failed"
+  | "cancelled";
+
+/** A queued background job from GET /jobs and GET /jobs/:id. */
+export interface BackgroundJob {
+  id: string;
+  type: string;
+  payload: Record<string, unknown> | null;
+  status: JobStatus;
+  priority: number;
+  attempts: number;
+  maxAttempts: number;
+  runAt: string | null;
+  lockedAt: string | null;
+  lockedBy: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  error: string | null;
+  dedupeKey: string | null;
+  institutionId: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Result of POST /jobs/run-scheduler. */
+export interface JobSchedulerResult {
+  due: number;
+  enqueued: number;
+}
+
+/** Result of POST /jobs/process. */
+export interface JobProcessResult {
+  processed: number;
+  success: number;
+  failed: number;
+  retried: number;
+}

@@ -28,6 +28,7 @@ import { feesRouter } from "./modules/fees/fees.routes";
 import { homeworkRouter } from "./modules/homework/homework.routes";
 import { hostelRouter } from "./modules/hostel/hostel.routes";
 import { inventoryRouter } from "./modules/inventory/inventory.routes";
+import { jobsRouter } from "./modules/jobs/jobs.routes";
 import { libraryRouter } from "./modules/library/library.routes";
 import { onlinePaymentsRouter } from "./modules/onlinepayments/onlinepayments.routes";
 import { transportRouter } from "./modules/transport/transport.routes";
@@ -119,6 +120,7 @@ export function createApp(): express.Express {
   api.use("/report-center", reportCenterRouter);
   api.use("/custom-reports", customReportsRouter);
   api.use("/scheduled-reports", scheduledReportsRouter);
+  api.use("/jobs", jobsRouter);
   api.use("/disciplinary", disciplinaryRouter);
   api.use("/communication", communicationRouter);
   api.use("/documents", documentsRouter);

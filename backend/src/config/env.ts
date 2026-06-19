@@ -72,6 +72,12 @@ export const env = {
 
   seedOnStart: process.env.SEED_ON_START === "true",
 
+  // Background job worker (Postgres-backed; no external broker). Off by default
+  // so tests/CI stay deterministic; enable in self-hosted deployments to run the
+  // scheduler tick + drain the queue on an interval.
+  jobWorkerEnabled: process.env.JOB_WORKER_ENABLED === "true",
+  jobWorkerIntervalMs: Number(process.env.JOB_WORKER_INTERVAL_MS ?? 15000),
+
   // Online payment gateway (provider-agnostic hosted checkout) — optional.
   // When PAYMENT_GATEWAY_PROVIDER + PAYMENT_GATEWAY_WEBHOOK_SECRET are unset the
   // gateway is "not configured": online payments degrade gracefully and offline

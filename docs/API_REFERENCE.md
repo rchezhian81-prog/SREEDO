@@ -222,6 +222,16 @@ Auth column legend: **public** · **auth** (any logged-in) · or explicit role(s
 | POST | `:id/run` | `scheduled_reports:run` | Run now (as the caller; records run history) |
 | GET | `:id/runs` | `scheduled_reports:history` | Run history (`?limit=`) |
 
+### Background Jobs — `/api/v1/jobs` *(`jobs:*`; admin = own institution, super_admin = platform-wide; other roles denied)*
+| Method | Path | Permission | Purpose |
+|--------|------|------------|---------|
+| GET | `/` | `jobs:read` | List jobs (filters: status, type, institutionId, date range; scoped) |
+| POST | `/run-scheduler` | `jobs:run_scheduler` | Scheduler tick — enqueue due scheduled reports (`{ due, enqueued }`) |
+| POST | `/process` | `jobs:manage` | Drain the worker queue now (`{ processed, success, failed, retried }`; scoped) |
+| GET | `:id` | `jobs:read` | Job detail (scoped; 404 out of scope) |
+| POST | `:id/retry` | `jobs:retry` | Retry a failed job |
+| POST | `:id/cancel` | `jobs:cancel` | Cancel a pending job |
+
 ### Platform (Super Admin) — `/api/v1/platform` *(super-admin only — `authorize("super_admin")` + `platform:*`; tenant users denied; cross-tenant data lives only here)*
 | Method | Path | Permission | Purpose |
 |--------|------|------------|---------|
