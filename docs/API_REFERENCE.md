@@ -232,6 +232,23 @@ Auth column legend: **public** · **auth** (any logged-in) · or explicit role(s
 | POST | `:id/retry` | `jobs:retry` | Retry a failed job |
 | POST | `:id/cancel` | `jobs:cancel` | Cancel a pending job |
 
+### Observability
+*Public probes (no auth; no secrets / tenant data):*
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/health` | Liveness (postgres + mongo + uptime) |
+| GET | `/live` | Cheapest liveness ("process is up") |
+| GET | `/ready` | Readiness — 503 until critical deps (DB + migrations) ready; optional deps reported |
+
+*Protected — `/api/v1/observability` (super-admin only; `observability:*`):*
+| Method | Path | Permission | Purpose |
+|--------|------|------------|---------|
+| GET | `/metrics` | `observability:metrics` | Prometheus text (requests/errors/durations, job + scheduled-report counters, queue depth) |
+| GET | `/health` | `observability:health` | Detailed health (DB/Mongo, migrations, queue depth, config) |
+| GET | `/overview` | `observability:read` | Overview (request/error summary, jobs + queue, scheduled-report delivery, recent failures, worker status) |
+
+*Every response carries an `x-request-id` correlation header (honoured from the request or generated).*
+
 ### Platform (Super Admin) — `/api/v1/platform` *(super-admin only — `authorize("super_admin")` + `platform:*`; tenant users denied; cross-tenant data lives only here)*
 | Method | Path | Permission | Purpose |
 |--------|------|------------|---------|

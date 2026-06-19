@@ -360,12 +360,12 @@ payroll, unpaid-leave deductions). `payroll:*` permissions, tenant-scoped
 |------|-------------|
 | **Performance** | P95 API < 300 ms for list/detail at seed scale; pagination on all list endpoints (✅ pattern exists). |
 | **Scalability** | Stateless API (horizontal scale behind nginx); connection-pooled Postgres; multi-tenant data partitioning by `institution_id`. |
-| **Availability** | `/health` liveness ✅; target 99.5% on a single VPS; graceful degradation when Mongo/OpenAI/SMTP are down ✅. |
+| **Availability** | `/health` + `/live` liveness ✅, `/ready` readiness probe ✅ (fails only on critical deps DB+migrations); target 99.5% on a single VPS; graceful degradation when Mongo/OpenAI/SMTP are down ✅. |
 | **Security** | See §6. |
 | **Usability** | Soft-3D premium UI, responsive (desktop/tablet/mobile), ≤3 clicks to core tasks, consistent search/filter/export/print. |
 | **Accessibility** | WCAG 2.1 AA target: keyboard nav, labels, contrast. |
 | **Internationalization** | UTF-8 throughout; currency/date locale config; copy externalizable (future). |
-| **Observability** | Structured request logging (morgan ✅); audit trail ✅; error handler with consistent envelope ✅. |
+| **Observability** | ✅ **Structured JSON request logging** (correlation id via `x-request-id`, safe curated fields — no secrets); ✅ **Prometheus metrics** (`/observability/metrics`: requests/errors/durations, job + scheduled-report counters, queue depth); ✅ liveness/readiness probes; ✅ super-admin **overview + detailed health**; audit trail ✅; consistent error envelope ✅. (`observability:*`, super-admin only.) |
 | **Maintainability** | Clean modular architecture (routes/schema/service ✅), TypeScript everywhere ✅, generated API docs ✅. |
 | **Portability** | Dockerized; runs on any Docker host / Hostinger VPS ✅. |
 

@@ -1,7 +1,6 @@
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
-import morgan from "morgan";
 import swaggerUi from "swagger-ui-express";
 import { env } from "./config/env";
 import { swaggerSpec } from "./config/swagger";
@@ -10,6 +9,10 @@ import { pool } from "./db/postgres";
 import { auditLog } from "./middleware/audit";
 import { errorHandler, notFoundHandler } from "./middleware/error";
 import { apiRateLimiter } from "./middleware/rate-limit";
+import { requestContext } from "./middleware/request-context";
+import { requestLogger } from "./middleware/request-logger";
+import { observabilityRouter } from "./modules/observability/observability.routes";
+import { liveness, readiness } from "./modules/observability/observability.service";
 import { academicsRouter } from "./modules/academics/academics.routes";
 import { adminConsoleRouter } from "./modules/adminconsole/adminconsole.routes";
 import { aiRouter } from "./modules/ai/ai.routes";
@@ -53,6 +56,8 @@ export function createApp(): express.Express {
   // Behind nginx in production; needed for correct client IPs in rate limiting.
   app.set("trust proxy", 1);
 
+  // Correlation id first, so every log line + response carries it.
+  app.use(requestContext);
   app.use(helmet());
   app.use(cors({ origin: env.corsOrigin, credentials: true }));
   app.use(
@@ -64,7 +69,7 @@ export function createApp(): express.Express {
       },
     })
   );
-  app.use(morgan(env.isProduction ? "combined" : "dev"));
+  app.use(requestLogger);
 
   app.get("/health", async (_req, res) => {
     let postgres = false;
@@ -80,6 +85,18 @@ export function createApp(): express.Express {
       mongo: getMongoDb() !== null,
       uptime: process.uptime(),
     });
+  });
+
+  // Readiness probe — 503 until critical deps (DB + migrations) are ready. Public
+  // (k8s probes don't authenticate); returns only check flags, never secrets.
+  app.get("/ready", async (_req, res) => {
+    const result = await readiness();
+    res.status(result.ready ? 200 : 503).json(result);
+  });
+
+  // Liveness — cheapest possible "process is up" probe.
+  app.get("/live", (_req, res) => {
+    res.json(liveness());
   });
 
   // Swagger is disabled in production by default (see env.enableApiDocs) so the
@@ -129,6 +146,7 @@ export function createApp(): express.Express {
   api.use("/id-cards", idCardsRouter);
   api.use("/ai", aiRouter);
   api.use("/ai-insights", aiInsightsRouter);
+  api.use("/observability", observabilityRouter); // super-admin platform observability
   api.use("/admin", adminConsoleRouter); // super-admin platform console
   api.use("/platform", platformRouter); // super-admin platform hardening
   api.use("/", superAdminRouter); // /institutions, /branches, /packages
