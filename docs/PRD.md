@@ -47,8 +47,9 @@ students.
 **Non-goals (v1)**
 
 - Public marketing website / CMS.
-- Built-in payment *gateway* processing — the architecture is integration-ready
-  (invoices, payments, methods) but we ship adapters, not a PCI cardholder vault.
+- Storing card/bank/UPI data — we ship a pluggable **hosted-checkout** payment
+  adapter (✅ Online Fee Gateway), never a PCI cardholder vault: sensitive payment
+  data lives with the provider; we keep only non-sensitive order/payment refs.
 - Learning-management depth (SCORM, proctored online exams). Homework and study
   materials are in scope; a full LMS is not.
 
@@ -165,8 +166,14 @@ server-side. Homework/results detail and study materials remain ⬜.
   payments with **overpay guard**, status lifecycle, multiple methods, summary.
 - ✅ **Payment receipt PDF** (owner-scoped download from the fee page + portal),
   on the shared pdfkit utility.
+- ✅ **Online Fee Gateway** (`/online-payments`, `online_payments:*`): pluggable
+  provider-agnostic hosted-checkout adapter (env-configured, no stored card data),
+  payment orders with anti-tampering + duplicate-success guard, signature-verified
+  idempotent webhook that credits the invoice + issues the receipt, refunds,
+  per-institution feature flag, 5 reports + reconciliation, and graceful
+  degradation (offline collection unaffected) when unconfigured.
 - ⬜ Fee categories, term-wise schedules, **fine** rules, **discount/scholarship**,
-  online-payment gateway adapter, class-wise/student-wise dues reports.
+  class-wise/student-wise dues reports.
 
 ### 4.9 Exam & Result Management — ✅ Built
 - ✅ Exam creation, bulk mark entry (web **Exams & Results** page with a

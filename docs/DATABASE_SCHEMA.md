@@ -199,6 +199,18 @@ used when `institutions.type = 'college'`; the school flow is unaffected.
   records, invoices, documents, leave_requests, inventory_items, etc.);
   embeddings are computed on the fly when OpenAI is configured, and AI usage is
   logged best-effort to the MongoDB `ai_usage` collection.
+- **Online Fee Gateway:** ✅ (migration `0032`, all tenant-scoped) `payment_orders`
+  (`institution_id`, `invoice_id`, `student_id`, `order_no` unique, `amount`,
+  `currency`, `status` created|pending|success|failed|cancelled|expired|refunded,
+  `provider`, `gateway_ref`/`gateway_payment_id`/`refund_ref` — non-sensitive refs
+  only, `payment_id` → the `payments` row created on success, `checkout_url`,
+  `created_by`; unique `(provider, gateway_ref)`), and `payment_webhook_events`
+  (`provider` + `event_id` unique for **idempotency**, `event_type`,
+  `payment_order_id`, `status`). **No card/bank/UPI data is stored.** Adds the
+  `online_payments:*` permissions and grants (admin/accountant; student & parent
+  get read+create, owner-scoped). The per-institution on/off switch is a
+  `featureFlags.onlinePayments` flag in `institutions.settings`; provider secrets
+  come from env only.
 
 ### Phase C/D supporting
 - **fee_categories**, **fee_discounts/scholarships**, **fee_fines** — extend the

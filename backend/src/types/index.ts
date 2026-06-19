@@ -18,6 +18,8 @@ declare global {
   namespace Express {
     interface Request {
       user?: AuthenticatedUser;
+      /** Raw request body bytes, captured for webhook signature verification. */
+      rawBody?: Buffer;
     }
   }
 }

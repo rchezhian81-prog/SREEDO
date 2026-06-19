@@ -121,8 +121,18 @@ components (fixed/%), per-staff salary structures (with revision history), a
 monthly **payroll run** that pulls the staff summary to prorate pay (auto
 unpaid-leave deduction) computing gross/deductions/net, idempotent per
 staff/month with **finalize/lock**, **owner-scoped payslip PDFs**, and 6 reports
-(migration `0029`, `/payroll`, `payroll:*`, tenant-scoped). **Phase D operations
-are complete.** Remaining (cross-phase): **custom report builder**.
+(migration `0029`, `/payroll`, `payroll:*`, tenant-scoped). ✅ **Online Fee
+Gateway** — pluggable, provider-agnostic hosted-checkout payments against existing
+invoices: env-configured adapter (no hardcoded credentials, no card/bank/UPI data
+stored), **payment orders** with anti-tampering (server-computed amount) and
+duplicate-success prevention, a secure **signature-verified, idempotent webhook**
+that credits the invoice + creates the existing fee-receipt payment on success,
+fee-receipt PDF after payment, gateway **refund** initiation, per-institution
+**feature-flag** enablement, 5 reports + reconciliation, and graceful degradation
+(offline collection unaffected) when unconfigured (migration `0032`,
+`/online-payments`, `online_payments:*`, tenant-scoped + owner-scoped for
+student/parent). **Phase D operations are complete.** Remaining (cross-phase):
+**custom report builder**.
 
 ### Phase E — Scale & polish ⬜
 Caching, read replicas if needed, background job queue, observability/metrics,
@@ -138,7 +148,7 @@ of E2E. Every PR must keep CI green.
 | Layer | Tooling | Scope | Status |
 |-------|---------|-------|--------|
 | **Unit** | Vitest | utils (jwt, password, pagination) | ✅ 11 tests (`npm test`) |
-| **API integration** | Supertest + real Postgres | auth/RBAC, owner-scoping, tenant isolation, sequence numbering, invoice `amount_paid` + overpay, per-module flows (incl. AI insights fallback + permission guards), Swagger gating | ✅ 165 tests (`npm run test:integration`, in CI) |
+| **API integration** | Supertest + real Postgres | auth/RBAC, owner-scoping, tenant isolation, sequence numbering, invoice `amount_paid` + overpay, per-module flows (incl. AI insights fallback, online-payment webhook idempotency + signature + permission guards), Swagger gating | ✅ 177 tests (`npm run test:integration`, in CI) |
 | **Contract** | Validate responses against the generated OpenAPI spec | drift between code and Swagger | ⬜ |
 | **Frontend** | React Testing Library (components), Playwright (E2E) | login → dashboard → create student → record payment | ⬜ |
 | **Mobile** | `flutter analyze` + `flutter test` | widget/provider tests | 🟡 analyze in CI; tests ⬜ |

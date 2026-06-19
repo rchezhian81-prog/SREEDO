@@ -27,6 +27,7 @@ import { homeworkRouter } from "./modules/homework/homework.routes";
 import { hostelRouter } from "./modules/hostel/hostel.routes";
 import { inventoryRouter } from "./modules/inventory/inventory.routes";
 import { libraryRouter } from "./modules/library/library.routes";
+import { onlinePaymentsRouter } from "./modules/onlinepayments/onlinepayments.routes";
 import { transportRouter } from "./modules/transport/transport.routes";
 import { feeReceiptsRouter, idCardsRouter } from "./modules/pdfs/pdfs.routes";
 import { payrollRouter } from "./modules/payroll/payroll.routes";
@@ -48,7 +49,15 @@ export function createApp(): express.Express {
 
   app.use(helmet());
   app.use(cors({ origin: env.corsOrigin, credentials: true }));
-  app.use(express.json({ limit: "1mb" }));
+  app.use(
+    express.json({
+      limit: "1mb",
+      // Capture the raw bytes so payment webhooks can verify their HMAC signature.
+      verify: (req, _res, buf) => {
+        (req as express.Request).rawBody = buf;
+      },
+    })
+  );
   app.use(morgan(env.isProduction ? "combined" : "dev"));
 
   app.get("/health", async (_req, res) => {
@@ -88,6 +97,7 @@ export function createApp(): express.Express {
   api.use("/timetable", timetableRouter);
   api.use("/exams", examsRouter);
   api.use("/fees", feesRouter);
+  api.use("/online-payments", onlinePaymentsRouter);
   api.use("/college", collegeRouter);
   api.use("/library", libraryRouter);
   api.use("/transport", transportRouter);

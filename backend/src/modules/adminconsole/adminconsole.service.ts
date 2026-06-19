@@ -98,7 +98,11 @@ export async function institutionStats(id: string) {
             (SELECT count(*)::int FROM subjects WHERE institution_id = $1) AS subjects,
             (SELECT count(*)::int FROM users WHERE institution_id = $1) AS users,
             (SELECT COALESCE(sum(amount_due - amount_paid), 0)
-             FROM invoices WHERE institution_id = $1 AND status IN ('pending','partially_paid')) AS "feesOutstanding"
+             FROM invoices WHERE institution_id = $1 AND status IN ('pending','partially_paid')) AS "feesOutstanding",
+            (SELECT count(*)::int FROM payment_orders
+             WHERE institution_id = $1 AND status = 'success') AS "onlinePaymentsCount",
+            (SELECT COALESCE(sum(amount), 0) FROM payment_orders
+             WHERE institution_id = $1 AND status = 'success') AS "onlinePaymentsTotal"
      FROM institutions WHERE id = $1`,
     [id]
   );

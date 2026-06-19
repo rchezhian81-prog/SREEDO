@@ -2029,6 +2029,195 @@ export const REPORTS: Record<string, Report> = {
       };
     },
   },
+
+  online_payment_transactions: {
+    title: "Online Payment Transactions",
+    category: "Online Payments",
+    permission: "online_payments:reports",
+    run: async (f, inst) => {
+      const params: unknown[] = [inst];
+      const where = ["po.institution_id = $1"];
+      if (f.status) {
+        params.push(f.status);
+        where.push(`po.status = $${params.length}`);
+      }
+      if (f.dateFrom) {
+        params.push(f.dateFrom);
+        where.push(`po.created_at >= $${params.length}`);
+      }
+      if (f.dateTo) {
+        params.push(f.dateTo);
+        where.push(`po.created_at <= ($${params.length}::date + 1)`);
+      }
+      const rows = await rowsOf(
+        `SELECT po.order_no AS "orderNo", i.invoice_no AS "invoiceNo",
+                s.first_name || ' ' || s.last_name AS student,
+                po.amount, po.currency, po.status, po.provider,
+                po.gateway_ref AS "gatewayRef", po.created_at AS "createdAt"
+         FROM payment_orders po
+         JOIN invoices i ON i.id = po.invoice_id
+         JOIN students s ON s.id = po.student_id
+         WHERE ${where.join(" AND ")} ORDER BY po.created_at DESC`,
+        params
+      );
+      return {
+        title: "Online Payment Transactions",
+        columns: [
+          { key: "orderNo", label: "Order No" },
+          { key: "invoiceNo", label: "Invoice" },
+          { key: "student", label: "Student" },
+          { key: "amount", label: "Amount" },
+          { key: "currency", label: "Currency" },
+          { key: "status", label: "Status" },
+          { key: "provider", label: "Provider" },
+          { key: "gatewayRef", label: "Gateway Ref" },
+          { key: "createdAt", label: "Created" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  online_payments_successful: {
+    title: "Successful Online Payments",
+    category: "Online Payments",
+    permission: "online_payments:reports",
+    run: async (f, inst) => {
+      const params: unknown[] = [inst];
+      const where = ["po.institution_id = $1", "po.status = 'success'"];
+      if (f.dateFrom) {
+        params.push(f.dateFrom);
+        where.push(`po.created_at >= $${params.length}`);
+      }
+      if (f.dateTo) {
+        params.push(f.dateTo);
+        where.push(`po.created_at <= ($${params.length}::date + 1)`);
+      }
+      const rows = await rowsOf(
+        `SELECT po.order_no AS "orderNo", i.invoice_no AS "invoiceNo",
+                s.first_name || ' ' || s.last_name AS student,
+                po.amount, po.provider, po.gateway_payment_id AS "paymentRef",
+                po.updated_at AS "paidAt"
+         FROM payment_orders po
+         JOIN invoices i ON i.id = po.invoice_id
+         JOIN students s ON s.id = po.student_id
+         WHERE ${where.join(" AND ")} ORDER BY po.updated_at DESC`,
+        params
+      );
+      return {
+        title: "Successful Online Payments",
+        columns: [
+          { key: "orderNo", label: "Order No" },
+          { key: "invoiceNo", label: "Invoice" },
+          { key: "student", label: "Student" },
+          { key: "amount", label: "Amount" },
+          { key: "provider", label: "Provider" },
+          { key: "paymentRef", label: "Payment Ref" },
+          { key: "paidAt", label: "Paid At" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  online_payments_failed: {
+    title: "Failed / Cancelled Online Payments",
+    category: "Online Payments",
+    permission: "online_payments:reports",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT po.order_no AS "orderNo", i.invoice_no AS "invoiceNo",
+                s.first_name || ' ' || s.last_name AS student,
+                po.amount, po.status, po.provider, po.updated_at AS "updatedAt"
+         FROM payment_orders po
+         JOIN invoices i ON i.id = po.invoice_id
+         JOIN students s ON s.id = po.student_id
+         WHERE po.institution_id = $1 AND po.status IN ('failed', 'cancelled', 'expired')
+         ORDER BY po.updated_at DESC`,
+        [inst]
+      );
+      return {
+        title: "Failed / Cancelled Online Payments",
+        columns: [
+          { key: "orderNo", label: "Order No" },
+          { key: "invoiceNo", label: "Invoice" },
+          { key: "student", label: "Student" },
+          { key: "amount", label: "Amount" },
+          { key: "status", label: "Status" },
+          { key: "provider", label: "Provider" },
+          { key: "updatedAt", label: "Updated" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  online_payment_orders_pending: {
+    title: "Pending Payment Orders",
+    category: "Online Payments",
+    permission: "online_payments:reports",
+    run: async (_f, inst) => {
+      const rows = await rowsOf(
+        `SELECT po.order_no AS "orderNo", i.invoice_no AS "invoiceNo",
+                s.first_name || ' ' || s.last_name AS student,
+                po.amount, po.status, po.provider, po.created_at AS "createdAt"
+         FROM payment_orders po
+         JOIN invoices i ON i.id = po.invoice_id
+         JOIN students s ON s.id = po.student_id
+         WHERE po.institution_id = $1 AND po.status IN ('created', 'pending')
+         ORDER BY po.created_at DESC`,
+        [inst]
+      );
+      return {
+        title: "Pending Payment Orders",
+        columns: [
+          { key: "orderNo", label: "Order No" },
+          { key: "invoiceNo", label: "Invoice" },
+          { key: "student", label: "Student" },
+          { key: "amount", label: "Amount" },
+          { key: "status", label: "Status" },
+          { key: "provider", label: "Provider" },
+          { key: "createdAt", label: "Created" },
+        ],
+        rows,
+      };
+    },
+  },
+
+  gateway_reconciliation: {
+    title: "Gateway Reconciliation",
+    category: "Online Payments",
+    permission: "online_payments:reports",
+    run: async (_f, inst) => {
+      // Successful orders cross-checked against the fee payment they created.
+      const rows = await rowsOf(
+        `SELECT po.order_no AS "orderNo", i.invoice_no AS "invoiceNo",
+                po.amount AS "orderAmount", p.amount AS "creditedAmount",
+                po.gateway_payment_id AS "paymentRef",
+                CASE WHEN p.id IS NULL THEN 'missing'
+                     WHEN p.amount = po.amount THEN 'matched'
+                     ELSE 'mismatch' END AS reconciliation
+         FROM payment_orders po
+         JOIN invoices i ON i.id = po.invoice_id
+         LEFT JOIN payments p ON p.id = po.payment_id
+         WHERE po.institution_id = $1 AND po.status = 'success'
+         ORDER BY po.updated_at DESC`,
+        [inst]
+      );
+      return {
+        title: "Gateway Reconciliation",
+        columns: [
+          { key: "orderNo", label: "Order No" },
+          { key: "invoiceNo", label: "Invoice" },
+          { key: "orderAmount", label: "Order Amount" },
+          { key: "creditedAmount", label: "Credited" },
+          { key: "paymentRef", label: "Payment Ref" },
+          { key: "reconciliation", label: "Reconciliation" },
+        ],
+        rows,
+      };
+    },
+  },
 };
 
 export function listReports() {
