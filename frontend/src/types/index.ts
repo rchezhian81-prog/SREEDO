@@ -1376,3 +1376,53 @@ export interface CustomReport {
   createdAt: string;
   updatedAt: string;
 }
+
+// --- Disciplinary Records ---
+
+export type DisciplinarySeverity = "low" | "medium" | "high" | "critical";
+
+export type DisciplinaryStatus =
+  | "open"
+  | "under_review"
+  | "action_taken"
+  | "closed"
+  | "cancelled";
+
+export interface DisciplinaryRecord {
+  id: string;
+  studentId: string;
+  studentName: string;
+  admissionNo: string;
+  className: string | null;
+  sectionName: string | null;
+  programName: string | null;
+  semesterName: string | null;
+  incidentDate: string;
+  category: string;
+  severity: DisciplinarySeverity;
+  description: string | null;
+  reportedBy: string | null;
+  involvedStaff: string | null;
+  actionTaken: string | null;
+  followUpDate: string | null;
+  status: DisciplinaryStatus;
+  remarks: string | null;
+  closedAt: string | null;
+  cancelledAt: string | null;
+  cancelReason: string | null;
+  createdAt: string;
+}
+
+export interface DisciplinaryAction {
+  id: string;
+  action: string;
+  note: string | null;
+  fromStatus: DisciplinaryStatus | null;
+  toStatus: DisciplinaryStatus | null;
+  byName: string | null;
+  createdAt: string;
+}
+
+export interface DisciplinarySettings {
+  portalEnabled: boolean;
+}

@@ -17,6 +17,7 @@ const NAV = [
   { href: "/portal/documents", label: "Documents", icon: "📁" },
   { href: "/portal/certificates", label: "Certificates", icon: "📜" },
   { href: "/portal/homework", label: "Homework", icon: "📚" },
+  { href: "/portal/disciplinary", label: "Disciplinary", icon: "⚖️" },
   { href: "/portal/fees", label: "Fees", icon: "💳" },
   { href: "/portal/announcements", label: "Notices", icon: "📣" },
   { href: "/portal/inbox", label: "Inbox", icon: "📨" },
