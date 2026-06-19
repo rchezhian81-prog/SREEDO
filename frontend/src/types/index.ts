@@ -1342,3 +1342,37 @@ export interface ThreadDetail {
   participants: ThreadParticipant[];
   messages: ThreadMessage[];
 }
+
+// --- Custom Report Builder ---
+
+export interface ReportSource {
+  key: string;
+  title: string;
+  category: string;
+  permission: string;
+}
+
+export interface ReportColumn {
+  key: string;
+  label: string;
+}
+
+export interface CustomReportResult {
+  title: string;
+  columns: ReportColumn[];
+  rows: Record<string, unknown>[];
+}
+
+export interface CustomReport {
+  id: string;
+  name: string;
+  reportKey: string;
+  columns: string[];
+  filters: Record<string, string>;
+  sort: { key: string; dir: string } | null;
+  groupBy: string | null;
+  visibility: "private" | "shared";
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
