@@ -361,7 +361,10 @@ See [`ARCHITECTURE.md`](./ARCHITECTURE.md) §AI for data flow. Every AI feature 
 - **PostgreSQL is the system of record**; MongoDB is optional (audit + AI only).
 - **OpenAI / SMTP / object storage / SMS** are external, optional integrations.
 - **Hostinger VPS + Docker Compose** is the reference deployment target.
-- Mobile app currently read-only (v0.1); write features land with the portals.
+- Mobile app: **parent/student parity (Phase 1)** shipped — auth, dashboard,
+  attendance, fees + online payment, homework view/submit, notices/inbox, and
+  PDF downloads, all over the existing owner/tenant-scoped APIs. Staff mobile
+  parity is a later phase.
 
 ## 9. Success metrics
 

@@ -1,7 +1,26 @@
 # SRE EDU OS — Mobile
 
-Flutter app for staff and parents: dashboard, notice board and profile,
-with Firebase Cloud Messaging for push notifications.
+Flutter app for the SRE EDU OS school ERP, with Firebase Cloud Messaging for
+push notifications.
+
+## Parent/Student parity (Phase 1)
+
+The app is role-aware. Students and parents get a portal experience built
+entirely on the existing owner/tenant-scoped backend APIs (Bearer auth via
+`/auth/login` with refresh + graceful session expiry):
+
+- **Dashboard** with a parent **child selector** (attendance rate, outstanding
+  fees, pending invoices, quick links).
+- **Attendance** — monthly summary + recent records.
+- **Fees** — pending/paid invoices, **Pay Online** via the Online Fee Gateway
+  (hosted checkout), a payment-result screen, and fee-receipt download.
+- **Homework** — list, detail, attachment download, and text submission.
+- **Notices** — announcements + a message **inbox** with read state.
+- **Documents / Report cards / ID card** — authenticated PDF download + view.
+- **Profile** for the selected student/child.
+
+Staff keep the existing dashboard/notices/profile. Staff mobile parity is a
+later phase.
 
 ## Getting started
 
