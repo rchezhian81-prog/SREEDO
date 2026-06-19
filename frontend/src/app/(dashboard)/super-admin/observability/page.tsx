@@ -278,6 +278,36 @@ export default function ObservabilityPage() {
                 </div>
               </div>
 
+              {overview.cache && (
+                <div>
+                  <SectionHeading>Hot-path cache</SectionHeading>
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <KpiCard
+                      label="Hits"
+                      value={formatNumber(overview.cache.hits)}
+                      hint={(() => {
+                        const reads = overview.cache.hits + overview.cache.misses;
+                        return reads > 0
+                          ? `${Math.round((overview.cache.hits / reads) * 100)}% hit rate`
+                          : "no reads yet";
+                      })()}
+                    />
+                    <KpiCard
+                      label="Misses"
+                      value={formatNumber(overview.cache.misses)}
+                    />
+                    <KpiCard
+                      label="Invalidations"
+                      value={formatNumber(overview.cache.invalidations)}
+                    />
+                    <KpiCard
+                      label="Live entries"
+                      value={formatNumber(overview.cache.size)}
+                    />
+                  </div>
+                </div>
+              )}
+
               <div>
                 <SectionHeading>Scheduled report delivery</SectionHeading>
                 <CountByStatus record={overview.scheduledReports} />

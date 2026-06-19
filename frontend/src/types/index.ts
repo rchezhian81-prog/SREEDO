@@ -1687,6 +1687,13 @@ export interface ObservabilityOverview {
     queue: Record<string, number>;
   };
   scheduledReports: Record<string, number>;
+  /** Hot-path read cache counters (in-process). */
+  cache: {
+    hits: number;
+    misses: number;
+    invalidations: number;
+    size: number;
+  };
   recentFailures: ObservabilityRecentFailure[];
   worker: { enabled: boolean; intervalMs: number };
 }
