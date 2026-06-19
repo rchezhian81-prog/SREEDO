@@ -176,6 +176,21 @@ Auth column legend: **public** · **auth** (any logged-in) · or explicit role(s
 | GET | `/search` | `ai:document_search` | Semantic document search (keyword fallback); `q` required |
 | GET | `/suggestions` | `ai:workflow_suggestions` | Deterministic workflow suggestions |
 
+### Custom Report Builder — `/api/v1/custom-reports` *(tenant-scoped; `custom_reports:*`; running/exporting also re-checks the underlying report's own permission)*
+| Method | Path | Permission | Purpose |
+|--------|------|------------|---------|
+| GET | `/sources` | `custom_reports:read` | Available report sources (Reports Center registry) |
+| GET | `/` | `custom_reports:read` | List saved reports (shared + mine) |
+| POST | `/` | `custom_reports:create` | Create a saved definition (shared needs `:share`) |
+| POST | `/preview` | `custom_reports:run` | Ad-hoc run without saving (underlying permission enforced) |
+| POST | `/export` | `custom_reports:export` | Ad-hoc export CSV/PDF (`?format=csv\|pdf`) |
+| GET | `:id` | `custom_reports:read` | Get a definition (private: creator-only, else 404) |
+| PATCH | `:id` | `custom_reports:update` | Edit (creator/admin; shared needs `:share`) |
+| DELETE | `:id` | `custom_reports:delete` | Delete (creator/admin) |
+| POST | `:id/duplicate` | `custom_reports:create` | Duplicate as a private copy |
+| GET | `:id/run` | `custom_reports:run` | Run a saved report (underlying permission enforced) |
+| GET | `:id/export` | `custom_reports:export` | Export a saved report CSV/PDF (`?format=csv\|pdf`) |
+
 ---
 
 ## Part 2 — Planned endpoints (by phase)
