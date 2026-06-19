@@ -1162,3 +1162,103 @@ export interface GatewayStatus {
   configured: boolean; provider: string | null; currency: string;
   institutionEnabled: boolean; enabled: boolean;
 }
+
+// --- Fee Management Depth ---
+
+export interface FeeCategory {
+  id: string;
+  name: string;
+  code: string | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export type FeeTermType =
+  | "one_time"
+  | "monthly"
+  | "quarterly"
+  | "term"
+  | "annual";
+
+export interface FeeSchedule {
+  id: string;
+  name: string;
+  categoryId: string | null;
+  categoryName: string | null;
+  amount: number | string;
+  termType: FeeTermType | string;
+  termLabel: string | null;
+  dueDate: string;
+  classId: string | null;
+  sectionId: string | null;
+  programId: string | null;
+  semesterId: string | null;
+  studentId: string | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface FeeSchedulePreview {
+  schedule: FeeSchedule;
+  targetCount: number;
+  toGenerate: number;
+  students: { id: string; name: string; alreadyInvoiced: boolean }[];
+}
+
+export type FineType = "fixed" | "per_day" | "percent";
+
+export interface FineRule {
+  id: string;
+  name: string;
+  categoryId: string | null;
+  categoryName: string | null;
+  fineType: FineType | string;
+  amount: number | string;
+  graceDays: number | null;
+  createdAt: string;
+}
+
+export type DiscountKind = "discount" | "scholarship";
+export type DiscountType = "fixed" | "percent";
+
+export interface FeeDiscount {
+  id: string;
+  name: string;
+  kind: DiscountKind | string;
+  categoryId: string | null;
+  categoryName: string | null;
+  discountType: DiscountType | string;
+  value: number | string;
+  createdAt: string;
+}
+
+export interface InvoiceBreakdown {
+  invoice: {
+    invoiceNo: string;
+    amountDue: number | string;
+    amountPaid: number | string;
+    discountTotal: number | string;
+    fineTotal: number | string;
+    status: string;
+    categoryName: string | null;
+  };
+  base: number | string;
+  discountTotal: number | string;
+  fineTotal: number | string;
+  outstanding: number | string;
+  fines: {
+    id: string;
+    amount: number | string;
+    days: number | null;
+    status: string;
+    reason: string | null;
+    createdAt: string;
+  }[];
+  discounts: {
+    id: string;
+    amount: number | string;
+    status: string;
+    reason: string | null;
+    createdAt: string;
+  }[];
+}
