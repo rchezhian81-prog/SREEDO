@@ -95,6 +95,17 @@ Auth column legend: **public** · **auth** (any logged-in) · or explicit role(s
 | POST | `/invoices/:id/payments` | Record payment (overpay-guarded) |
 | GET | `/summary` | Fee summary (collected/pending) |
 
+### Online Payments — `/api/v1/online-payments` *(tenant-scoped; `online_payments:*`; degrades to 503 when the gateway is unconfigured/disabled)*
+| Method | Path | Permission | Purpose |
+|--------|------|------------|---------|
+| POST | `/webhook` | none (HMAC-verified) | Gateway webhook — signature-verified, idempotent; credits the invoice on success |
+| GET / PATCH | `/settings` | `online_payments:settings` | Gateway status (no secrets) / enable-disable per institution |
+| GET | `/` | `online_payments:read` | List orders (owner-scoped for student/parent) |
+| POST | `/` | `online_payments:create` | Create an order for a pending invoice (server-computed amount → hosted checkout) |
+| GET | `/:id` | `online_payments:read` | Order detail (owner-scoped) |
+| GET | `/:id/receipt` | `online_payments:read` | Fee-receipt PDF after success (owner-scoped) |
+| POST | `/:id/refund` | `online_payments:refund` | Gateway refund initiation |
+
 ### Announcements — `/api/v1/announcements` *(write: admin, teacher)*
 | Method | Path | Purpose |
 |--------|------|---------|

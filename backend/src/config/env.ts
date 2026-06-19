@@ -72,6 +72,15 @@ export const env = {
 
   seedOnStart: process.env.SEED_ON_START === "true",
 
+  // Online payment gateway (provider-agnostic hosted checkout) — optional.
+  // When PAYMENT_GATEWAY_PROVIDER + PAYMENT_GATEWAY_WEBHOOK_SECRET are unset the
+  // gateway is "not configured": online payments degrade gracefully and offline
+  // fee collection keeps working. No provider credentials are ever hardcoded.
+  paymentGatewayProvider: optional("PAYMENT_GATEWAY_PROVIDER"),
+  paymentGatewayWebhookSecret: optional("PAYMENT_GATEWAY_WEBHOOK_SECRET"),
+  paymentCheckoutBaseUrl: optional("PAYMENT_CHECKOUT_BASE_URL"),
+  paymentCurrency: process.env.PAYMENT_CURRENCY ?? "INR",
+
   // API docs (Swagger) default off in production; override with ENABLE_API_DOCS.
   enableApiDocs:
     process.env.ENABLE_API_DOCS !== undefined

@@ -245,3 +245,32 @@ Deliverable **#5 Module-wise workflow**. Step-by-step flows for each module.
    and `/college/students/:id/cgpa` (student→self, parent→child, staff→any).
 5. **Fees/timetable:** fee structures may target a program/semester; a timetable
    entry targets a section (school) **or** a semester (college).
+
+## T. Online Fee Gateway ✅ (Phase D)
+1. **Configure (optional):** set `PAYMENT_GATEWAY_PROVIDER` +
+   `PAYMENT_GATEWAY_WEBHOOK_SECRET` (env, never committed). When unset the gateway
+   is "not configured" — `POST /online-payments` returns 503 and **offline fee
+   collection is unaffected**. An admin can also toggle online payments per
+   institution via `PATCH /online-payments/settings` (`online_payments:settings`;
+   stored as a `featureFlags.onlinePayments` flag). `GET /online-payments/settings`
+   shows status (provider/enabled) and **never returns secret keys**.
+2. **Initiate:** an admin/accountant, or a **student/parent for their own/linked**
+   invoice (owner-scoped), calls `POST /online-payments { invoiceId }`
+   (`online_payments:create`). The server charges the invoice's **outstanding
+   balance** (a mismatching client `amount` is rejected — anti-tampering),
+   refuses an invoice that already has a successful payment, creates a
+   `payment_orders` row, and returns a **hosted checkout URL** to redirect to.
+3. **Webhook:** the provider calls `POST /online-payments/webhook` (public). The
+   raw body's **HMAC-SHA256 signature is verified**; the event is **idempotent**
+   (`payment_webhook_events` unique per provider+event id). On `success` it locks
+   the order, credits the invoice via the normal `payments` ledger (`method =
+   online`), marks the order `success`, and links the created payment — so the
+   existing **fee-receipt PDF** is available at `/online-payments/:id/receipt`.
+   `failed`/`cancelled`/`expired` update the order without crediting. Only the
+   matched order's institution is touched — no cross-tenant data is read/written.
+4. **Manage:** admin/accountant can **refund** a successful order
+   (`POST /online-payments/:id/refund`, `online_payments:refund`; gateway-initiated,
+   reconcile the fee ledger separately). Reports (Reports Center,
+   `online_payments:reports`): transactions, successful, failed/cancelled, pending
+   orders, and **gateway reconciliation** (order vs credited amount). The Super
+   Admin cross-tenant snapshot includes per-institution successful-payment totals.

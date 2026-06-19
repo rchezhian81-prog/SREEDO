@@ -18,6 +18,7 @@ import type {
   Invoice,
   InvoiceWithPayments,
   Paginated,
+  PaymentOrder,
   StudentSummary,
 } from "@/types";
 
@@ -87,6 +88,11 @@ export default function PortalFeesPage() {
   const [paymentsError, setPaymentsError] = useState<string | null>(null);
   const [receiptError, setReceiptError] = useState<string | null>(null);
 
+  // "Pay online" per-row state.
+  const [payingId, setPayingId] = useState<string | null>(null);
+  const [payError, setPayError] = useState<string | null>(null);
+  const [gatewayUnavailable, setGatewayUnavailable] = useState(false);
+
   useEffect(() => {
     if (!studentId) {
       setSummary(null);
@@ -146,6 +152,32 @@ export default function PortalFeesPage() {
     }
   };
 
+  const payOnline = async (invoice: Invoice) => {
+    setPayError(null);
+    setGatewayUnavailable(false);
+    setPayingId(invoice.id);
+    try {
+      const order = await portalApi.post<PaymentOrder>("/online-payments", {
+        invoiceId: invoice.id,
+      });
+      if (order.checkoutUrl) {
+        window.location.href = order.checkoutUrl;
+        return; // leave the loading state on while navigating away
+      }
+      setPayError("Could not start the payment. Please try again.");
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 503) {
+        setGatewayUnavailable(true);
+      } else {
+        setPayError(
+          err instanceof ApiError ? err.message : "Failed to start payment"
+        );
+      }
+    } finally {
+      setPayingId(null);
+    }
+  };
+
   if (!studentId) {
     return (
       <>
@@ -172,6 +204,20 @@ export default function PortalFeesPage() {
             value={f.outstanding.toLocaleString()}
           />
           <StatCard label="Pending invoices" value={f.pendingInvoices} />
+        </div>
+      )}
+
+      {gatewayUnavailable && (
+        <Card className="mb-4 border-slate-200 bg-slate-50">
+          <p className="text-sm text-slate-600">
+            Online payment is not available right now. Please pay at the office
+            or contact the school.
+          </p>
+        </Card>
+      )}
+      {payError && (
+        <div className="mb-4">
+          <ErrorNote message={payError} />
         </div>
       )}
 
@@ -209,12 +255,24 @@ export default function PortalFeesPage() {
                     </Badge>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => viewPayments(inv)}
-                      className="text-xs font-medium text-brand-600 hover:text-brand-700"
-                    >
-                      View payments
-                    </button>
+                    <div className="flex items-center justify-end gap-3">
+                      {(inv.status === "pending" ||
+                        inv.status === "partially_paid") && (
+                        <button
+                          onClick={() => payOnline(inv)}
+                          disabled={payingId === inv.id}
+                          className="text-xs font-medium text-brand-600 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {payingId === inv.id ? "Starting…" : "Pay online"}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => viewPayments(inv)}
+                        className="text-xs font-medium text-brand-600 hover:text-brand-700"
+                      >
+                        View payments
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

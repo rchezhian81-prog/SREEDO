@@ -10,6 +10,8 @@ export { query };
 export const app = createApp();
 
 const TABLES = [
+  "payment_webhook_events",
+  "payment_orders",
   "data_exports",
   "payslip_lines",
   "payslips",
