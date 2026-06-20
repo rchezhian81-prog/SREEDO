@@ -16,6 +16,7 @@ import {
   Spinner,
 } from "@/components/ui";
 import type { DocumentMeta } from "@/types";
+import { useI18n } from "@/i18n/I18nProvider";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
 
@@ -65,6 +66,7 @@ function formatKb(bytes: number) {
 }
 
 export default function PortalDocumentsPage() {
+  const { t } = useI18n();
   const studentId = usePortalStore((state) => state.selectedStudentId);
   const role = usePortalStore((state) => state.user?.role);
   const isStudent = role === "student";
@@ -132,7 +134,7 @@ export default function PortalDocumentsPage() {
   if (!studentId) {
     return (
       <>
-        <PageHeader title="Documents" />
+        <PageHeader title={t("portalPages.documents.title")} />
         <EmptyState message="No student linked to your account yet." />
       </>
     );
@@ -140,7 +142,7 @@ export default function PortalDocumentsPage() {
 
   return (
     <>
-      <PageHeader title="Documents" subtitle="View and download your files" />
+      <PageHeader title={t("portalPages.documents.title")} subtitle="View and download your files" />
 
       <div className="space-y-6">
         {isStudent && (

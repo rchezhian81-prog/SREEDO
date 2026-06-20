@@ -13,6 +13,7 @@ import {
   Spinner,
 } from "@/components/ui";
 import type { AttendanceRow, SchoolClass } from "@/types";
+import { useI18n } from "@/i18n/I18nProvider";
 
 const STATUSES = ["present", "absent", "late", "excused"] as const;
 type Status = (typeof STATUSES)[number];
@@ -30,6 +31,7 @@ interface SectionOption {
 }
 
 export default function AttendancePage() {
+  const { t } = useI18n();
   const [sections, setSections] = useState<SectionOption[]>([]);
   const [sectionId, setSectionId] = useState("");
   const [date, setDate] = useState(() =>
@@ -113,8 +115,8 @@ export default function AttendancePage() {
   return (
     <>
       <PageHeader
-        title="Attendance"
-        subtitle="Mark and review daily attendance"
+        title={t("pages.attendance.title")}
+        subtitle={t("pages.attendance.subtitle")}
       />
 
       <div className="mb-4 flex flex-wrap items-end gap-3">

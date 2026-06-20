@@ -15,6 +15,7 @@ import {
   Spinner,
 } from "@/components/ui";
 import type { DocumentMeta, Paginated, Student } from "@/types";
+import { useI18n } from "@/i18n/I18nProvider";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
 
@@ -78,6 +79,7 @@ function formatKb(bytes: number) {
 }
 
 export default function DocumentsPage() {
+  const { t } = useI18n();
   const role = useAuthStore((state) => state.user?.role);
   const isAdmin = role === "admin";
 
@@ -241,8 +243,8 @@ export default function DocumentsPage() {
   return (
     <>
       <PageHeader
-        title="Documents"
-        subtitle="Upload and manage files & attachments"
+        title={t("pages.documents.title")}
+        subtitle={t("pages.documents.subtitle")}
       />
 
       {loading ? (

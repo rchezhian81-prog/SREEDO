@@ -23,6 +23,7 @@ import type {
   SentMessage,
   Student,
 } from "@/types";
+import { useI18n } from "@/i18n/I18nProvider";
 
 type Tab = "compose" | "sent" | "inbox";
 
@@ -60,6 +61,7 @@ function tabClass(active: boolean) {
 }
 
 export default function CommunicationPage() {
+  const { t } = useI18n();
   const role = useAuthStore((state) => state.user?.role);
   const canSendNotifications =
     role === "admin" || role === "teacher" || role === "accountant";
@@ -70,8 +72,8 @@ export default function CommunicationPage() {
   return (
     <>
       <PageHeader
-        title="Communication"
-        subtitle="Send messages and manage your inbox"
+        title={t("pages.communication.title")}
+        subtitle={t("pages.communication.subtitle")}
       />
 
       <div className="mb-6 flex gap-2 border-b border-slate-200">

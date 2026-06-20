@@ -6,8 +6,10 @@ import { api } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth-store";
 import { Card, PageHeader, Spinner } from "@/components/ui";
 import type { Period, Room } from "@/types";
+import { useI18n } from "@/i18n/I18nProvider";
 
 export default function TimetableHubPage() {
+  const { t } = useI18n();
   const role = useAuthStore((state) => state.user?.role);
   const isAdmin = role === "admin";
 
@@ -30,7 +32,7 @@ export default function TimetableHubPage() {
 
   return (
     <>
-      <PageHeader title="Timetable" subtitle="Class & teacher schedules" />
+      <PageHeader title={t("pages.timetable.title")} subtitle={t("pages.timetable.subtitle")} />
 
       {loading ? (
         <Spinner />

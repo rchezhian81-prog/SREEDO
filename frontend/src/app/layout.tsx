@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { I18nProvider } from "@/i18n/I18nProvider";
 
 export const metadata: Metadata = {
   title: "SRE EDU OS",
@@ -11,7 +12,9 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <I18nProvider>{children}</I18nProvider>
+      </body>
     </html>
   );
 }

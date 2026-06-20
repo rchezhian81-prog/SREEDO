@@ -11,6 +11,7 @@ import {
   Spinner,
 } from "@/components/ui";
 import type { TimetableEntry } from "@/types";
+import { useI18n } from "@/i18n/I18nProvider";
 
 const DAYS = [
   { value: 1, label: "Monday" },
@@ -32,6 +33,7 @@ interface PeriodRow {
 }
 
 export default function PortalTimetablePage() {
+  const { t } = useI18n();
   const studentId = usePortalStore((state) => state.selectedStudentId);
   const [entries, setEntries] = useState<TimetableEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -77,7 +79,7 @@ export default function PortalTimetablePage() {
   if (!studentId) {
     return (
       <>
-        <PageHeader title="Timetable" />
+        <PageHeader title={t("portalPages.timetable.title")} />
         <EmptyState message="No student linked to your account yet." />
       </>
     );
@@ -87,7 +89,7 @@ export default function PortalTimetablePage() {
 
   return (
     <>
-      <PageHeader title="Timetable" subtitle="Weekly class schedule" />
+      <PageHeader title={t("portalPages.timetable.title")} subtitle="Weekly class schedule" />
       <ErrorNote message={error} />
       {periods.length === 0 ? (
         <EmptyState message="No timetable has been published yet." />

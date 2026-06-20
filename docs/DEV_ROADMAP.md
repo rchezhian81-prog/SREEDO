@@ -277,8 +277,22 @@ per window). **Restore** (`/backups/:id/restore`) is global-only, always needs
 with a non-destructive **preview** first, and **every attempt is audited**. **Retention**
 keeps the latest N successful backups (NULL = never delete). **Metrics**:
 `backups_total`/`restores_total` by result, `backups_stored`, `backup_last_success_timestamp_seconds`
-+ a `backups` block on `/observability/overview`. Remaining:
-read replicas if needed, accessibility audit, i18n, load testing.
++ a `backups` block on `/observability/overview`.
+✅ **Internationalization (i18n)** — multi-language support for the **web frontend**
+(English default + **Tamil**, designed so Hindi/others slot in via one dictionary file).
+A tiny client-side framework (`src/i18n/`): flat dot-keyed dictionaries (`en` source of
+truth, `ta` Partial), a `translate()` with **English fallback** then key-fallback (never
+crashes) + `{var}` interpolation, an `I18nProvider` (default locale on SSR/first paint to
+avoid hydration mismatch, then the **persisted** per-browser choice from `localStorage`),
+and a `LanguageSwitcher` in the **staff dashboard, parent/student portal, and both login
+screens**. Translated surfaces: all navigation (school + super-admin + portal), login
+(incl. validation messages via translated keys), layout chrome (sign-out/viewing/app
+name), common buttons (save/cancel/delete/edit/download/upload/export/search/filter/submit),
+and page headers across the listed modules. Backend/API stay English-stable; the frontend
+maps its own fallback messages. PDFs/reports are unchanged (keys structured for later).
+Frontend now has its own **vitest** suite (i18n core: default/Tamil-load/fallback/interp/
+locale-validation), wired into CI (`typecheck` + `test` + `build`). Remaining:
+read replicas if needed, accessibility audit, load testing.
 
 ---
 
@@ -292,7 +306,7 @@ of E2E. Every PR must keep CI green.
 | **Unit** | Vitest | utils (jwt, password, pagination) | ✅ 11 tests (`npm test`) |
 | **API integration** | Supertest + real Postgres | auth/RBAC, owner-scoping, tenant isolation, sequence numbering, invoice `amount_paid` + overpay, per-module flows (incl. AI insights fallback, online-payment webhook idempotency + signature, fee schedule generation/fines/discounts, TC issue/dues-override/owner-scoped download, thread participant-scoping/read-state + permission guards, custom-report saved/ad-hoc run + column projection + CSV/PDF export + share/private access + underlying-report permission enforcement, disciplinary incident workflow + cancel/delete/close permission gating + portal-default-off owner-scoped read + reports, scheduled-report manual/scheduled run + run-history success/failure + CSV/PDF delivery + recipient & underlying-report permission enforcement + email graceful fallback, platform super-admin lifecycle/suspend/activate/subscription/limits + durable audit trail + KPIs + audited impersonation + tenant-denied boundary + no-secret-leak, job-queue enqueue/dedupe + safe claim + retry-backoff/permanent-failure + scheduler-tick enqueues+runs scheduled reports + retry/cancel permission gates + tenant isolation + no-secret-leak, observability correlation-id generate/preserve + structured-log no-secret/safe-fields + /health + /ready DB-readiness + Prometheus metrics + metrics permission gate + job-failure metric increment + student/parent blocked, RBAC catalogue/matrix + grant/revoke + cache-invalidation-takes-effect + duplicate-idempotent + invalid-rejected + super_admin-critical-protected + audit + tenant-denied + no-secret-leak, caching hot-read hit/miss + dashboard invalidation-after-write + tenant-scoped cache isolation + RBAC catalogue/matrix invalidation-on-role-change + no-stale-permission-after-role-change + cache metrics counters in /observability + super-admin boundary, backup manual-trigger + metadata + protected download + non-super-admin denied + restore confirmation/force-required + global-only restore + confirmed full restore round-trip + retention cleanup + retention-off-never-deletes + scheduled-backup enqueue+run + durable audit + backup/restore metrics + no-secret/path-exposure), Swagger gating | ✅ 295 tests (`npm run test:integration`, in CI) |
 | **Contract** | Validate responses against the generated OpenAPI spec | drift between code and Swagger | ⬜ |
-| **Frontend** | React Testing Library (components), Playwright (E2E) | login → dashboard → create student → record payment | ⬜ |
+| **Frontend** | Vitest (i18n core ✅); React Testing Library (components), Playwright (E2E) ⬜ | i18n default/Tamil-load/fallback/interpolation/locale-validation; later: login → dashboard → create student → record payment | 🟡 9 i18n tests (`npm test`, in CI) |
 | **Mobile** | `flutter analyze` + `flutter test` | parent/student (Phase 1) + **staff (Phase 2)**: attendance/marks/homework/communication/reports/payslips/timetable + quick views | 🟡 analyze in CI + smoke tests; widget/provider tests ⬜ |
 | **Security** | dependency audit, `/security-review` on diffs, authz tests | RBAC, owner-scope, input validation, rate limits | 🟡 |
 | **Performance** | k6/autocannon on hot endpoints | P95 < 300 ms at seed scale | ⬜ |

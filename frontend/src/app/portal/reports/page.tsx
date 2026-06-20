@@ -14,6 +14,7 @@ import {
   Spinner,
 } from "@/components/ui";
 import type { Exam } from "@/types";
+import { useI18n } from "@/i18n/I18nProvider";
 
 async function downloadPortalPdf(path: string, filename: string) {
   const base =
@@ -39,6 +40,7 @@ async function downloadPortalPdf(path: string, filename: string) {
 }
 
 export default function PortalReportsPage() {
+  const { t } = useI18n();
   const studentId = usePortalStore((state) => state.selectedStudentId);
   const [exams, setExams] = useState<Exam[]>([]);
   const [examId, setExamId] = useState("");
@@ -82,7 +84,7 @@ export default function PortalReportsPage() {
   if (!studentId) {
     return (
       <>
-        <PageHeader title="Report Card" />
+        <PageHeader title={t("portalPages.reports.title")} />
         <EmptyState message="No student linked to your account yet." />
       </>
     );
@@ -93,7 +95,7 @@ export default function PortalReportsPage() {
   return (
     <>
       <PageHeader
-        title="Report Card"
+        title={t("portalPages.reports.title")}
         subtitle="Download a report card for an exam"
       />
       <Card>

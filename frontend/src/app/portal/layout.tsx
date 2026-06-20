@@ -6,22 +6,25 @@ import { usePathname, useRouter } from "next/navigation";
 import { portalApi } from "@/lib/portal-api";
 import { usePortalStore } from "@/stores/portal-store";
 import { cx, Select, Spinner } from "@/components/ui";
+import { useI18n } from "@/i18n/I18nProvider";
+import type { TranslationKey } from "@/i18n";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import type { PortalChild, User } from "@/types";
 
-const NAV = [
-  { href: "/portal", label: "Dashboard", icon: "📊" },
-  { href: "/portal/profile", label: "Profile", icon: "🪪" },
-  { href: "/portal/attendance", label: "Attendance", icon: "🗓️" },
-  { href: "/portal/timetable", label: "Timetable", icon: "📅" },
-  { href: "/portal/reports", label: "Report Card", icon: "📄" },
-  { href: "/portal/documents", label: "Documents", icon: "📁" },
-  { href: "/portal/certificates", label: "Certificates", icon: "📜" },
-  { href: "/portal/homework", label: "Homework", icon: "📚" },
-  { href: "/portal/disciplinary", label: "Disciplinary", icon: "⚖️" },
-  { href: "/portal/fees", label: "Fees", icon: "💳" },
-  { href: "/portal/announcements", label: "Notices", icon: "📣" },
-  { href: "/portal/inbox", label: "Inbox", icon: "📨" },
-  { href: "/portal/messages", label: "Messages", icon: "💬" },
+const NAV: { href: string; tkey: TranslationKey; icon: string }[] = [
+  { href: "/portal", tkey: "portalNav.dashboard", icon: "📊" },
+  { href: "/portal/profile", tkey: "portalNav.profile", icon: "🪪" },
+  { href: "/portal/attendance", tkey: "portalNav.attendance", icon: "🗓️" },
+  { href: "/portal/timetable", tkey: "portalNav.timetable", icon: "📅" },
+  { href: "/portal/reports", tkey: "portalNav.reportCard", icon: "📄" },
+  { href: "/portal/documents", tkey: "portalNav.documents", icon: "📁" },
+  { href: "/portal/certificates", tkey: "portalNav.certificates", icon: "📜" },
+  { href: "/portal/homework", tkey: "portalNav.homework", icon: "📚" },
+  { href: "/portal/disciplinary", tkey: "portalNav.disciplinary", icon: "⚖️" },
+  { href: "/portal/fees", tkey: "portalNav.fees", icon: "💳" },
+  { href: "/portal/announcements", tkey: "portalNav.notices", icon: "📣" },
+  { href: "/portal/inbox", tkey: "portalNav.inbox", icon: "📨" },
+  { href: "/portal/messages", tkey: "portalNav.messages", icon: "💬" },
 ];
 
 export default function PortalLayout({
@@ -31,6 +34,7 @@ export default function PortalLayout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const { t } = useI18n();
   const isLogin = pathname === "/portal/login";
 
   const {
@@ -99,7 +103,8 @@ export default function PortalLayout({
             S
           </div>
           <span className="font-semibold text-slate-900">
-            SRE EDU OS · Portal
+            {t("app.name")}
+            {t("app.portalSuffix")}
           </span>
         </div>
 
@@ -107,7 +112,7 @@ export default function PortalLayout({
           {kids.length > 1 ? (
             <label className="block">
               <span className="mb-1 block text-xs font-medium text-slate-500">
-                Viewing
+                {t("common.viewing")}
               </span>
               <Select
                 value={selectedStudentId ?? ""}
@@ -122,7 +127,9 @@ export default function PortalLayout({
             </label>
           ) : selectedChild ? (
             <div>
-              <p className="text-xs font-medium text-slate-500">Viewing</p>
+              <p className="text-xs font-medium text-slate-500">
+                {t("common.viewing")}
+              </p>
               <p className="truncate text-sm font-medium text-slate-900">
                 {selectedChild.firstName} {selectedChild.lastName}
               </p>
@@ -147,7 +154,7 @@ export default function PortalLayout({
               )}
             >
               <span aria-hidden>{item.icon}</span>
-              {item.label}
+              {t(item.tkey)}
             </Link>
           ))}
         </nav>
@@ -159,11 +166,12 @@ export default function PortalLayout({
           <p className="truncate text-xs capitalize text-slate-500">
             {user?.role?.replace("_", " ")}
           </p>
+          <LanguageSwitcher className="mt-3" />
           <button
             onClick={handleLogout}
-            className="mt-3 text-sm font-medium text-red-600 hover:text-red-700"
+            className="mt-3 block text-sm font-medium text-red-600 hover:text-red-700"
           >
-            Sign out
+            {t("common.signOut")}
           </button>
         </div>
       </aside>

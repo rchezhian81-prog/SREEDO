@@ -6,65 +6,68 @@ import { usePathname, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth-store";
 import { cx, Spinner } from "@/components/ui";
+import { useI18n } from "@/i18n/I18nProvider";
+import type { TranslationKey } from "@/i18n";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 
-type NavItem = { href: string; label: string; icon: string; adminOnly?: boolean };
+type NavItem = { href: string; tkey: TranslationKey; icon: string; adminOnly?: boolean };
 
 const SCHOOL_NAV: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: "📊" },
-  { href: "/students", label: "Students", icon: "🎓" },
-  { href: "/teachers", label: "Teachers", icon: "👩‍🏫" },
-  { href: "/classes", label: "Classes", icon: "🏫" },
-  { href: "/timetable", label: "Timetable", icon: "📅" },
-  { href: "/college", label: "College", icon: "🏛️" },
-  { href: "/library", label: "Library", icon: "📖" },
-  { href: "/transport", label: "Transport", icon: "🚌" },
-  { href: "/hostel", label: "Hostel", icon: "🏨" },
-  { href: "/inventory", label: "Inventory", icon: "📦" },
-  { href: "/staff", label: "Staff Attendance", icon: "🧑‍💼" },
-  { href: "/leave", label: "Leave", icon: "🌴" },
-  { href: "/payroll", label: "Payroll", icon: "💰" },
-  { href: "/attendance", label: "Attendance", icon: "🗓️" },
-  { href: "/exams", label: "Exams", icon: "📝" },
-  { href: "/reports", label: "Reports", icon: "📄" },
-  { href: "/documents", label: "Documents", icon: "📁" },
-  { href: "/homework", label: "Homework", icon: "📚" },
-  { href: "/id-cards", label: "ID Cards", icon: "🪪" },
-  { href: "/transfer-certificates", label: "Transfer Certs", icon: "📜" },
-  { href: "/reports-center", label: "Reports Center", icon: "📈" },
-  { href: "/report-builder", label: "Report Builder", icon: "🧱" },
-  { href: "/scheduled-reports", label: "Scheduled Reports", icon: "⏰" },
-  { href: "/disciplinary", label: "Disciplinary", icon: "⚖️" },
-  { href: "/fees", label: "Fees", icon: "💳" },
-  { href: "/fees/setup", label: "Fee Setup", icon: "🧾" },
-  { href: "/online-payments", label: "Online Payments", icon: "🏦" },
-  { href: "/announcements", label: "Announcements", icon: "📣" },
-  { href: "/communication", label: "Communication", icon: "📨" },
-  { href: "/messaging", label: "Messaging", icon: "💬" },
-  { href: "/assistant", label: "AI Assistant", icon: "✨" },
-  { href: "/ai-insights", label: "AI Insights", icon: "🧠" },
-  { href: "/jobs", label: "Jobs", icon: "⚙️", adminOnly: true },
-  { href: "/users", label: "Users", icon: "👥", adminOnly: true },
+  { href: "/dashboard", tkey: "nav.dashboard", icon: "📊" },
+  { href: "/students", tkey: "nav.students", icon: "🎓" },
+  { href: "/teachers", tkey: "nav.teachers", icon: "👩‍🏫" },
+  { href: "/classes", tkey: "nav.classes", icon: "🏫" },
+  { href: "/timetable", tkey: "nav.timetable", icon: "📅" },
+  { href: "/college", tkey: "nav.college", icon: "🏛️" },
+  { href: "/library", tkey: "nav.library", icon: "📖" },
+  { href: "/transport", tkey: "nav.transport", icon: "🚌" },
+  { href: "/hostel", tkey: "nav.hostel", icon: "🏨" },
+  { href: "/inventory", tkey: "nav.inventory", icon: "📦" },
+  { href: "/staff", tkey: "nav.staffAttendance", icon: "🧑‍💼" },
+  { href: "/leave", tkey: "nav.leave", icon: "🌴" },
+  { href: "/payroll", tkey: "nav.payroll", icon: "💰" },
+  { href: "/attendance", tkey: "nav.attendance", icon: "🗓️" },
+  { href: "/exams", tkey: "nav.exams", icon: "📝" },
+  { href: "/reports", tkey: "nav.reports", icon: "📄" },
+  { href: "/documents", tkey: "nav.documents", icon: "📁" },
+  { href: "/homework", tkey: "nav.homework", icon: "📚" },
+  { href: "/id-cards", tkey: "nav.idCards", icon: "🪪" },
+  { href: "/transfer-certificates", tkey: "nav.transferCerts", icon: "📜" },
+  { href: "/reports-center", tkey: "nav.reportsCenter", icon: "📈" },
+  { href: "/report-builder", tkey: "nav.reportBuilder", icon: "🧱" },
+  { href: "/scheduled-reports", tkey: "nav.scheduledReports", icon: "⏰" },
+  { href: "/disciplinary", tkey: "nav.disciplinary", icon: "⚖️" },
+  { href: "/fees", tkey: "nav.fees", icon: "💳" },
+  { href: "/fees/setup", tkey: "nav.feeSetup", icon: "🧾" },
+  { href: "/online-payments", tkey: "nav.onlinePayments", icon: "🏦" },
+  { href: "/announcements", tkey: "nav.announcements", icon: "📣" },
+  { href: "/communication", tkey: "nav.communication", icon: "📨" },
+  { href: "/messaging", tkey: "nav.messaging", icon: "💬" },
+  { href: "/assistant", tkey: "nav.aiAssistant", icon: "✨" },
+  { href: "/ai-insights", tkey: "nav.aiInsights", icon: "🧠" },
+  { href: "/jobs", tkey: "nav.jobs", icon: "⚙️", adminOnly: true },
+  { href: "/users", tkey: "nav.users", icon: "👥", adminOnly: true },
 ];
 
 const SUPER_ADMIN_NAV: NavItem[] = [
-  { href: "/super-admin", label: "Institutions", icon: "🏢" },
-  { href: "/super-admin/platform", label: "Platform Overview", icon: "🛰️" },
+  { href: "/super-admin", tkey: "nav.institutions", icon: "🏢" },
+  { href: "/super-admin/platform", tkey: "nav.platformOverview", icon: "🛰️" },
   {
     href: "/super-admin/platform/institutions",
-    label: "Platform Tenants",
+    tkey: "nav.platformTenants",
     icon: "🏬",
   },
-  { href: "/super-admin/platform/audit", label: "Platform Audit", icon: "🧾" },
-  { href: "/super-admin/platform/support", label: "Support Access", icon: "🛟" },
-  { href: "/super-admin/rbac", label: "Roles & Permissions", icon: "🔐" },
-  { href: "/super-admin/packages", label: "Packages", icon: "📦" },
-  { href: "/super-admin/settings", label: "Inst. Settings", icon: "⚙️" },
-  { href: "/super-admin/audit-logs", label: "Audit Logs", icon: "📜" },
-  { href: "/super-admin/exports", label: "Data Exports", icon: "💾" },
-  { href: "/super-admin/health", label: "System Health", icon: "❤️‍🩹" },
-  { href: "/super-admin/observability", label: "Observability", icon: "📡" },
-  { href: "/super-admin/backups", label: "Backups", icon: "🗄️" },
-  { href: "/super-admin/jobs", label: "Jobs", icon: "⚙️" },
+  { href: "/super-admin/platform/audit", tkey: "nav.platformAudit", icon: "🧾" },
+  { href: "/super-admin/platform/support", tkey: "nav.supportAccess", icon: "🛟" },
+  { href: "/super-admin/rbac", tkey: "nav.rolesPermissions", icon: "🔐" },
+  { href: "/super-admin/packages", tkey: "nav.packages", icon: "📦" },
+  { href: "/super-admin/settings", tkey: "nav.instSettings", icon: "⚙️" },
+  { href: "/super-admin/audit-logs", tkey: "nav.auditLogs", icon: "📜" },
+  { href: "/super-admin/exports", tkey: "nav.dataExports", icon: "💾" },
+  { href: "/super-admin/health", tkey: "nav.systemHealth", icon: "❤️‍🩹" },
+  { href: "/super-admin/observability", tkey: "nav.observability", icon: "📡" },
+  { href: "/super-admin/backups", tkey: "nav.backups", icon: "🗄️" },
+  { href: "/super-admin/jobs", tkey: "nav.jobs", icon: "⚙️" },
 ];
 
 export default function DashboardLayout({
@@ -74,6 +77,7 @@ export default function DashboardLayout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const { t } = useI18n();
   const { user, accessToken, refreshToken, logout } = useAuthStore();
   const [hydrated, setHydrated] = useState(false);
 
@@ -126,7 +130,8 @@ export default function DashboardLayout({
             S
           </div>
           <span className="font-semibold text-slate-900">
-            SRE EDU OS{isSuper ? " · Platform" : ""}
+            {t("app.name")}
+            {isSuper ? t("app.platformSuffix") : ""}
           </span>
         </div>
         <nav className="flex-1 space-y-1 p-3">
@@ -155,7 +160,7 @@ export default function DashboardLayout({
               )}
             >
               <span aria-hidden>{item.icon}</span>
-              {item.label}
+              {t(item.tkey)}
             </Link>
             );
           })}
@@ -167,11 +172,12 @@ export default function DashboardLayout({
           <p className="truncate text-xs capitalize text-slate-500">
             {user?.role?.replace("_", " ")}
           </p>
+          <LanguageSwitcher className="mt-3" />
           <button
             onClick={handleLogout}
-            className="mt-3 text-sm font-medium text-red-600 hover:text-red-700"
+            className="mt-3 block text-sm font-medium text-red-600 hover:text-red-700"
           >
-            Sign out
+            {t("common.signOut")}
           </button>
         </div>
       </aside>

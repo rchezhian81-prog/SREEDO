@@ -12,6 +12,7 @@ import {
   Spinner,
 } from "@/components/ui";
 import type { StudentSummary } from "@/types";
+import { useI18n } from "@/i18n/I18nProvider";
 
 function StatCard({
   label,
@@ -40,6 +41,7 @@ const QUICK_LINKS = [
 ];
 
 export default function PortalDashboardPage() {
+  const { t } = useI18n();
   const studentId = usePortalStore((state) => state.selectedStudentId);
   const [summary, setSummary] = useState<StudentSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -63,7 +65,7 @@ export default function PortalDashboardPage() {
   if (!studentId) {
     return (
       <>
-        <PageHeader title="Dashboard" />
+        <PageHeader title={t("portalPages.dashboard.title")} />
         <EmptyState message="No student linked to your account yet." />
       </>
     );
@@ -83,7 +85,9 @@ export default function PortalDashboardPage() {
     <>
       <PageHeader
         title={
-          profile ? `${profile.firstName} ${profile.lastName}` : "Dashboard"
+          profile
+            ? `${profile.firstName} ${profile.lastName}`
+            : t("portalPages.dashboard.title")
         }
         subtitle={
           profile

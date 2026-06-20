@@ -22,6 +22,7 @@ import type {
   PaymentOrder,
   StudentSummary,
 } from "@/types";
+import { useI18n } from "@/i18n/I18nProvider";
 
 const PORTAL_ADJ_TONES: Record<string, "slate" | "green" | "amber" | "red"> = {
   applied: "green",
@@ -85,6 +86,7 @@ const STATUS_TONES: Record<
 };
 
 export default function PortalFeesPage() {
+  const { t } = useI18n();
   const studentId = usePortalStore((state) => state.selectedStudentId);
   const [summary, setSummary] = useState<StudentSummary | null>(null);
   const [invoices, setInvoices] = useState<Invoice[] | null>(null);
@@ -220,7 +222,7 @@ export default function PortalFeesPage() {
   if (!studentId) {
     return (
       <>
-        <PageHeader title="Fees" />
+        <PageHeader title={t("portalPages.fees.title")} />
         <EmptyState message="No student linked to your account yet." />
       </>
     );
@@ -232,7 +234,7 @@ export default function PortalFeesPage() {
 
   return (
     <>
-      <PageHeader title="Fees" subtitle="Invoices and payments" />
+      <PageHeader title={t("portalPages.fees.title")} subtitle="Invoices and payments" />
       <ErrorNote message={error} />
       {f && (
         <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

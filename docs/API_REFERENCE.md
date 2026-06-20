@@ -256,6 +256,13 @@ on student writes) and the super-admin **RBAC catalogue/matrix** (`GET /platform
 counters surface via `/observability/metrics` (`cache_hits_total`, `cache_misses_total`,
 `cache_invalidations_total`, `cache_entries`) and the `cache` block of `/observability/overview`.
 
+### Internationalization (i18n)
+The **web frontend** is multi-language (English default + Tamil; switcher persisted per
+browser). The **API contract is unchanged and English-stable** — error messages, field
+names, and payloads are not localized. The frontend owns presentation: it maps its own
+fallback messages (e.g. network errors) to translated UI strings and falls back to English
+for any missing translation. PDFs/reports are not localized this round.
+
 ### Backups — `/api/v1/backups` *(super-admin only — `authorize("super_admin")` + `backup:*`; tenant users denied; storage paths never exposed)*
 | Method | Path | Permission | Purpose |
 |--------|------|------------|---------|
