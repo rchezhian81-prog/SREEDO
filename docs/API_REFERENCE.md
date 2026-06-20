@@ -268,6 +268,13 @@ A web-frontend baseline a11y pass (keyboard focus, reduced motion, skip links, l
 labelled controls, accessible dialog, status/alert roles). **No API or contract changes** —
 backend responses are unaffected.
 
+### Load / Performance Testing
+A load-testing suite (`backend/perf/`, autocannon) exercises the existing hot endpoints
+(auth, dashboard stats, students/staff lists, attendance, fees summary, Reports Center,
+timetable, RBAC) and reads `/observability/metrics` for cache/latency counters. **No new
+endpoints or contract changes** — it only drives existing routes. See
+[`PERFORMANCE.md`](./PERFORMANCE.md).
+
 ### Backups — `/api/v1/backups` *(super-admin only — `authorize("super_admin")` + `backup:*`; tenant users denied; storage paths never exposed)*
 | Method | Path | Permission | Purpose |
 |--------|------|------------|---------|
