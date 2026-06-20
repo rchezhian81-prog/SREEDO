@@ -8,6 +8,10 @@ export const ta: Partial<Record<keyof typeof en, string>> = {
   "language.english": "ஆங்கிலம்",
   "language.tamil": "தமிழ்",
 
+  // Accessibility
+  "a11y.skipToContent": "முதன்மை உள்ளடக்கத்திற்கு செல்லவும்",
+  "a11y.primaryNavigation": "முதன்மை வழிசெலுத்தல்",
+
   // Common actions / labels
   "common.save": "சேமி",
   "common.cancel": "ரத்து செய்",

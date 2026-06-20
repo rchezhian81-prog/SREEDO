@@ -375,6 +375,12 @@ payroll, unpaid-leave deductions). `payroll:*` permissions, tenant-scoped
   missing string (never crashes), and a structure ready for Hindi/other languages. Backend
   API stays English-stable; frontend maps its own fallback messages. Frontend gains a
   **vitest** suite (i18n core) wired into CI.
+- ✅ **Accessibility (WCAG 2.1 AA baseline)** (web frontend): a primitives-and-layouts pass
+  so every page benefits — visible keyboard focus, reduced-motion support, skip-to-content
+  links, labelled landmarks + `aria-current`, label↔control association with error a11y, an
+  accessible modal (dialog role / `aria-modal` / Escape / focus-trap / restore), status/alert
+  roles, and accessible names on icon buttons. Covered by jsdom + Testing Library component
+  tests in CI.
 
 ### 4.20 Security — 🟡 Partial (see §6)
 - ✅ JWT auth, role-based access, rate limiting, zod input validation, bcrypt
@@ -394,7 +400,7 @@ payroll, unpaid-leave deductions). `payroll:*` permissions, tenant-scoped
 | **Backup & recovery** | ✅ Scheduled + manual **database backups** (portable logical snapshots to object storage, retention policy) and a guarded, audited **restore** workflow (super-admin only, confirmation + production force flag, non-destructive preview). Backup/restore success/failure + last-backup-time exposed as metrics. |
 | **Security** | See §6. |
 | **Usability** | Soft-3D premium UI, responsive (desktop/tablet/mobile), ≤3 clicks to core tasks, consistent search/filter/export/print. |
-| **Accessibility** | WCAG 2.1 AA target: keyboard nav, labels, contrast. |
+| **Accessibility** | ✅ WCAG 2.1 AA baseline: visible keyboard focus (`:focus-visible`), `prefers-reduced-motion` support, skip-to-content links, labelled `<nav>`/`<main>` landmarks + `aria-current`, label↔control association with `aria-invalid`/`aria-describedby`, accessible modal dialog (role/`aria-modal`/Escape/focus-trap/restore), status/alert roles for spinner/errors, accessible names on icon buttons — covered by jsdom component tests. Ongoing: per-page audits + automated axe checks. |
 | **Internationalization** | ✅ Web frontend i18n — English (default) + **Tamil**, per-browser language switcher (staff, portal, login), English fallback for missing strings, designed for easy addition of Hindi/others; UTF-8 throughout. PDFs/reports structured for later translation. |
 | **Observability** | ✅ **Structured JSON request logging** (correlation id via `x-request-id`, safe curated fields — no secrets); ✅ **Prometheus metrics** (`/observability/metrics`: requests/errors/durations, job + scheduled-report counters, queue depth); ✅ liveness/readiness probes; ✅ super-admin **overview + detailed health**; audit trail ✅; consistent error envelope ✅. (`observability:*`, super-admin only.) |
 | **Maintainability** | Clean modular architecture (routes/schema/service ✅), TypeScript everywhere ✅, generated API docs ✅. |

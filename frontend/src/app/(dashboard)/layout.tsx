@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth-store";
-import { cx, Spinner } from "@/components/ui";
+import { cx, Spinner, SkipLink } from "@/components/ui";
 import { useI18n } from "@/i18n/I18nProvider";
 import type { TranslationKey } from "@/i18n";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
@@ -124,6 +124,7 @@ export default function DashboardLayout({
 
   return (
     <div className="flex min-h-screen">
+      <SkipLink label={t("a11y.skipToContent")} />
       <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-200 bg-white md:flex">
         <div className="flex items-center gap-2 border-b border-slate-200 px-5 py-4">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 font-bold text-white">
@@ -134,7 +135,7 @@ export default function DashboardLayout({
             {isSuper ? t("app.platformSuffix") : ""}
           </span>
         </div>
-        <nav className="flex-1 space-y-1 p-3">
+        <nav aria-label={t("a11y.primaryNavigation")} className="flex-1 space-y-1 p-3">
           {navItems.map((item) => {
             // Section landing pages (`/super-admin`, `/super-admin/platform`)
             // have child routes with their own nav entries, so they only count
@@ -152,6 +153,7 @@ export default function DashboardLayout({
             <Link
               key={item.href}
               href={item.href}
+              aria-current={active ? "page" : undefined}
               className={cx(
                 "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
                 active
@@ -181,7 +183,13 @@ export default function DashboardLayout({
           </button>
         </div>
       </aside>
-      <main className="min-w-0 flex-1 p-6 md:p-8">{children}</main>
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="min-w-0 flex-1 p-6 focus:outline-none md:p-8"
+      >
+        {children}
+      </main>
     </div>
   );
 }

@@ -553,3 +553,25 @@ and the design makes adding Hindi/others a matter of one dictionary file.
 5. **Tests**: a frontend **vitest** suite covers the i18n core — English default, Tamil
    loads, missing-key fallback to English, key-fallback (no crash), `{var}` interpolation,
    and locale validation — wired into CI (`typecheck` + `test` + `build`).
+
+## CC. Accessibility (WCAG 2.1 AA) ✅ (Phase E)
+A baseline accessibility pass targeting the **shared primitives and layouts**, so the whole
+web app benefits without auditing every page individually.
+1. **Global** (`globals.css`): a visible keyboard focus indicator on every interactive
+   element via `:focus-visible` rings (WCAG 2.4.7), and `prefers-reduced-motion` support that
+   neutralises animations/transitions (e.g. the loading spinner) for users who ask for it
+   (2.3.3).
+2. **Primitives** (`components/ui.tsx`): `Field` associates its `<label>` with the control
+   through a generated id and adds `aria-invalid` + `aria-describedby` when there's an error
+   (1.3.1 / 3.3.1); `Modal` is a `role="dialog"` with `aria-modal`, labelled by its title,
+   **Escape-to-close**, a **Tab focus-trap**, initial focus, and focus restore to the trigger
+   (2.1.2 / 2.4.3 / 4.1.2); `Spinner` is a `role="status"` with an sr-only "Loading…" label
+   and `ErrorNote` a `role="alert"` (4.1.3); icon-only buttons carry accessible names; buttons
+   keep a focus ring.
+3. **Layouts** (staff dashboard + parent/student portal): a **skip-to-content** link as the
+   first focusable element (2.4.1), a labelled `<nav>` landmark, `aria-current="page"` on the
+   active item (4.1.2), and a focusable `<main id="main-content">` target. The skip-link label
+   is localised via i18n.
+4. **Tests**: jsdom + Testing Library component tests assert label↔control association +
+   error a11y, dialog semantics + Escape, status/alert roles, and the skip link — alongside
+   the i18n suite, in CI.

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { portalApi } from "@/lib/portal-api";
 import { usePortalStore } from "@/stores/portal-store";
-import { cx, Select, Spinner } from "@/components/ui";
+import { cx, Select, Spinner, SkipLink } from "@/components/ui";
 import { useI18n } from "@/i18n/I18nProvider";
 import type { TranslationKey } from "@/i18n";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
@@ -97,6 +97,7 @@ export default function PortalLayout({
 
   return (
     <div className="flex min-h-screen">
+      <SkipLink label={t("a11y.skipToContent")} />
       <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-200 bg-white md:flex">
         <div className="flex items-center gap-2 border-b border-slate-200 px-5 py-4">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 font-bold text-white">
@@ -137,26 +138,29 @@ export default function PortalLayout({
           ) : null}
         </div>
 
-        <nav className="flex-1 space-y-1 p-3">
-          {NAV.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cx(
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
-                (
-                  item.href === "/portal"
-                    ? pathname === item.href
-                    : pathname.startsWith(item.href)
-                )
-                  ? "bg-brand-50 text-brand-700"
-                  : "text-slate-600 hover:bg-slate-100"
-              )}
-            >
-              <span aria-hidden>{item.icon}</span>
-              {t(item.tkey)}
-            </Link>
-          ))}
+        <nav aria-label={t("a11y.primaryNavigation")} className="flex-1 space-y-1 p-3">
+          {NAV.map((item) => {
+            const active =
+              item.href === "/portal"
+                ? pathname === item.href
+                : pathname.startsWith(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={active ? "page" : undefined}
+                className={cx(
+                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
+                  active
+                    ? "bg-brand-50 text-brand-700"
+                    : "text-slate-600 hover:bg-slate-100"
+                )}
+              >
+                <span aria-hidden>{item.icon}</span>
+                {t(item.tkey)}
+              </Link>
+            );
+          })}
         </nav>
 
         <div className="border-t border-slate-200 p-4">
@@ -175,7 +179,13 @@ export default function PortalLayout({
           </button>
         </div>
       </aside>
-      <main className="min-w-0 flex-1 p-6 md:p-8">{children}</main>
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="min-w-0 flex-1 p-6 focus:outline-none md:p-8"
+      >
+        {children}
+      </main>
     </div>
   );
 }

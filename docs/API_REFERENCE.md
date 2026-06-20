@@ -263,6 +263,11 @@ names, and payloads are not localized. The frontend owns presentation: it maps i
 fallback messages (e.g. network errors) to translated UI strings and falls back to English
 for any missing translation. PDFs/reports are not localized this round.
 
+### Accessibility (WCAG 2.1 AA)
+A web-frontend baseline a11y pass (keyboard focus, reduced motion, skip links, landmarks,
+labelled controls, accessible dialog, status/alert roles). **No API or contract changes** —
+backend responses are unaffected.
+
 ### Backups — `/api/v1/backups` *(super-admin only — `authorize("super_admin")` + `backup:*`; tenant users denied; storage paths never exposed)*
 | Method | Path | Permission | Purpose |
 |--------|------|------------|---------|
