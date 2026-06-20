@@ -12,6 +12,10 @@ export const en = {
   "language.english": "English",
   "language.tamil": "Tamil",
 
+  // Accessibility
+  "a11y.skipToContent": "Skip to main content",
+  "a11y.primaryNavigation": "Primary navigation",
+
   // Common actions / labels
   "common.save": "Save",
   "common.cancel": "Cancel",

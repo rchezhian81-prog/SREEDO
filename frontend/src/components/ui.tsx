@@ -1,6 +1,15 @@
 "use client";
 
-import { forwardRef, type ReactNode } from "react";
+import {
+  cloneElement,
+  forwardRef,
+  isValidElement,
+  useEffect,
+  useId,
+  useRef,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 
 export function cx(...classes: Array<string | false | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -25,6 +34,7 @@ export const Button = forwardRef<
       ref={ref}
       className={cx(
         "inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60 focus-visible:ring-offset-2",
         styles,
         className
       )}
@@ -81,6 +91,11 @@ export const Textarea = forwardRef<
   );
 });
 
+/**
+ * Labelled form field. Associates the <label> with its control via a generated
+ * id and, when there is an error, wires `aria-invalid` + `aria-describedby` so
+ * screen readers announce the message (WCAG 1.3.1 / 3.3.1).
+ */
 export function Field({
   label,
   error,
@@ -90,14 +105,36 @@ export function Field({
   error?: string;
   children: ReactNode;
 }) {
+  const generatedId = useId();
+  const errorId = `${generatedId}-error`;
+  const childId =
+    isValidElement(children) && (children.props as { id?: string }).id
+      ? (children.props as { id?: string }).id
+      : generatedId;
+
+  const control = isValidElement(children)
+    ? cloneElement(children as ReactElement<Record<string, unknown>>, {
+        id: childId,
+        "aria-invalid": error ? true : undefined,
+        "aria-describedby": error ? errorId : undefined,
+      })
+    : children;
+
   return (
-    <label className="block">
-      <span className="mb-1 block text-sm font-medium text-slate-700">
+    <div className="block">
+      <label
+        htmlFor={childId}
+        className="mb-1 block text-sm font-medium text-slate-700"
+      >
         {label}
-      </span>
-      {children}
-      {error && <span className="mt-1 block text-xs text-red-600">{error}</span>}
-    </label>
+      </label>
+      {control}
+      {error && (
+        <span id={errorId} className="mt-1 block text-xs text-red-600">
+          {error}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -146,6 +183,11 @@ export function Badge({
   );
 }
 
+/**
+ * Accessible modal dialog: labelled by its title, traps Tab focus, closes on
+ * Escape, focuses itself on open and restores focus to the trigger on close
+ * (WCAG 2.1.2 / 2.4.3 / 4.1.2).
+ */
 export function Modal({
   title,
   open,
@@ -157,6 +199,53 @@ export function Modal({
   onClose: () => void;
   children: ReactNode;
 }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+
+  useEffect(() => {
+    if (!open) return;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const node = dialogRef.current;
+    const focusable = () =>
+      node
+        ? Array.from(
+            node.querySelectorAll<HTMLElement>(
+              'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'
+            )
+          )
+        : [];
+    (focusable()[0] ?? node)?.focus();
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const items = focusable();
+      if (items.length === 0) {
+        event.preventDefault();
+        return;
+      }
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      previouslyFocused?.focus?.();
+    };
+  }, [open, onClose]);
+
   if (!open) return null;
   return (
     <div
@@ -164,17 +253,24 @@ export function Modal({
       onClick={onClose}
     >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
         className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+          <h2 id={titleId} className="text-lg font-semibold text-slate-900">
+            {title}
+          </h2>
           <button
             onClick={onClose}
-            className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            className="rounded-lg p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
             aria-label="Close"
           >
-            ✕
+            <span aria-hidden>✕</span>
           </button>
         </div>
         {children}
@@ -203,10 +299,12 @@ export function PageHeader({
   );
 }
 
+/** Loading indicator announced to assistive tech (WCAG 4.1.3). */
 export function Spinner() {
   return (
-    <div className="flex justify-center py-12">
+    <div className="flex justify-center py-12" role="status" aria-live="polite">
       <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-300 border-t-brand-600" />
+      <span className="sr-only">Loading…</span>
     </div>
   );
 }
@@ -219,11 +317,38 @@ export function EmptyState({ message }: { message: string }) {
   );
 }
 
+/** Error banner announced immediately to assistive tech (WCAG 4.1.3). */
 export function ErrorNote({ message }: { message: string | null }) {
   if (!message) return null;
   return (
-    <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+    <p
+      role="alert"
+      className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700"
+    >
       {message}
     </p>
+  );
+}
+
+/**
+ * Skip-to-content link: the first focusable element on a page, visually hidden
+ * until focused, letting keyboard users jump past the navigation (WCAG 2.4.1).
+ * `label` is passed in so callers can localise it; `targetId` must match the
+ * page's <main id> landmark.
+ */
+export function SkipLink({
+  label,
+  targetId = "main-content",
+}: {
+  label: string;
+  targetId?: string;
+}) {
+  return (
+    <a
+      href={`#${targetId}`}
+      className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-brand-700 focus:shadow"
+    >
+      {label}
+    </a>
   );
 }
