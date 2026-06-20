@@ -338,6 +338,10 @@ used when `institutions.type = 'college'`; the school flow is unaffected.
   `backup:read|create|download|restore|manage` (super_admin only). Restore is global-only,
   confirmation-gated (+ force in production), transactional, and audited in
   `platform_audit_log`.
+- **Internationalization (i18n):** ✅ (no migration) — **no new tables, no DB state**.
+  Web-frontend only: translation dictionaries (`en`, `ta`) live in the frontend
+  (`src/i18n/`) and the language choice persists in the browser (`localStorage`). The
+  backend/API and database are unchanged and remain English-stable.
 
 ### Phase C/D supporting
 - **fee_categories**, **fee_discounts/scholarships**, **fee_fines** — extend the

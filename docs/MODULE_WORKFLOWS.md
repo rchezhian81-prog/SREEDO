@@ -529,3 +529,27 @@ are denied entirely.
 5. **Metrics**: `backups_total` / `restores_total` by result, `backups_stored`, and
    `backup_last_success_timestamp_seconds` on `GET /observability/metrics`, plus a
    `backups` block on `/observability/overview` — surfaced on the super-admin dashboard.
+
+## BB. Internationalization (i18n) ✅ (Phase E)
+Web-frontend multi-language support. English is the default; **Tamil** ships alongside it,
+and the design makes adding Hindi/others a matter of one dictionary file.
+1. **Framework** (`src/i18n/`): flat dot-keyed dictionaries — `en.ts` is the source of
+   truth, `ta.ts` is a `Partial` of it. `translate(locale, key, vars?)` resolves the key in
+   the locale, falls back to **English**, then to the **key itself** (so a missing string is
+   never a crash), and supports `{var}` interpolation. `I18nProvider` renders the default
+   locale on the server / first client paint (no hydration mismatch), then adopts the
+   **persisted** choice from `localStorage` (`sreedo-lang`).
+2. **Switcher**: a `LanguageSwitcher` (English / தமிழ்) appears in the **staff dashboard**,
+   the **parent/student portal**, and **both login screens**; the choice persists per
+   browser and sets `<html lang>`.
+3. **Coverage**: all navigation (school + super-admin + portal), the login screens
+   (including validation messages, stored as translated keys), layout chrome
+   (sign-out / viewing / app name), the common buttons
+   (save/cancel/delete/edit/download/upload/export/search/filter/submit), and page headers
+   across the listed modules. Remaining body strings fall back to English safely.
+4. **Backend / PDFs**: the API stays English-stable (the frontend maps its own fallback
+   messages); report cards / fee receipts / ID cards / reports are unchanged this round, with
+   the key structure ready for later translation.
+5. **Tests**: a frontend **vitest** suite covers the i18n core — English default, Tamil
+   loads, missing-key fallback to English, key-fallback (no crash), `{var}` interpolation,
+   and locale validation — wired into CI (`typecheck` + `test` + `build`).

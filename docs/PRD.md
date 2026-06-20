@@ -369,6 +369,12 @@ payroll, unpaid-leave deductions). `payroll:*` permissions, tenant-scoped
   audited. **Retention** keeps the latest N backups (off by default → never deletes).
   Backup/restore **metrics** on `/observability`. (See
   [`MODULE_WORKFLOWS.md`](./MODULE_WORKFLOWS.md).)
+- ✅ **Internationalization (i18n)** (web frontend): English (default) + **Tamil**, with a
+  per-browser **language switcher** in the staff app, parent/student portal, and login
+  screens. Client-side framework with clear translation keys, **English fallback** for any
+  missing string (never crashes), and a structure ready for Hindi/other languages. Backend
+  API stays English-stable; frontend maps its own fallback messages. Frontend gains a
+  **vitest** suite (i18n core) wired into CI.
 
 ### 4.20 Security — 🟡 Partial (see §6)
 - ✅ JWT auth, role-based access, rate limiting, zod input validation, bcrypt
@@ -389,7 +395,7 @@ payroll, unpaid-leave deductions). `payroll:*` permissions, tenant-scoped
 | **Security** | See §6. |
 | **Usability** | Soft-3D premium UI, responsive (desktop/tablet/mobile), ≤3 clicks to core tasks, consistent search/filter/export/print. |
 | **Accessibility** | WCAG 2.1 AA target: keyboard nav, labels, contrast. |
-| **Internationalization** | UTF-8 throughout; currency/date locale config; copy externalizable (future). |
+| **Internationalization** | ✅ Web frontend i18n — English (default) + **Tamil**, per-browser language switcher (staff, portal, login), English fallback for missing strings, designed for easy addition of Hindi/others; UTF-8 throughout. PDFs/reports structured for later translation. |
 | **Observability** | ✅ **Structured JSON request logging** (correlation id via `x-request-id`, safe curated fields — no secrets); ✅ **Prometheus metrics** (`/observability/metrics`: requests/errors/durations, job + scheduled-report counters, queue depth); ✅ liveness/readiness probes; ✅ super-admin **overview + detailed health**; audit trail ✅; consistent error envelope ✅. (`observability:*`, super-admin only.) |
 | **Maintainability** | Clean modular architecture (routes/schema/service ✅), TypeScript everywhere ✅, generated API docs ✅. |
 | **Portability** | Dockerized; runs on any Docker host / Hostinger VPS ✅. |
