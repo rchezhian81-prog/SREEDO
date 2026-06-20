@@ -342,6 +342,9 @@ used when `institutions.type = 'college'`; the school flow is unaffected.
   Web-frontend only: translation dictionaries (`en`, `ta`) live in the frontend
   (`src/i18n/`) and the language choice persists in the browser (`localStorage`). The
   backend/API and database are unchanged and remain English-stable.
+- **Accessibility (WCAG 2.1 AA):** ✅ (no migration) — **no new tables, no DB state**.
+  Web-frontend only (focus/landmarks/dialog/labels/roles in shared primitives + layouts).
+  Backend, API, and database are unchanged.
 
 ### Phase C/D supporting
 - **fee_categories**, **fee_discounts/scholarships**, **fee_fines** — extend the
