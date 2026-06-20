@@ -25,6 +25,7 @@ import type {
   SchoolClass,
   Subject,
 } from "@/types";
+import { useI18n } from "@/i18n/I18nProvider";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
 
@@ -130,6 +131,7 @@ const emptyForm: HomeworkForm = {
 };
 
 export default function HomeworkPage() {
+  const { t } = useI18n();
   const role = useAuthStore((state) => state.user?.role);
   const canManage = role === "admin" || role === "teacher";
 
@@ -270,8 +272,8 @@ export default function HomeworkPage() {
   return (
     <>
       <PageHeader
-        title="Homework"
-        subtitle="Assignments, attachments & submissions"
+        title={t("pages.homework.title")}
+        subtitle={t("pages.homework.subtitle")}
         action={
           !selectedId && canManage ? (
             <Button onClick={openCreate}>+ New homework</Button>

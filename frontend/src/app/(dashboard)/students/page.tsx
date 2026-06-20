@@ -18,6 +18,7 @@ import {
   Spinner,
 } from "@/components/ui";
 import type { Paginated, SchoolClass, Student } from "@/types";
+import { useI18n } from "@/i18n/I18nProvider";
 
 const studentSchema = z.object({
   firstName: z.string().min(1, "Required"),
@@ -42,6 +43,7 @@ interface SectionOption {
 }
 
 export default function StudentsPage() {
+  const { t } = useI18n();
   const [students, setStudents] = useState<Student[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -129,8 +131,8 @@ export default function StudentsPage() {
   return (
     <>
       <PageHeader
-        title="Students"
-        subtitle={`${total} enrolled`}
+        title={t("pages.students.title")}
+        subtitle={t("pages.students.subtitle")}
         action={
           <Button onClick={() => setModalOpen(true)}>+ Add student</Button>
         }

@@ -14,6 +14,7 @@ import {
   Spinner,
 } from "@/components/ui";
 import type { StaffAttendanceSummary } from "@/types";
+import { useI18n } from "@/i18n/I18nProvider";
 
 const SUB_PAGES: {
   href: string;
@@ -46,6 +47,7 @@ function currentMonth(): string {
 }
 
 export default function StaffHubPage() {
+  const { t } = useI18n();
   const { can, loading: permsLoading } = usePermissions();
 
   const [month, setMonth] = useState(currentMonth);
@@ -97,7 +99,7 @@ export default function StaffHubPage() {
   if (permsLoading) {
     return (
       <>
-        <PageHeader title="Staff Attendance" subtitle="Marking, history & reports" />
+        <PageHeader title={t("pages.staffAttendance.title")} subtitle={t("pages.staffAttendance.subtitle")} />
         <Spinner />
       </>
     );
@@ -106,7 +108,7 @@ export default function StaffHubPage() {
   if (!can("staff_attendance:read")) {
     return (
       <>
-        <PageHeader title="Staff Attendance" subtitle="Marking, history & reports" />
+        <PageHeader title={t("pages.staffAttendance.title")} subtitle={t("pages.staffAttendance.subtitle")} />
         <EmptyState message="You do not have access to staff attendance." />
       </>
     );
@@ -114,7 +116,7 @@ export default function StaffHubPage() {
 
   return (
     <>
-      <PageHeader title="Staff Attendance" subtitle="Marking, history & reports" />
+      <PageHeader title={t("pages.staffAttendance.title")} subtitle={t("pages.staffAttendance.subtitle")} />
 
       <div className="space-y-6">
         <Card>

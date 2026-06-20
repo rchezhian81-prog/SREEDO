@@ -10,6 +10,7 @@ import {
   Spinner,
 } from "@/components/ui";
 import type { Announcement, DashboardStats, Paginated } from "@/types";
+import { useI18n } from "@/i18n/I18nProvider";
 
 function StatCard({
   label,
@@ -30,6 +31,7 @@ function StatCard({
 }
 
 export default function DashboardPage() {
+  const { t } = useI18n();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,8 +60,8 @@ export default function DashboardPage() {
   return (
     <>
       <PageHeader
-        title="Dashboard"
-        subtitle="A live overview of the school today"
+        title={t("pages.dashboard.title")}
+        subtitle={t("pages.dashboard.subtitle")}
       />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Active students" value={stats?.activeStudents ?? 0} />

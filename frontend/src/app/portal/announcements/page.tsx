@@ -11,8 +11,10 @@ import {
   Spinner,
 } from "@/components/ui";
 import type { Announcement, Paginated } from "@/types";
+import { useI18n } from "@/i18n/I18nProvider";
 
 export default function PortalAnnouncementsPage() {
+  const { t } = useI18n();
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +36,7 @@ export default function PortalAnnouncementsPage() {
 
   return (
     <>
-      <PageHeader title="Notices" subtitle="Announcements from the school" />
+      <PageHeader title={t("portalPages.announcements.title")} subtitle="Announcements from the school" />
       <ErrorNote message={error} />
       {announcements.length === 0 ? (
         <EmptyState message="No notices yet." />

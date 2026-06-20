@@ -15,6 +15,7 @@ import {
   Spinner,
 } from "@/components/ui";
 import type { Exam, ReportData, ReportMeta, SchoolClass } from "@/types";
+import { useI18n } from "@/i18n/I18nProvider";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
 
@@ -54,6 +55,7 @@ function renderCell(value: unknown): string {
 }
 
 export default function ReportsCenterPage() {
+  const { t } = useI18n();
   const [reports, setReports] = useState<ReportMeta[]>([]);
   const [permissions, setPermissions] = useState<string[]>([]);
   const [role, setRole] = useState("");
@@ -192,8 +194,8 @@ export default function ReportsCenterPage() {
   return (
     <>
       <PageHeader
-        title="Reports Center"
-        subtitle="Cross-module reports & export"
+        title={t("pages.reportsCenter.title")}
+        subtitle={t("pages.reportsCenter.subtitle")}
       />
 
       {loading ? (

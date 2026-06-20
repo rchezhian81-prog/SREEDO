@@ -17,6 +17,7 @@ import {
   Textarea,
 } from "@/components/ui";
 import type { Homework, HomeworkAttachment, HomeworkDetail } from "@/types";
+import { useI18n } from "@/i18n/I18nProvider";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
 
@@ -76,6 +77,7 @@ function formatDate(value: string | null) {
 }
 
 export default function PortalHomeworkPage() {
+  const { t } = useI18n();
   const role = usePortalStore((state) => state.user?.role);
   const isStudent = role === "student";
 
@@ -104,7 +106,7 @@ export default function PortalHomeworkPage() {
 
   return (
     <>
-      <PageHeader title="Homework" subtitle="Assignments and submissions" />
+      <PageHeader title={t("portalPages.homework.title")} subtitle="Assignments and submissions" />
 
       {selectedId ? (
         <PortalHomeworkDetail

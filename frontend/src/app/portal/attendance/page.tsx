@@ -11,6 +11,7 @@ import {
   Spinner,
 } from "@/components/ui";
 import type { StudentSummary } from "@/types";
+import { useI18n } from "@/i18n/I18nProvider";
 
 function StatCard({
   label,
@@ -31,6 +32,7 @@ function StatCard({
 }
 
 export default function PortalAttendancePage() {
+  const { t } = useI18n();
   const studentId = usePortalStore((state) => state.selectedStudentId);
   const [summary, setSummary] = useState<StudentSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -54,7 +56,7 @@ export default function PortalAttendancePage() {
   if (!studentId) {
     return (
       <>
-        <PageHeader title="Attendance" />
+        <PageHeader title={t("portalPages.attendance.title")} />
         <EmptyState message="No student linked to your account yet." />
       </>
     );
@@ -69,7 +71,7 @@ export default function PortalAttendancePage() {
   return (
     <>
       <PageHeader
-        title="Attendance"
+        title={t("portalPages.attendance.title")}
         subtitle="Recorded across the academic year"
       />
       <ErrorNote message={error} />

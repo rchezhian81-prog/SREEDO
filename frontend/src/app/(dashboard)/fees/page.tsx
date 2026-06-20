@@ -30,6 +30,7 @@ import type {
   Paginated,
   Student,
 } from "@/types";
+import { useI18n } from "@/i18n/I18nProvider";
 
 const ADJ_STATUS_TONES: Record<string, "slate" | "green" | "amber" | "red"> = {
   applied: "green",
@@ -92,6 +93,7 @@ const STATUS_TONES: Record<Invoice["status"], "green" | "amber" | "red" | "slate
   };
 
 export default function FeesPage() {
+  const { t } = useI18n();
   const { can } = usePermissions();
   const canApplyFine = can("fee_fines:apply");
   const canWaiveFine = can("fee_fines:waive");
@@ -350,8 +352,8 @@ export default function FeesPage() {
   return (
     <>
       <PageHeader
-        title="Fees"
-        subtitle="Invoices, payments and collections"
+        title={t("pages.fees.title")}
+        subtitle={t("pages.fees.subtitle")}
         action={
           <Button onClick={() => setInvoiceModal(true)}>+ New invoice</Button>
         }
