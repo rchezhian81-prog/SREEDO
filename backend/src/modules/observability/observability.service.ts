@@ -67,6 +67,16 @@ export async function detailedHealth() {
   };
 }
 
+/** Backup/restore live gauges (last successful backup + stored count) from DB. */
+async function backupGauges(): Promise<{ lastSuccessAt: string | null; stored: number }> {
+  const { rows } = await query<{ lastSuccessAt: string | null; stored: number }>(
+    `SELECT max(completed_at) FILTER (WHERE status = 'success') AS "lastSuccessAt",
+            count(*) FILTER (WHERE status = 'success')::int AS stored
+     FROM backups`
+  );
+  return rows[0];
+}
+
 /** Platform observability overview (super-admin admin view). */
 export async function overview() {
   const m = snapshot();
@@ -74,6 +84,7 @@ export async function overview() {
   const scheduled = await groupCounts(
     "SELECT status, count(*)::int AS n FROM scheduled_report_runs GROUP BY status"
   );
+  const backups = await backupGauges();
   const { rows: recentFailures } = await query(
     `SELECT id, type, error, institution_id AS "institutionId", completed_at AS "completedAt"
      FROM jobs WHERE status = 'failed' ORDER BY completed_at DESC NULLS LAST LIMIT 10`
@@ -88,6 +99,14 @@ export async function overview() {
     jobs: { success: m.jobsSuccess, failed: m.jobsFailed, retried: m.jobsRetried, queue },
     scheduledReports: scheduled,
     cache: cacheStats(),
+    backups: {
+      success: m.backupsSuccess,
+      failed: m.backupsFailed,
+      restoresSuccess: m.restoresSuccess,
+      restoresFailed: m.restoresFailed,
+      stored: backups.stored,
+      lastSuccessAt: backups.lastSuccessAt,
+    },
     recentFailures,
     worker: { enabled: env.jobWorkerEnabled, intervalMs: env.jobWorkerIntervalMs },
   };
@@ -153,6 +172,23 @@ export async function renderMetrics(): Promise<string> {
   out.push("# HELP cache_entries Current number of live cache entries");
   out.push("# TYPE cache_entries gauge");
   out.push(`cache_entries ${cache.size}`);
+
+  const backups = await backupGauges();
+  out.push("# HELP backups_total Database backups by result");
+  out.push("# TYPE backups_total counter");
+  out.push(`backups_total{result="success"} ${m.backupsSuccess}`);
+  out.push(`backups_total{result="failed"} ${m.backupsFailed}`);
+  out.push("# HELP restores_total Database restores by result");
+  out.push("# TYPE restores_total counter");
+  out.push(`restores_total{result="success"} ${m.restoresSuccess}`);
+  out.push(`restores_total{result="failed"} ${m.restoresFailed}`);
+  out.push("# HELP backups_stored Successful backups currently retained");
+  out.push("# TYPE backups_stored gauge");
+  out.push(`backups_stored ${backups.stored}`);
+  out.push("# HELP backup_last_success_timestamp_seconds Unix time of the last successful backup (0 if none)");
+  out.push("# TYPE backup_last_success_timestamp_seconds gauge");
+  const lastTs = backups.lastSuccessAt ? Math.floor(new Date(backups.lastSuccessAt).getTime() / 1000) : 0;
+  out.push(`backup_last_success_timestamp_seconds ${lastTs}`);
 
   return line(out) + "\n";
 }

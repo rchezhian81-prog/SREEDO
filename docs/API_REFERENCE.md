@@ -256,6 +256,26 @@ on student writes) and the super-admin **RBAC catalogue/matrix** (`GET /platform
 counters surface via `/observability/metrics` (`cache_hits_total`, `cache_misses_total`,
 `cache_invalidations_total`, `cache_entries`) and the `cache` block of `/observability/overview`.
 
+### Backups — `/api/v1/backups` *(super-admin only — `authorize("super_admin")` + `backup:*`; tenant users denied; storage paths never exposed)*
+| Method | Path | Permission | Purpose |
+|--------|------|------------|---------|
+| GET | `/` | `backup:read` | List backups (metadata only; `?scope`/`?status`/`?institutionId`/`?limit`) |
+| POST | `/` | `backup:create` | Trigger a manual backup now (`{ scope, institutionId? }`; 201) |
+| GET | `/settings` | `backup:read` | Retention + automatic-schedule settings |
+| PATCH | `/settings` | `backup:manage` | Update retention (`retentionCount` null = off) + schedule |
+| GET | `/{id}` | `backup:read` | One backup's metadata |
+| DELETE | `/{id}` | `backup:manage` | Delete a backup + its artifact (audited) |
+| GET | `/{id}/download` | `backup:download` | Download the gzipped artifact (protected, audited) |
+| GET | `/{id}/restore/preview` | `backup:restore` | Non-destructive preview (scope, schema match, per-table rows) |
+| POST | `/{id}/restore` | `backup:restore` | Restore a global backup (`{ confirm, force? }`; destructive, audited) |
+
+*Backups are portable logical snapshots stored in object storage (or local-disk fallback);
+the raw `storage_key` is never returned. Restore is **global-only**, requires `confirm=true`
+(and `force=true` in production), runs transactionally, and writes `restore.start` +
+`restore.success`/`restore.failed` to the platform audit log. Backup/restore counters are on
+`/observability/metrics` (`backups_total`, `restores_total`, `backups_stored`,
+`backup_last_success_timestamp_seconds`).*
+
 ### Platform (Super Admin) — `/api/v1/platform` *(super-admin only — `authorize("super_admin")` + `platform:*`; tenant users denied; cross-tenant data lives only here)*
 | Method | Path | Permission | Purpose |
 |--------|------|------------|---------|

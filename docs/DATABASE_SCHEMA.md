@@ -324,6 +324,20 @@ used when `institutions.type = 'college'`; the school flow is unaffected.
   the `institution_id` so entries never cross tenants; no secrets or per-request
   private data are cached. Counters (hits/misses/invalidations/entries) are exposed
   through the existing observability metrics — no schema change.
+- **Backup / restore:** ✅ (migration `0043`) `backups` — `id`, `scope`
+  (`global`|`institution`), `institution_id` (CASCADE; NULL for global, enforced by a
+  CHECK that scope and institution_id agree), `status`
+  (`pending`|`running`|`success`|`failed`), `trigger` (`manual`|`scheduled`),
+  `storage_mode` (`s3`|`local`), `storage_key` (internal object key — **never returned
+  by the API**), `size_bytes`, `table_count`, `row_count`, `schema_version`, `error`,
+  `created_by` (users SET NULL; NULL = system), `started_at`/`completed_at`/`created_at`.
+  `backup_settings` — a pinned singleton (`id = 1`) holding `retention_count` (NULL =
+  retention OFF, never auto-delete), `schedule_enabled`, `schedule_frequency`,
+  `schedule_run_time`, `next_run_at`, `updated_by`. Backup ARTIFACTS (gzipped logical
+  `to_jsonb` snapshots) live in object storage / local-disk fallback, not the DB. Adds
+  `backup:read|create|download|restore|manage` (super_admin only). Restore is global-only,
+  confirmation-gated (+ force in production), transactional, and audited in
+  `platform_audit_log`.
 
 ### Phase C/D supporting
 - **fee_categories**, **fee_discounts/scholarships**, **fee_fines** — extend the

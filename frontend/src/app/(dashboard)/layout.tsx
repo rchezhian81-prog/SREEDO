@@ -60,9 +60,10 @@ const SUPER_ADMIN_NAV: NavItem[] = [
   { href: "/super-admin/packages", label: "Packages", icon: "📦" },
   { href: "/super-admin/settings", label: "Inst. Settings", icon: "⚙️" },
   { href: "/super-admin/audit-logs", label: "Audit Logs", icon: "📜" },
-  { href: "/super-admin/exports", label: "Backups", icon: "💾" },
+  { href: "/super-admin/exports", label: "Data Exports", icon: "💾" },
   { href: "/super-admin/health", label: "System Health", icon: "❤️‍🩹" },
   { href: "/super-admin/observability", label: "Observability", icon: "📡" },
+  { href: "/super-admin/backups", label: "Backups", icon: "🗄️" },
   { href: "/super-admin/jobs", label: "Jobs", icon: "⚙️" },
 ];
 

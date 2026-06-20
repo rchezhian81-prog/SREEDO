@@ -359,6 +359,16 @@ payroll, unpaid-leave deductions). `payroll:*` permissions, tenant-scoped
   per-request private data are cached; a role change never yields stale access (the
   runtime permission cache is invalidated too). **Cache metrics**
   (hits/misses/invalidations/entries) ride the existing `/observability` surface.
+- ✅ **Scheduled Backup / Restore Automation** (`backup:*`, migration `0043`):
+  super-admin database backups — **manual** trigger + **automatic schedule** (driven by
+  the job worker, deduped per window) — as portable logical snapshots (no external
+  `pg_dump`), stored in object storage / local-disk fallback with the raw path never
+  exposed (protected, audited download). Durable metadata (scope, status, size, table/row
+  counts, schema version). A guarded **restore** workflow: global-only, non-destructive
+  **preview**, mandatory confirmation (+ `force` in production), transactional, and fully
+  audited. **Retention** keeps the latest N backups (off by default → never deletes).
+  Backup/restore **metrics** on `/observability`. (See
+  [`MODULE_WORKFLOWS.md`](./MODULE_WORKFLOWS.md).)
 
 ### 4.20 Security — 🟡 Partial (see §6)
 - ✅ JWT auth, role-based access, rate limiting, zod input validation, bcrypt
@@ -375,6 +385,7 @@ payroll, unpaid-leave deductions). `payroll:*` permissions, tenant-scoped
 | **Performance** | P95 API < 300 ms for list/detail at seed scale; pagination on all list endpoints (✅ pattern exists); ✅ **hot-path read cache** — a short-TTL in-process cache for the dashboard stats and super-admin RBAC catalogue/matrix, tenant-scoped keys, explicit invalidation on writes, with hit/miss/invalidation counters on `/observability`. |
 | **Scalability** | Stateless API (horizontal scale behind nginx; the read cache is per-instance with short TTLs + explicit invalidation, so it stays correct across replicas — a shared cache (e.g. Redis) is a later option if needed); connection-pooled Postgres; multi-tenant data partitioning by `institution_id`. |
 | **Availability** | `/health` + `/live` liveness ✅, `/ready` readiness probe ✅ (fails only on critical deps DB+migrations); target 99.5% on a single VPS; graceful degradation when Mongo/OpenAI/SMTP are down ✅. |
+| **Backup & recovery** | ✅ Scheduled + manual **database backups** (portable logical snapshots to object storage, retention policy) and a guarded, audited **restore** workflow (super-admin only, confirmation + production force flag, non-destructive preview). Backup/restore success/failure + last-backup-time exposed as metrics. |
 | **Security** | See §6. |
 | **Usability** | Soft-3D premium UI, responsive (desktop/tablet/mobile), ≤3 clicks to core tasks, consistent search/filter/export/print. |
 | **Accessibility** | WCAG 2.1 AA target: keyboard nav, labels, contrast. |

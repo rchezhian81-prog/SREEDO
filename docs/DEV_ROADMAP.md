@@ -260,7 +260,24 @@ the `institution_id` so nothing leaks across tenants; no secrets or per-request
 private data are cached. **Cache metrics** ride the existing observability surface
 (`/observability/metrics`: `cache_hits_total`, `cache_misses_total`,
 `cache_invalidations_total` counters + `cache_entries` gauge; `/observability/overview`
-gains a `cache` block, surfaced on the web dashboard with a hit-rate). Remaining:
+gains a `cache` block, surfaced on the web dashboard with a hit-rate).
+✅ **Scheduled Backup / Restore Automation** — durable database backups + a guarded
+restore workflow, **super-admin only** (`backup:*`, migration `0043`). A backup is a
+**portable logical snapshot** (per-table `to_jsonb` rows + sequence positions, gzipped) —
+no external `pg_dump` binary, so it runs identically in CI and on the VPS. Artifacts go
+to **object storage** (S3) or the local-disk fallback (dev); only an internal,
+app-generated key is stored and it is **never exposed via the API** (protected,
+audited download route). `backups` metadata (scope global/institution, status, trigger,
+size, table/row counts, schema version, created-by/system) + a singleton
+`backup_settings` (retention + schedule). **Manual trigger** (`POST /backups`) and
+**automatic schedule** (the job worker enqueues a `scheduled_backup` when due, deduped
+per window). **Restore** (`/backups/:id/restore`) is global-only, always needs
+`confirm=true`, additionally needs `force=true` in production, runs in one transaction
+(`session_replication_role=replica` so tables reload in any order; rolls back on error)
+with a non-destructive **preview** first, and **every attempt is audited**. **Retention**
+keeps the latest N successful backups (NULL = never delete). **Metrics**:
+`backups_total`/`restores_total` by result, `backups_stored`, `backup_last_success_timestamp_seconds`
++ a `backups` block on `/observability/overview`. Remaining:
 read replicas if needed, accessibility audit, i18n, load testing.
 
 ---
@@ -273,7 +290,7 @@ of E2E. Every PR must keep CI green.
 | Layer | Tooling | Scope | Status |
 |-------|---------|-------|--------|
 | **Unit** | Vitest | utils (jwt, password, pagination) | ✅ 11 tests (`npm test`) |
-| **API integration** | Supertest + real Postgres | auth/RBAC, owner-scoping, tenant isolation, sequence numbering, invoice `amount_paid` + overpay, per-module flows (incl. AI insights fallback, online-payment webhook idempotency + signature, fee schedule generation/fines/discounts, TC issue/dues-override/owner-scoped download, thread participant-scoping/read-state + permission guards, custom-report saved/ad-hoc run + column projection + CSV/PDF export + share/private access + underlying-report permission enforcement, disciplinary incident workflow + cancel/delete/close permission gating + portal-default-off owner-scoped read + reports, scheduled-report manual/scheduled run + run-history success/failure + CSV/PDF delivery + recipient & underlying-report permission enforcement + email graceful fallback, platform super-admin lifecycle/suspend/activate/subscription/limits + durable audit trail + KPIs + audited impersonation + tenant-denied boundary + no-secret-leak, job-queue enqueue/dedupe + safe claim + retry-backoff/permanent-failure + scheduler-tick enqueues+runs scheduled reports + retry/cancel permission gates + tenant isolation + no-secret-leak, observability correlation-id generate/preserve + structured-log no-secret/safe-fields + /health + /ready DB-readiness + Prometheus metrics + metrics permission gate + job-failure metric increment + student/parent blocked, RBAC catalogue/matrix + grant/revoke + cache-invalidation-takes-effect + duplicate-idempotent + invalid-rejected + super_admin-critical-protected + audit + tenant-denied + no-secret-leak, caching hot-read hit/miss + dashboard invalidation-after-write + tenant-scoped cache isolation + RBAC catalogue/matrix invalidation-on-role-change + no-stale-permission-after-role-change + cache metrics counters in /observability + super-admin boundary), Swagger gating | ✅ 281 tests (`npm run test:integration`, in CI) |
+| **API integration** | Supertest + real Postgres | auth/RBAC, owner-scoping, tenant isolation, sequence numbering, invoice `amount_paid` + overpay, per-module flows (incl. AI insights fallback, online-payment webhook idempotency + signature, fee schedule generation/fines/discounts, TC issue/dues-override/owner-scoped download, thread participant-scoping/read-state + permission guards, custom-report saved/ad-hoc run + column projection + CSV/PDF export + share/private access + underlying-report permission enforcement, disciplinary incident workflow + cancel/delete/close permission gating + portal-default-off owner-scoped read + reports, scheduled-report manual/scheduled run + run-history success/failure + CSV/PDF delivery + recipient & underlying-report permission enforcement + email graceful fallback, platform super-admin lifecycle/suspend/activate/subscription/limits + durable audit trail + KPIs + audited impersonation + tenant-denied boundary + no-secret-leak, job-queue enqueue/dedupe + safe claim + retry-backoff/permanent-failure + scheduler-tick enqueues+runs scheduled reports + retry/cancel permission gates + tenant isolation + no-secret-leak, observability correlation-id generate/preserve + structured-log no-secret/safe-fields + /health + /ready DB-readiness + Prometheus metrics + metrics permission gate + job-failure metric increment + student/parent blocked, RBAC catalogue/matrix + grant/revoke + cache-invalidation-takes-effect + duplicate-idempotent + invalid-rejected + super_admin-critical-protected + audit + tenant-denied + no-secret-leak, caching hot-read hit/miss + dashboard invalidation-after-write + tenant-scoped cache isolation + RBAC catalogue/matrix invalidation-on-role-change + no-stale-permission-after-role-change + cache metrics counters in /observability + super-admin boundary, backup manual-trigger + metadata + protected download + non-super-admin denied + restore confirmation/force-required + global-only restore + confirmed full restore round-trip + retention cleanup + retention-off-never-deletes + scheduled-backup enqueue+run + durable audit + backup/restore metrics + no-secret/path-exposure), Swagger gating | ✅ 295 tests (`npm run test:integration`, in CI) |
 | **Contract** | Validate responses against the generated OpenAPI spec | drift between code and Swagger | ⬜ |
 | **Frontend** | React Testing Library (components), Playwright (E2E) | login → dashboard → create student → record payment | ⬜ |
 | **Mobile** | `flutter analyze` + `flutter test` | parent/student (Phase 1) + **staff (Phase 2)**: attendance/marks/homework/communication/reports/payslips/timetable + quick views | 🟡 analyze in CI + smoke tests; widget/provider tests ⬜ |

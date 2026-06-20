@@ -6,6 +6,7 @@ import {
   generateAbsenceAlerts,
   generateFeeReminders,
 } from "../communication/communication.service";
+import { enqueueDueScheduledBackups, runScheduledBackup } from "../backups/backups.service";
 import { runSchedulerTick } from "./jobs.service";
 
 interface ClaimedJob {
@@ -48,6 +49,11 @@ const HANDLERS: Record<string, Handler> = {
     const date =
       (job.payload as { date?: string }).date ?? new Date().toISOString().slice(0, 10);
     await generateAbsenceAlerts(job.institutionId, job.createdBy, date, false);
+  },
+
+  // Automated platform-wide database backup (enqueued by the schedule tick).
+  scheduled_backup: async () => {
+    await runScheduledBackup();
   },
 };
 
@@ -158,6 +164,7 @@ export function startWorker(): void {
     void (async () => {
       try {
         await runSchedulerTick(null);
+        await enqueueDueScheduledBackups();
         await processDueJobs({ limit: 50 });
       } catch (err) {
         console.error("job worker tick failed:", err);

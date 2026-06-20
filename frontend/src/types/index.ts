@@ -1747,3 +1747,47 @@ export interface RbacRevokeResult {
   revoked: boolean;
   removed: boolean;
 }
+
+// --- Super Admin: Scheduled Backup / Restore Automation (/backups/*) ---
+
+/** A database backup (super-admin backup/restore automation). */
+export interface Backup {
+  id: string;
+  scope: "global" | "institution";
+  institutionId: string | null;
+  status: "pending" | "running" | "success" | "failed";
+  trigger: "manual" | "scheduled";
+  storageMode: "s3" | "local" | null;
+  sizeBytes: number | string | null; // bigint serialises as a string
+  tableCount: number | null;
+  rowCount: number | null;
+  schemaVersion: number | null;
+  error: string | null;
+  hasArtifact: boolean;
+  createdBy: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+}
+
+export interface BackupSettings {
+  retentionCount: number | null;
+  scheduleEnabled: boolean;
+  scheduleFrequency: "daily" | "weekly" | "monthly";
+  scheduleRunTime: string;
+  nextRunAt: string | null;
+  updatedAt: string;
+}
+
+export interface BackupRestorePreview {
+  backupId: string;
+  scope: string;
+  createdAt: string;
+  schemaVersion: number;
+  currentSchemaVersion: number;
+  schemaMatches: boolean;
+  restorable: boolean;
+  tableCount: number;
+  totalRows: number;
+  tables: { name: string; rowCount: number }[];
+}

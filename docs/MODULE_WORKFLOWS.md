@@ -500,3 +500,32 @@ Deliverable **#5 Module-wise workflow**. Step-by-step flows for each module.
    `cache_misses_total`, `cache_invalidations_total`, `cache_entries` on
    `GET /observability/metrics`, plus a `cache` block on `/observability/overview`
    (shown with a hit-rate on the super-admin dashboard).
+
+## AA. Scheduled Backup / Restore Automation ✅ (Phase E)
+Super-admin only (`/backups`, `authorize("super_admin")` + `backup:*`). Tenant users
+are denied entirely.
+1. **Backup**: a backup is a **portable logical snapshot** — each table captured via
+   `to_jsonb` plus sequence positions, gzipped — so it needs no external `pg_dump` and
+   runs the same in CI and on the VPS. **Manual**: `POST /backups` runs one now (scope
+   `global`, or `institution` for a filtered per-tenant export). **Automatic**: enable a
+   schedule (daily/weekly/monthly + run time); the job worker's tick enqueues a
+   `scheduled_backup` job when due (deduped per window) and the handler runs the backup.
+2. **Storage & safety**: artifacts go to **object storage** (S3) when configured, else a
+   local-disk fallback (dev only). Only an internal, app-generated `storage_key` is kept;
+   it is **never** returned by the API. Download is a separate protected, audited route
+   (`GET /backups/:id/download`). Metadata records scope, status, trigger, size, table/row
+   counts, schema version, and who/what created it.
+3. **Restore** (`POST /backups/:id/restore`): **global backups only**. It is destructive,
+   so it ALWAYS requires `confirm=true`, and in **production** additionally requires
+   `force=true` — it can never happen by accident. A non-destructive **preview**
+   (`GET /backups/:id/restore/preview`) shows scope, schema match, and per-table row
+   counts first. The restore runs in one transaction with FK checks/triggers disabled
+   (`session_replication_role=replica`) so tables reload in any order; any error rolls the
+   whole thing back. The schema version must match the current DB. **Every attempt is
+   audited** (`restore.start` up front, then `restore.success`/`restore.failed`).
+4. **Retention**: keep the latest **N** successful backups; older ones (artifact + row)
+   are pruned after each successful backup. When `retentionCount` is unset (NULL),
+   retention is OFF and **nothing is ever deleted**.
+5. **Metrics**: `backups_total` / `restores_total` by result, `backups_stored`, and
+   `backup_last_success_timestamp_seconds` on `GET /observability/metrics`, plus a
+   `backups` block on `/observability/overview` — surfaced on the super-admin dashboard.

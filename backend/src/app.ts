@@ -20,6 +20,7 @@ import { aiInsightsRouter } from "./modules/aiinsights/aiinsights.routes";
 import { announcementsRouter } from "./modules/announcements/announcements.routes";
 import { attendanceRouter } from "./modules/attendance/attendance.routes";
 import { authRouter } from "./modules/auth/auth.routes";
+import { backupsRouter } from "./modules/backups/backups.routes";
 import { collegeRouter } from "./modules/college/college.routes";
 import { communicationRouter } from "./modules/communication/communication.routes";
 import { customReportsRouter } from "./modules/customreports/customreports.routes";
@@ -147,6 +148,7 @@ export function createApp(): express.Express {
   api.use("/ai", aiRouter);
   api.use("/ai-insights", aiInsightsRouter);
   api.use("/observability", observabilityRouter); // super-admin platform observability
+  api.use("/backups", backupsRouter); // super-admin backup / restore automation
   api.use("/admin", adminConsoleRouter); // super-admin platform console
   api.use("/platform", platformRouter); // super-admin platform hardening
   api.use("/", superAdminRouter); // /institutions, /branches, /packages
