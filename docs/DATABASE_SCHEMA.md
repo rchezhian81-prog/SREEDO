@@ -316,6 +316,14 @@ used when `institutions.type = 'college'`; the school flow is unaffected.
   cache on every change and recording a durable `platform_audit_log` entry. Adds
   `platform:rbac_read|rbac_manage|permissions_read|permissions_manage` (super_admin
   only). super_admin's `platform:*` grants cannot be revoked (critical-access guard).
+- **Caching:** ✅ (no migration) — **no new tables, no DB state**. A per-instance
+  in-process TTL cache (`src/cache/cache.ts`) memoises hot reads only: the
+  **dashboard stats** payload (keyed by `institution_id`, 30 s TTL, invalidated by
+  student create/status-change/archive/delete) and the global super-admin **RBAC
+  catalogue/matrix** (60 s TTL, dropped on grant/revoke). Cache keys always carry
+  the `institution_id` so entries never cross tenants; no secrets or per-request
+  private data are cached. Counters (hits/misses/invalidations/entries) are exposed
+  through the existing observability metrics — no schema change.
 
 ### Phase C/D supporting
 - **fee_categories**, **fee_discounts/scholarships**, **fee_fines** — extend the

@@ -2,6 +2,7 @@ import { pool, query } from "../../db/postgres";
 import { getMongoDb } from "../../db/mongo";
 import { env } from "../../config/env";
 import { snapshot } from "../../observability/metrics";
+import { cacheStats } from "../../cache/cache";
 
 async function groupCounts(sql: string): Promise<Record<string, number>> {
   const { rows } = await query<{ status: string; n: number }>(sql);
@@ -86,6 +87,7 @@ export async function overview() {
     },
     jobs: { success: m.jobsSuccess, failed: m.jobsFailed, retried: m.jobsRetried, queue },
     scheduledReports: scheduled,
+    cache: cacheStats(),
     recentFailures,
     worker: { enabled: env.jobWorkerEnabled, intervalMs: env.jobWorkerIntervalMs },
   };
@@ -137,6 +139,20 @@ export async function renderMetrics(): Promise<string> {
   for (const [status, n] of Object.entries(scheduled)) {
     out.push(`scheduled_report_runs_total{status="${status}"} ${n}`);
   }
+
+  const cache = cacheStats();
+  out.push("# HELP cache_hits_total Hot-path cache reads served from cache");
+  out.push("# TYPE cache_hits_total counter");
+  out.push(`cache_hits_total ${cache.hits}`);
+  out.push("# HELP cache_misses_total Hot-path cache reads that fell through to the loader");
+  out.push("# TYPE cache_misses_total counter");
+  out.push(`cache_misses_total ${cache.misses}`);
+  out.push("# HELP cache_invalidations_total Cache entries dropped by explicit invalidation");
+  out.push("# TYPE cache_invalidations_total counter");
+  out.push(`cache_invalidations_total ${cache.invalidations}`);
+  out.push("# HELP cache_entries Current number of live cache entries");
+  out.push("# TYPE cache_entries gauge");
+  out.push(`cache_entries ${cache.size}`);
 
   return line(out) + "\n";
 }

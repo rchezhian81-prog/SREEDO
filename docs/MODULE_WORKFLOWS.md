@@ -475,3 +475,28 @@ Deliverable **#5 Module-wise workflow**. Step-by-step flows for each module.
    worker status, and DB/Mongo/migrations/uptime — surfaced in a super-admin
    dashboard. All protected observability endpoints are **super_admin only**
    (`observability:read|metrics|health|logs`); no tenant data or secrets leak.
+
+## Z. Caching ✅ (Phase E)
+1. **What is cached** (hot reads only, deliberately low-risk): the **dashboard
+   stats** payload (`GET /dashboard/stats`) and the super-admin **RBAC
+   catalogue/matrix** (`GET /platform/permissions`, `GET /platform/roles`). A tiny
+   per-instance in-process TTL cache (`src/cache/cache.ts`) does get-or-load with
+   lazy expiry — no external store, no migration (suits the single-VPS target).
+2. **Tenant safety**: every cache key is namespaced and carries the
+   `institution_id` (e.g. `dashboard:stats:<institutionId>`), so a read can never
+   serve one tenant's data to another. The RBAC catalogue/matrix are global
+   reference data (not tenant-scoped) and are cached under a shared `rbac:` key.
+   Secrets and per-request-authorized private data are **never** cached.
+3. **Invalidation on write**: dashboard stats are dropped when a student is
+   created / status-changed / archived / deleted; the RBAC catalogue/matrix are
+   dropped on every grant/revoke. A short TTL (30 s dashboard, 60 s RBAC) bounds
+   any staleness not covered by an explicit hook.
+4. **No stale access after a role change**: grant/revoke also invalidates the
+   *runtime permission cache*, so a permission change takes effect immediately —
+   the read cache only ever holds the *display* catalogue/matrix, never an
+   authorization decision.
+5. **Metrics**: hit / miss / invalidation counters and a live entry-count gauge
+   are exposed through the existing observability surface — `cache_hits_total`,
+   `cache_misses_total`, `cache_invalidations_total`, `cache_entries` on
+   `GET /observability/metrics`, plus a `cache` block on `/observability/overview`
+   (shown with a hit-rate on the super-admin dashboard).

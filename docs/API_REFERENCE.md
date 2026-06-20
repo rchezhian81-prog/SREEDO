@@ -243,11 +243,18 @@ Auth column legend: **public** · **auth** (any logged-in) · or explicit role(s
 *Protected — `/api/v1/observability` (super-admin only; `observability:*`):*
 | Method | Path | Permission | Purpose |
 |--------|------|------------|---------|
-| GET | `/metrics` | `observability:metrics` | Prometheus text (requests/errors/durations, job + scheduled-report counters, queue depth) |
+| GET | `/metrics` | `observability:metrics` | Prometheus text (requests/errors/durations, job + scheduled-report counters, queue depth, **cache** hits/misses/invalidations + entries) |
 | GET | `/health` | `observability:health` | Detailed health (DB/Mongo, migrations, queue depth, config) |
-| GET | `/overview` | `observability:read` | Overview (request/error summary, jobs + queue, scheduled-report delivery, recent failures, worker status) |
+| GET | `/overview` | `observability:read` | Overview (request/error summary, jobs + queue, scheduled-report delivery, **cache** counters, recent failures, worker status) |
 
 *Every response carries an `x-request-id` correlation header (honoured from the request or generated).*
+
+**Hot-path caching:** a per-instance in-process TTL cache fronts the **dashboard
+stats** (`GET /dashboard/stats`, keyed by `institution_id`, 30 s TTL, invalidated
+on student writes) and the super-admin **RBAC catalogue/matrix** (`GET /platform/permissions`,
+`GET /platform/roles`, 60 s TTL, dropped on grant/revoke). No new endpoints; cache
+counters surface via `/observability/metrics` (`cache_hits_total`, `cache_misses_total`,
+`cache_invalidations_total`, `cache_entries`) and the `cache` block of `/observability/overview`.
 
 ### Platform (Super Admin) — `/api/v1/platform` *(super-admin only — `authorize("super_admin")` + `platform:*`; tenant users denied; cross-tenant data lives only here)*
 | Method | Path | Permission | Purpose |
