@@ -10,6 +10,7 @@ export { query };
 export const app = createApp();
 
 const TABLES = [
+  "backups",
   "jobs",
   "platform_audit_log",
   "scheduled_report_runs",
