@@ -304,6 +304,20 @@ link, a labelled `<nav>` landmark, `aria-current="page"` on the active item, and
 `<main id="main-content">`. Frontend tests extended with **jsdom + Testing Library**
 component a11y tests (label association, dialog semantics + Escape, status/alert roles, skip
 link). Remaining: read replicas if needed, load testing.
+✅ **Load / Performance Testing** — a CI-safe load suite in `backend/perf/` built on
+**autocannon** (npm, no external binary). Scenarios for the hot endpoints (login, dashboard
+stats, students/staff lists, attendance summary, fees/dues, Reports Center, timetable reads,
+RBAC catalogue/matrix) with per-scenario **P95 budgets**; the runner logs in, drives each
+with autocannon, gates on **p97.5 (≥ p95)**, and surfaces cache hit/miss + error counts from
+`/observability/metrics`. A **bulk seed** (`perf:seed`) generates seed-scale data (multiple
+institutions, students, staff, attendance, fees, homework). The actual load test is **manual**
+(local/staging); CI only runs `perf:validate` (typecheck + config validation, no server) so
+normal CI stays fast. Targets: **P95 < 300 ms for cached hot reads**, no error spike/crashes.
+Reference run (2 inst × 200 students, single dev container): all read endpoints **6–24 ms P95**,
+zero errors, ~21k cache hits; login bcrypt-bound (informational). Guide: `docs/PERFORMANCE.md`
+(how to run, thresholds, reading results, single-VPS meaning, when read replicas are needed).
+**Phase E Scale & Polish is complete.** Optional follow-ups remain (read replicas if/when
+signals appear, deeper a11y/i18n).
 
 ---
 
@@ -320,7 +334,7 @@ of E2E. Every PR must keep CI green.
 | **Frontend** | Vitest (i18n core ✅ + jsdom/Testing Library component a11y ✅); Playwright (E2E) ⬜ | i18n default/Tamil-load/fallback/interpolation/locale-validation; a11y label-association/dialog-semantics+Escape/status+alert roles/skip-link; later: login → dashboard → create student → record payment | 🟡 17 tests (`npm test`, in CI) |
 | **Mobile** | `flutter analyze` + `flutter test` | parent/student (Phase 1) + **staff (Phase 2)**: attendance/marks/homework/communication/reports/payslips/timetable + quick views | 🟡 analyze in CI + smoke tests; widget/provider tests ⬜ |
 | **Security** | dependency audit, `/security-review` on diffs, authz tests | RBAC, owner-scope, input validation, rate limits | 🟡 |
-| **Performance** | k6/autocannon on hot endpoints | P95 < 300 ms at seed scale | ⬜ |
+| **Performance** | autocannon on hot endpoints (`backend/perf/`); CI validates config | P95 < 300 ms at seed scale on cached hot reads | ✅ suite + seed + guide; `perf:validate` in CI, manual run local/staging (`docs/PERFORMANCE.md`) |
 
 **Test data:** the `seed` script provides deterministic demo data; integration
 tests run migrate + seed against an ephemeral Postgres (Compose service or CI

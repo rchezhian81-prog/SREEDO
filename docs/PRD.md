@@ -381,6 +381,11 @@ payroll, unpaid-leave deductions). `payroll:*` permissions, tenant-scoped
   accessible modal (dialog role / `aria-modal` / Escape / focus-trap / restore), status/alert
   roles, and accessible names on icon buttons. Covered by jsdom + Testing Library component
   tests in CI.
+- ✅ **Load / Performance Testing** (`backend/perf/`, autocannon): a CI-safe load suite for the
+  hot endpoints with per-scenario **P95 budgets** (300 ms for cached hot reads), a bulk
+  seed-scale data generator, and cache/error metrics surfaced from `/observability`. The load
+  run is manual (local/staging); CI runs only a fast config/type validation. See
+  [`PERFORMANCE.md`](./PERFORMANCE.md).
 
 ### 4.20 Security — 🟡 Partial (see §6)
 - ✅ JWT auth, role-based access, rate limiting, zod input validation, bcrypt
@@ -394,7 +399,7 @@ payroll, unpaid-leave deductions). `payroll:*` permissions, tenant-scoped
 
 | Area | Requirement |
 |------|-------------|
-| **Performance** | P95 API < 300 ms for list/detail at seed scale; pagination on all list endpoints (✅ pattern exists); ✅ **hot-path read cache** — a short-TTL in-process cache for the dashboard stats and super-admin RBAC catalogue/matrix, tenant-scoped keys, explicit invalidation on writes, with hit/miss/invalidation counters on `/observability`. |
+| **Performance** | P95 API < 300 ms for list/detail at seed scale; pagination on all list endpoints (✅ pattern exists); ✅ **hot-path read cache** — a short-TTL in-process cache for the dashboard stats and super-admin RBAC catalogue/matrix, tenant-scoped keys, explicit invalidation on writes, with hit/miss/invalidation counters on `/observability`. ✅ **Load/perf suite** (`backend/perf/`, autocannon) validates the P95 target on hot endpoints at seeded scale; a reference run shows cached reads at 6–24 ms P95 with zero errors (`docs/PERFORMANCE.md`). |
 | **Scalability** | Stateless API (horizontal scale behind nginx; the read cache is per-instance with short TTLs + explicit invalidation, so it stays correct across replicas — a shared cache (e.g. Redis) is a later option if needed); connection-pooled Postgres; multi-tenant data partitioning by `institution_id`. |
 | **Availability** | `/health` + `/live` liveness ✅, `/ready` readiness probe ✅ (fails only on critical deps DB+migrations); target 99.5% on a single VPS; graceful degradation when Mongo/OpenAI/SMTP are down ✅. |
 | **Backup & recovery** | ✅ Scheduled + manual **database backups** (portable logical snapshots to object storage, retention policy) and a guarded, audited **restore** workflow (super-admin only, confirmation + production force flag, non-destructive preview). Backup/restore success/failure + last-backup-time exposed as metrics. |

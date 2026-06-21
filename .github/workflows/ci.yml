@@ -42,6 +42,9 @@ jobs:
           JWT_ACCESS_SECRET: ci-access-secret-not-dev
           JWT_REFRESH_SECRET: ci-refresh-secret-not-dev
       - run: npm run build
+      # Validate the performance suite (config + types) without running a load
+      # test, so CI stays fast. The actual run is manual (local/staging).
+      - run: npm run perf:validate
 
   frontend:
     name: Frontend (typecheck, test, build)

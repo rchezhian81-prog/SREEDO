@@ -575,3 +575,26 @@ web app benefits without auditing every page individually.
 4. **Tests**: jsdom + Testing Library component tests assert label↔control association +
    error a11y, dialog semantics + Escape, status/alert roles, and the skip link — alongside
    the i18n suite, in CI.
+
+## DD. Load / Performance Testing ✅ (Phase E)
+A CI-safe load-testing suite for the backend's hot endpoints (`backend/perf/`), built on
+**autocannon** (an npm dependency — no external binary). Full guide: `docs/PERFORMANCE.md`.
+1. **Scenarios** (`perf/scenarios.ts`, pure data so it validates without a server): login,
+   dashboard stats, students list, staff list, attendance summary, fees/dues, Reports Center,
+   timetable reads, RBAC catalogue + role matrix — each with a P95 budget. The portal (cookie
+   auth) is documented as a manual scenario.
+2. **Seed scale** (`npm run perf:seed`): bulk-generates multiple institutions with classes/
+   sections, staff, students, attendance, invoices + payments, and homework (volumes tunable
+   via env). Run against a **disposable** database only.
+3. **Run** (`npm run perf`): logs in (staff + super), drives each scenario with autocannon at
+   the configured concurrency/duration, and gates **P95** — conservatively on autocannon's
+   **p97.5 (≥ p95)** — against each budget. It also reads `/observability/metrics` before/after
+   to show cache hit/miss deltas and reports request throughput, non-2xx, errors, and runner
+   memory. `auth:login` is **informational** (bcrypt-bound by design, not gated).
+4. **Targets**: P95 < 300 ms for cached hot reads at seed scale, no error spike, no crashes. A
+   reference run (2 institutions × 200 students, single dev container) showed all read endpoints
+   at **6–24 ms P95** with zero errors and ~21k cache hits.
+5. **CI**: only `npm run perf:validate` runs in CI (typechecks the suite + validates the
+   scenario/config, no server) so normal CI stays fast; the load run itself is manual
+   (local/staging). The guide also covers reading results, single-VPS implications, and when
+   read replicas may be warranted.
