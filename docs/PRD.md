@@ -409,7 +409,7 @@ payroll, unpaid-leave deductions). `payroll:*` permissions, tenant-scoped
 | **Internationalization** | ✅ Web frontend i18n — English (default) + **Tamil**, per-browser language switcher (staff, portal, login), English fallback for missing strings, designed for easy addition of Hindi/others; UTF-8 throughout. PDFs/reports structured for later translation. |
 | **Observability** | ✅ **Structured JSON request logging** (correlation id via `x-request-id`, safe curated fields — no secrets); ✅ **Prometheus metrics** (`/observability/metrics`: requests/errors/durations, job + scheduled-report counters, queue depth); ✅ liveness/readiness probes; ✅ super-admin **overview + detailed health**; audit trail ✅; consistent error envelope ✅. (`observability:*`, super-admin only.) |
 | **Maintainability** | Clean modular architecture (routes/schema/service ✅), TypeScript everywhere ✅, generated API docs ✅. Test layers: backend unit + integration ✅, **API contract tests** ✅ (OpenAPI validity + coverage + security), frontend unit (i18n + a11y) ✅, and a **Playwright E2E** suite ✅ (smoke/critical/extended; CI-validated, browser run manual — `docs/E2E_TESTING.md`). |
-| **Portability** | Dockerized; runs on any Docker host / Hostinger VPS ✅. |
+| **Portability** | Dockerized; runs on any Docker host / Hostinger VPS ✅. **Production go-live hardened** ✅ — Docker Compose (backend + frontend + Postgres + Mongo + in-process worker + Nginx), TLS-ready Nginx (HTTP→HTTPS, HSTS), `.env.production.example`, production-safe super-admin bootstrap, restore drill, and a go-live checklist (`docs/DEPLOYMENT.md`). |
 
 ## 6. Security requirements (detail)
 

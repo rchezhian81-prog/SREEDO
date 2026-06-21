@@ -353,6 +353,11 @@ used when `institutions.type = 'college'`; the school flow is unaffected.
 - **E2E / contract testing:** ✅ (no migration) — **no schema change**. Test-only: backend
   contract tests read the generated OpenAPI spec + drive existing routes; Playwright E2E
   drives the web app against a demo-seeded disposable database. No new tables/columns.
+- **Deployment / production hardening:** ✅ (no migration) — **no schema change**. Ops only.
+  Production notes: the backend **auto-runs migrations on boot** (`runMigrations` in
+  `server.ts`); the initial super admin is created either by `SEED_ON_START` (demo) or a
+  production-safe one-off insert (see `docs/DEPLOYMENT.md`); backups/restore use the existing
+  `0043` backup module (restore needs a DB role permitted to `SET session_replication_role`).
 
 ### Phase C/D supporting
 - **fee_categories**, **fee_discounts/scholarships**, **fee_fines** — extend the

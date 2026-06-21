@@ -618,3 +618,24 @@ Two layers above unit/integration. Full guide: `docs/E2E_TESTING.md`.
    browser run is **not** in CI (it needs the whole stack and would slow every build). Browsers
    are installed only for local/staging runs. The executable behavioural safety net in CI is
    the contract suite.
+
+## FF. Deployment / Production Go-Live (Hostinger VPS) ✅
+Operational runbook (not an app feature): full step-by-step in `docs/DEPLOYMENT.md`.
+1. **Stack** (`docker-compose.yml`): Nginx (TLS) → frontend (:3000) + backend (:4000);
+   Postgres + Mongo internal with named volumes. Backend runs `NODE_ENV=production`, applies
+   migrations on boot, and runs the **in-process background worker** (`JOB_WORKER_ENABLED=true`
+   → scheduler tick for scheduled reports + backups, then drains the job queue). A backend
+   `/ready` healthcheck gates dependents.
+2. **Secrets** (`.env.production.example` → `.env`, never committed): strong `POSTGRES_PASSWORD`,
+   distinct `JWT_*` (the API refuses `dev-` secrets in prod), real `CORS_ORIGIN` +
+   `NEXT_PUBLIC_API_URL`, object storage (durable uploads + backups), optional SMTP/SMS/FCM/
+   OpenAI/payment. `ENABLE_API_DOCS=false`.
+3. **Bootstrap**: first boot seeds (staging) or create a **production-safe super admin** via a
+   one-off `docker compose exec` (no demo data); then build the institution from the console.
+4. **TLS**: certbot issues Let's Encrypt certs; swap in `infra/nginx/production.conf` + mount
+   certs + publish :443 → HTTP→HTTPS redirect, HSTS, security headers.
+5. **Verify & operate**: `/health` `/ready` `/live` probes; super-admin `/observability/*`
+   metrics; Docker JSON-log rotation; **backup schedule + retention + restore drill**; rollback
+   = redeploy previous tag (+ restore a backup if the schema changed). A **go-live checklist**
+   closes it out. Security defaults (secure cookies, CORS, rate limits, upload limits, protected
+   downloads, Swagger off, tenant/RBAC) are verified, not changed.
