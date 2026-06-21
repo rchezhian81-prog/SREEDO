@@ -50,6 +50,27 @@ Required at minimum: `POSTGRES_PASSWORD`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECR
 `NEXT_PUBLIC_API_URL` (both your real HTTPS origin). Configure **object storage**
 (`STORAGE_*`) so uploads and backups are durable. Keep `ENABLE_API_DOCS=false`.
 
+### Optional integrations (set the ones you use)
+
+These are optional — the API boots and runs without them and the matching feature is
+simply unavailable until configured. Variable names and inline hints all live in
+`.env.production.example`.
+
+- **Object storage** (`STORAGE_ENDPOINT`, `STORAGE_REGION`, `STORAGE_BUCKET`,
+  `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY`, `STORAGE_MAX_MB`) — strongly recommended in
+  production so uploads **and backups** are durable. Without it both fall back to the local
+  `backenduploads` volume (lost if that volume is removed). Keep `STORAGE_MAX_MB` aligned
+  with Nginx `client_max_body_size`.
+- **Email / SMTP** (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`) —
+  outbound notifications and scheduled-report delivery.
+- **SMS** (`SMS_PROVIDER`, `SMS_API_URL`, `SMS_API_KEY`, `SMS_SENDER`) — fee-reminder and
+  absence-alert text messages.
+- **Push / FCM** (`FCM_SERVER_KEY`) — mobile push notifications.
+- **AI insights** (`OPENAI_API_KEY`, `OPENAI_MODEL`) — optional; unset leaves AI features off.
+
+**Mongo** (optional audit / AI history) needs no `.env` entry — the Compose `mongo` service is
+already wired to the backend via `MONGO_URL` in `docker-compose.yml` and works out of the box.
+
 ## 4. First boot
 
 ```bash
