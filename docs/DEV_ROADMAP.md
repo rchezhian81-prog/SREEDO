@@ -353,6 +353,17 @@ analyze, Docker builds).
 Reference deployment: **Docker Compose + Nginx + SSL + GitHub Actions** on a
 Hostinger VPS (works on any Docker host).
 
+✅ **Production hardening shipped** — full step-by-step runbook in
+[`docs/DEPLOYMENT.md`](./DEPLOYMENT.md): a production-complete root `docker-compose.yml`
+(NODE_ENV=production, auto-migrate on boot, **in-process worker** `JOB_WORKER_ENABLED=true`,
+S3/SMTP/SMS/FCM/payment env passthroughs, a backend `/ready` **healthcheck**, persistent
+volumes), a TLS-ready `infra/nginx/production.conf.example` (HTTP→HTTPS redirect, HSTS +
+security headers), a root `.env.production.example` (all secrets templated, none committed),
+a **production-safe super-admin bootstrap** (no demo data), the **restore drill**, monitoring/
+log-rotation guidance, rollback steps, and a **go-live checklist**. Security defaults verified
+(secure httpOnly cookies in prod, restricted CORS, rate limiting, upload limits, protected
+private downloads, Swagger off, tenant/RBAC unchanged).
+
 ### Topology
 Nginx (:80/:443, TLS) → `frontend` (:3000) + `backend` (:4000); `postgres` +
 `mongo` internal-only with named volumes. Backend runs migrations on startup.
@@ -386,8 +397,11 @@ Nginx (:80/:443, TLS) → `frontend` (:3000) + `backend` (:4000); `postgres` +
   Store `SSH_KEY`, host, and registry creds as GitHub **secrets**.
 
 ### Backups (do not skip — fee data is money)
-- Nightly `pg_dump` to object storage **off the VPS** (cron + container).
-- Test **restore** quarterly. Mongo (audit/AI) is non-critical but can be snapshotted.
+- ✅ Built-in **Scheduled Backup / Restore** module (super-admin) — schedule + retention,
+  artifacts to object storage **off the VPS**, guarded/audited restore. Drive it from the app
+  or API; the in-process worker runs the schedule. (Migration `0043`; see `docs/DEPLOYMENT.md` §8.)
+- Run the **restore drill** on staging before go-live and periodically. Mongo (audit/AI) is
+  non-critical but can be snapshotted.
 - Phase A adds an admin-triggered backup endpoint/Ui on top of the cron baseline.
 
 ### Go-live checklist

@@ -282,6 +282,14 @@ endpoints are asserted to return documented status codes, and the security guara
 (401 unauth, 403 role/owner, 404 cross-tenant, portal cookie auth) are verified. The spec
 itself is unchanged by this — see [`E2E_TESTING.md`](./E2E_TESTING.md).
 
+### Production deployment
+In production (`docs/DEPLOYMENT.md`) the API sits behind Nginx (TLS) with the public probes
+`GET /health`, `/ready`, `/live` (no auth, no secrets) wired to monitoring + the container
+healthcheck; the super-admin `/observability/metrics|overview` surfaces request/cache/job/
+backup metrics. The API contract is **unchanged** by deployment — Swagger stays off
+(`ENABLE_API_DOCS=false`), CORS is restricted to `CORS_ORIGIN`, rate limiting + upload limits
+apply, and portal cookies are `secure` + `httpOnly` over HTTPS.
+
 ### Backups — `/api/v1/backups` *(super-admin only — `authorize("super_admin")` + `backup:*`; tenant users denied; storage paths never exposed)*
 | Method | Path | Permission | Purpose |
 |--------|------|------------|---------|
