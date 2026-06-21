@@ -275,6 +275,13 @@ timetable, RBAC) and reads `/observability/metrics` for cache/latency counters. 
 endpoints or contract changes** — it only drives existing routes. See
 [`PERFORMANCE.md`](./PERFORMANCE.md).
 
+### Contract testing
+This spec is **contract-tested** in CI (`backend/tests/integration/contract.int.test.ts`):
+the generated OpenAPI document is checked for validity + group coverage, representative
+endpoints are asserted to return documented status codes, and the security guarantees
+(401 unauth, 403 role/owner, 404 cross-tenant, portal cookie auth) are verified. The spec
+itself is unchanged by this — see [`E2E_TESTING.md`](./E2E_TESTING.md).
+
 ### Backups — `/api/v1/backups` *(super-admin only — `authorize("super_admin")` + `backup:*`; tenant users denied; storage paths never exposed)*
 | Method | Path | Permission | Purpose |
 |--------|------|------------|---------|

@@ -350,6 +350,9 @@ used when `institutions.type = 'college'`; the school flow is unaffected.
   (institutions, users, classes/sections, teachers, students, attendance_records, invoices,
   payments, homework) for measurement — it adds **no new tables or columns** and is meant for
   a disposable database.
+- **E2E / contract testing:** ✅ (no migration) — **no schema change**. Test-only: backend
+  contract tests read the generated OpenAPI spec + drive existing routes; Playwright E2E
+  drives the web app against a demo-seeded disposable database. No new tables/columns.
 
 ### Phase C/D supporting
 - **fee_categories**, **fee_discounts/scholarships**, **fee_fines** — extend the

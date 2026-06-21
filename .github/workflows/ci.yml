@@ -63,6 +63,9 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      # Validate the Playwright E2E suite (compile + discover) without launching
+      # browsers, so CI stays fast. The actual browser run is manual (local/staging).
+      - run: npm run e2e:validate
 
   mobile:
     name: Mobile (analyze)
