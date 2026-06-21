@@ -1,3 +1,9 @@
+# Production-oriented Docker Compose for a single Hostinger VPS.
+# Backend runs NODE_ENV=production, auto-applies migrations on boot, and runs the
+# in-process background worker (scheduler tick → scheduled backups + due jobs).
+# Copy .env.production.example to .env and fill in secrets before `docker compose up -d`.
+# See docs/DEPLOYMENT.md for the full go-live runbook (incl. TLS).
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -31,15 +37,62 @@ services:
       MONGO_DB: ${POSTGRES_DB:-sreedo}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET in .env}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET in .env}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-7}
+      # Restrict to your real origin(s) in production (comma-separated).
+      CORS_ORIGIN: ${CORS_ORIGIN:?set CORS_ORIGIN to your domain, e.g. https://erp.example.com}
+      RATE_LIMIT_WINDOW_MINUTES: ${RATE_LIMIT_WINDOW_MINUTES:-15}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-300}
+      AUTH_RATE_LIMIT_MAX: ${AUTH_RATE_LIMIT_MAX:-10}
+      # First boot only: seed the initial super admin (then set back to false).
       SEED_ON_START: ${SEED_ON_START:-false}
+      # Swagger stays OFF in production unless you explicitly enable + IP-restrict it.
       ENABLE_API_DOCS: ${ENABLE_API_DOCS:-false}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      # Background worker: runs the scheduler tick (scheduled reports + backups) and
+      # drains the job queue. Keep ON for a single-node deployment.
+      JOB_WORKER_ENABLED: ${JOB_WORKER_ENABLED:-true}
+      JOB_WORKER_INTERVAL_MS: ${JOB_WORKER_INTERVAL_MS:-15000}
+      # Object storage (S3-compatible). Strongly recommended in production so uploads
+      # and backups survive container restarts; falls back to local disk if unset.
+      STORAGE_ENDPOINT: ${STORAGE_ENDPOINT:-}
+      STORAGE_REGION: ${STORAGE_REGION:-us-east-1}
+      STORAGE_BUCKET: ${STORAGE_BUCKET:-}
+      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:-}
+      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:-}
+      STORAGE_MAX_MB: ${STORAGE_MAX_MB:-10}
+      # Email / SMS / push — optional (degrade gracefully when unset).
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-SRE EDU OS <no-reply@sreedo.edu>}
+      SMS_PROVIDER: ${SMS_PROVIDER:-}
+      SMS_API_URL: ${SMS_API_URL:-}
+      SMS_API_KEY: ${SMS_API_KEY:-}
+      SMS_SENDER: ${SMS_SENDER:-SREEDO}
+      FCM_SERVER_KEY: ${FCM_SERVER_KEY:-}
+      # AI assistant — optional.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
+      # Online payment gateway — optional.
+      PAYMENT_GATEWAY_PROVIDER: ${PAYMENT_GATEWAY_PROVIDER:-}
+      PAYMENT_GATEWAY_WEBHOOK_SECRET: ${PAYMENT_GATEWAY_WEBHOOK_SECRET:-}
+      PAYMENT_CHECKOUT_BASE_URL: ${PAYMENT_CHECKOUT_BASE_URL:-}
+      PAYMENT_CURRENCY: ${PAYMENT_CURRENCY:-INR}
+    # A persistent volume for the local-disk storage fallback (used only when S3 is
+    # not configured). Prefer object storage in production.
+    volumes:
+      - backenduploads:/app/uploads
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://localhost:4000/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
     depends_on:
       postgres:
         condition: service_healthy
@@ -50,18 +103,26 @@ services:
     build:
       context: ./frontend
       args:
+        # Public API base baked at build time — must be the browser-visible URL.
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost/api/v1}
     restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
   nginx:
     image: nginx:1.27-alpine
     restart: unless-stopped
     ports:
       - "80:80"
+      # For TLS, also publish 443 and mount certs — see docs/DEPLOYMENT.md and
+      # infra/nginx/production.conf.example.
+      # - "443:443"
     volumes:
       - ./infra/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      # TLS: swap in the production conf + mount Let's Encrypt certs:
+      # - ./infra/nginx/production.conf:/etc/nginx/conf.d/default.conf:ro
+      # - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
       - backend
       - frontend
@@ -69,3 +130,4 @@ services:
 volumes:
   pgdata:
   mongodata:
+  backenduploads:
