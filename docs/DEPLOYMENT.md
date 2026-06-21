@@ -50,6 +50,27 @@ Required at minimum: `POSTGRES_PASSWORD`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECR
 `NEXT_PUBLIC_API_URL` (both your real HTTPS origin). Configure **object storage**
 (`STORAGE_*`) so uploads and backups are durable. Keep `ENABLE_API_DOCS=false`.
 
+### Optional integrations (set the ones you use)
+
+These are optional — the API boots and runs without them and the matching feature is
+simply unavailable until configured. Variable names and inline hints all live in
+`.env.production.example`.
+
+- **Object storage** (`STORAGE_ENDPOINT`, `STORAGE_REGION`, `STORAGE_BUCKET`,
+  `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY`, `STORAGE_MAX_MB`) — strongly recommended in
+  production so uploads **and backups** are durable. Without it both fall back to the local
+  `backenduploads` volume (lost if that volume is removed). Keep `STORAGE_MAX_MB` aligned
+  with Nginx `client_max_body_size`.
+- **Email / SMTP** (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`) —
+  outbound notifications and scheduled-report delivery.
+- **SMS** (`SMS_PROVIDER`, `SMS_API_URL`, `SMS_API_KEY`, `SMS_SENDER`) — fee-reminder and
+  absence-alert text messages.
+- **Push / FCM** (`FCM_SERVER_KEY`) — mobile push notifications.
+- **AI insights** (`OPENAI_API_KEY`, `OPENAI_MODEL`) — optional; unset leaves AI features off.
+
+**Mongo** (optional audit / AI history) needs no `.env` entry — the Compose `mongo` service is
+already wired to the backend via `MONGO_URL` in `docker-compose.yml` and works out of the box.
+
 ## 4. First boot
 
 ```bash
@@ -119,6 +140,36 @@ docker compose ps                          # all services "running"/"healthy"
 ```
 Then sign in through the browser and run a quick smoke (dashboard, create a student).
 
+### Pre-go-live dry-run (staging)
+
+Before pointing real users at the box, do a full dry-run on a staging host (or the VPS
+before DNS cutover). Bring the stack up with `docker compose up -d --build` against a
+throwaway database and confirm each of these — they exercise every production guarantee:
+
+- **Boot & migrations**: backend logs show `Connected to PostgreSQL` → migrations →
+  `listening`; `/ready` returns `{"ready":true}` with `database`, `migrations`, `jobQueue`
+  all `true`.
+- **Docs off**: `GET /api/docs.json` → **404** (`ENABLE_API_DOCS=false` in production).
+- **AuthZ boundaries**: an unauthenticated `GET /api/v1/students` → **401**; an institution
+  admin hitting `GET /api/v1/platform/institutions` or `/observability/metrics` → **403**;
+  the same as super admin → **200**.
+- **Private downloads**: `GET /api/v1/backups` and `/api/v1/documents` with no token → **401**.
+- **CORS**: a preflight from `CORS_ORIGIN` echoes `Access-Control-Allow-Origin`; a preflight
+  from any other origin does **not**.
+- **Rate limiting**: more than `AUTH_RATE_LIMIT_MAX` (default 10) *failed* logins in the
+  window → **429** (successful logins don't count).
+- **Cookies**: portal login `Set-Cookie` carries `HttpOnly; Secure; SameSite=Lax`.
+- **Backup + restore preview**: `POST /api/v1/backups` → `status: success` with a size and
+  table count; `GET /api/v1/backups/:id/restore/preview` → `restorable: true`,
+  `schemaMatches: true`. (Only run the **destructive** restore against a staging DB — §8.)
+- **Worker**: enable the backup schedule, then watch a scheduled backup appear and
+  `next_run_at` advance — confirms the in-process worker tick is live (§7).
+- **Frontend**: `GET /` and `/login` return **200** HTML.
+- **No secrets committed**: only `*.env.example` templates are tracked; real `.env` is
+  git-ignored.
+
+Tear the dry-run database down afterward; the production database is created fresh at §4.
+
 ## 7. Background worker
 
 The worker runs **inside the backend container** when `JOB_WORKER_ENABLED=true`
@@ -154,8 +205,10 @@ fallback volume). See `docs/MODULE_WORKFLOWS.md` §AA.
    error; every attempt is audited (`restore.start` → `restore.success`/`failed`).
 4. Verify data + that you can still sign in.
 
-> The DB user must allow `SET session_replication_role = replica` for restore (the
-> default `postgres`/superuser role in the compose Postgres does).
+> Restore runs `SET session_replication_role = replica` (to bypass FK checks), which
+> requires a **superuser** DB role. The Compose Postgres role — `POSTGRES_USER`
+> (default `sreedo`) — is the cluster bootstrap superuser, so this works out of the box.
+> On managed Postgres, use a role with the equivalent privilege (e.g. `rds_superuser`).
 
 ## 9. Health, monitoring & logs
 
@@ -217,6 +270,8 @@ docker compose up -d --build
 - [ ] `ENABLE_API_DOCS=false`; `SEED_ON_START=false` after first boot.
 - [ ] TLS issued; HTTP→HTTPS redirect works; HSTS present.
 - [ ] `/health`, `/ready`, `/live` all OK over HTTPS; `docker compose ps` healthy.
+- [ ] Pre-go-live dry-run passed (§6): AuthZ 401/403, CORS, rate-limit 429, backup +
+      restore-preview, worker scheduled backup, frontend loads, no secrets committed.
 - [ ] Initial super admin created; demo accounts removed/rotated.
 - [ ] `JOB_WORKER_ENABLED=true`; worker tick visible in logs / overview.
 - [ ] Backup schedule + retention set; **manual backup taken**; **restore drill passed** on staging.
