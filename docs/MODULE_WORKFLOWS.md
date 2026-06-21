@@ -598,3 +598,23 @@ A CI-safe load-testing suite for the backend's hot endpoints (`backend/perf/`), 
    scenario/config, no server) so normal CI stays fast; the load run itself is manual
    (local/staging). The guide also covers reading results, single-VPS implications, and when
    read replicas may be warranted.
+
+## EE. E2E & Contract Testing ✅ (Phase E+)
+Two layers above unit/integration. Full guide: `docs/E2E_TESTING.md`.
+1. **API contract tests** (`backend/tests/integration/contract.int.test.ts`, **run in CI**):
+   assert the generated **OpenAPI** document is valid 3.x with metadata + a bearer scheme,
+   that every important API group is documented (auth, students, teachers, attendance, fees,
+   reports, documents, homework, communication, portal, platform/RBAC), that representative
+   endpoints return **documented status codes**, and that the security guarantees hold —
+   **401** unauthenticated, **403** role/permission denial, **404** cross-tenant read, **403**
+   cross-student (owner scope), and the portal cookie-auth flow. No extra services.
+2. **Playwright E2E** (`frontend/e2e/`, **manual** run against a live seeded stack): real
+   browser flows — smoke (admin sign-in + dashboard, create student, language switch, portal
+   sign-in), security (auth redirects, portal-vs-staff separation), a critical happy path
+   (enrol student → fees/payment where supported → Reports Center → portal view), and extended
+   flows (create staff, mark attendance, homework, communication inbox, documents, parent/child).
+3. **CI safety**: the frontend job runs `npm run e2e:validate` (`playwright test --list` —
+   compiles + discovers, **no browsers, no server**) so the suite can't rot, but the full
+   browser run is **not** in CI (it needs the whole stack and would slow every build). Browsers
+   are installed only for local/staging runs. The executable behavioural safety net in CI is
+   the contract suite.
