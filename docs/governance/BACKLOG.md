@@ -27,6 +27,11 @@ foundation, ID-card PDF generation) and have been **excluded** here.
 - Priority: 🔴 high · 🟠 medium · 🟢 nice-to-have
 - Effort: **S** (≈ days) · **M** (≈ 1–2 weeks) · **L** (≈ weeks+)
 
+### ✅ Recently shipped
+- **GAP-S01** — Forgot-password / self-service reset (PR #45)
+- **GAP-F01** — Bulk CSV import for students & staff (PR #46)
+- **GAP-T01** — Automated deploy workflow, gated/opt-in (PR #47) — activate by adding the VPS secrets + `DEPLOY_ENABLED=true` (see [DEPLOYMENT.md → Automated deploy](../DEPLOYMENT.md))
+
 ---
 
 ## ⭐ Recommended order (first)
