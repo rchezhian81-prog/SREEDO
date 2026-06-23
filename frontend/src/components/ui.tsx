@@ -10,6 +10,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
+import { Icon } from "@/components/icons";
 
 export function cx(...classes: Array<string | false | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -23,17 +24,18 @@ export const Button = forwardRef<
 >(function Button({ variant = "primary", className, ...props }, ref) {
   const styles = {
     primary:
-      "bg-brand-600 text-white hover:bg-brand-700 disabled:bg-brand-600/50",
+      "bg-brand-600 text-white shadow-[0_8px_18px_rgb(37_99_235_/_0.32)] hover:bg-brand-700 disabled:bg-brand-600/50 disabled:shadow-none",
     secondary:
-      "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
-    danger: "bg-red-600 text-white hover:bg-red-700",
-    ghost: "text-slate-600 hover:bg-slate-100",
+      "border border-line bg-surface text-ink hover:bg-hover",
+    danger:
+      "bg-red-600 text-white shadow-[0_8px_18px_rgb(239_68_68_/_0.3)] hover:bg-red-700",
+    ghost: "text-muted hover:bg-hover hover:text-ink",
   }[variant];
   return (
     <button
       ref={ref}
       className={cx(
-        "inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60",
+        "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60 focus-visible:ring-offset-2",
         styles,
         className
@@ -43,36 +45,21 @@ export const Button = forwardRef<
   );
 });
 
+const fieldStyles =
+  "w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-faint transition focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30";
+
 export const Input = forwardRef<
   HTMLInputElement,
   React.InputHTMLAttributes<HTMLInputElement>
 >(function Input({ className, ...props }, ref) {
-  return (
-    <input
-      ref={ref}
-      className={cx(
-        "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30",
-        className
-      )}
-      {...props}
-    />
-  );
+  return <input ref={ref} className={cx(fieldStyles, className)} {...props} />;
 });
 
 export const Select = forwardRef<
   HTMLSelectElement,
   React.SelectHTMLAttributes<HTMLSelectElement>
 >(function Select({ className, ...props }, ref) {
-  return (
-    <select
-      ref={ref}
-      className={cx(
-        "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30",
-        className
-      )}
-      {...props}
-    />
-  );
+  return <select ref={ref} className={cx(fieldStyles, className)} {...props} />;
 });
 
 export const Textarea = forwardRef<
@@ -80,14 +67,7 @@ export const Textarea = forwardRef<
   React.TextareaHTMLAttributes<HTMLTextAreaElement>
 >(function Textarea({ className, ...props }, ref) {
   return (
-    <textarea
-      ref={ref}
-      className={cx(
-        "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30",
-        className
-      )}
-      {...props}
-    />
+    <textarea ref={ref} className={cx(fieldStyles, className)} {...props} />
   );
 });
 
@@ -124,13 +104,13 @@ export function Field({
     <div className="block">
       <label
         htmlFor={childId}
-        className="mb-1 block text-sm font-medium text-slate-700"
+        className="mb-1.5 block text-sm font-medium text-ink"
       >
         {label}
       </label>
       {control}
       {error && (
-        <span id={errorId} className="mt-1 block text-xs text-red-600">
+        <span id={errorId} className="mt-1 block text-xs text-red-500">
           {error}
         </span>
       )}
@@ -148,7 +128,7 @@ export function Card({
   return (
     <div
       className={cx(
-        "rounded-xl border border-slate-200 bg-white p-5 shadow-sm",
+        "rounded-2xl border border-line bg-surface p-5 shadow-card",
         className
       )}
     >
@@ -165,16 +145,16 @@ export function Badge({
   children: ReactNode;
 }) {
   const tones = {
-    slate: "bg-slate-100 text-slate-700",
-    green: "bg-emerald-100 text-emerald-700",
-    amber: "bg-amber-100 text-amber-700",
-    red: "bg-red-100 text-red-700",
-    blue: "bg-blue-100 text-blue-700",
+    slate: "bg-hover text-muted",
+    green: "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400",
+    amber: "bg-amber-500/12 text-amber-600 dark:text-amber-400",
+    red: "bg-red-500/12 text-red-600 dark:text-red-400",
+    blue: "bg-brand-500/12 text-brand-600 dark:text-brand-300",
   }[tone];
   return (
     <span
       className={cx(
-        "inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium",
+        "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize",
         tones
       )}
     >
@@ -249,7 +229,7 @@ export function Modal({
   if (!open) return null;
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
@@ -258,19 +238,19 @@ export function Modal({
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl"
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-line bg-surface p-6 shadow-pop"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="mb-4 flex items-center justify-between">
-          <h2 id={titleId} className="text-lg font-semibold text-slate-900">
+        <div className="mb-5 flex items-center justify-between">
+          <h2 id={titleId} className="text-lg font-bold text-ink">
             {title}
           </h2>
           <button
             onClick={onClose}
-            className="rounded-lg p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+            className="rounded-lg p-1.5 text-faint transition hover:bg-hover hover:text-ink"
             aria-label="Close"
           >
-            <span aria-hidden>✕</span>
+            <Icon name="x" className="h-4 w-4" />
           </button>
         </div>
         {children}
@@ -289,10 +269,10 @@ export function PageHeader({
   action?: ReactNode;
 }) {
   return (
-    <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+    <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">{title}</h1>
-        {subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}
+        <h1 className="text-2xl font-bold tracking-tight text-ink">{title}</h1>
+        {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}
       </div>
       {action}
     </div>
@@ -303,7 +283,7 @@ export function PageHeader({
 export function Spinner() {
   return (
     <div className="flex justify-center py-12" role="status" aria-live="polite">
-      <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-300 border-t-brand-600" />
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-line border-t-brand-600" />
       <span className="sr-only">Loading…</span>
     </div>
   );
@@ -311,7 +291,7 @@ export function Spinner() {
 
 export function EmptyState({ message }: { message: string }) {
   return (
-    <div className="rounded-xl border border-dashed border-slate-300 py-12 text-center text-sm text-slate-500">
+    <div className="rounded-2xl border border-dashed border-line bg-surface/50 py-12 text-center text-sm text-muted">
       {message}
     </div>
   );
@@ -323,7 +303,7 @@ export function ErrorNote({ message }: { message: string | null }) {
   return (
     <p
       role="alert"
-      className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700"
+      className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400"
     >
       {message}
     </p>

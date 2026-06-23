@@ -103,7 +103,7 @@ export default function AnnouncementsPage() {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="font-medium text-slate-900">
+                    <h3 className="font-medium text-ink">
                       {announcement.title}
                     </h3>
                     {announcement.isPinned && (
@@ -111,10 +111,10 @@ export default function AnnouncementsPage() {
                     )}
                     <Badge tone="blue">{announcement.audience}</Badge>
                   </div>
-                  <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">
+                  <p className="mt-2 whitespace-pre-wrap text-sm text-muted">
                     {announcement.body}
                   </p>
-                  <p className="mt-2 text-xs text-slate-400">
+                  <p className="mt-2 text-xs text-faint">
                     {new Date(announcement.publishedAt).toLocaleString()} ·{" "}
                     {announcement.createdByName ?? "System"}
                   </p>
@@ -153,10 +153,10 @@ export default function AnnouncementsPage() {
                 <option value="staff">Staff</option>
               </Select>
             </Field>
-            <label className="flex items-center gap-2 pb-2 text-sm text-slate-700">
+            <label className="flex items-center gap-2 pb-2 text-sm text-ink">
               <input
                 type="checkbox"
-                className="h-4 w-4 rounded border-slate-300"
+                className="h-4 w-4 rounded border-line"
                 {...register("isPinned")}
               />
               Pin to top

@@ -361,19 +361,19 @@ export default function FeesPage() {
 
       <div className="mb-6 grid gap-4 sm:grid-cols-3">
         <Card>
-          <p className="text-sm text-slate-500">Total invoiced</p>
+          <p className="text-sm text-muted">Total invoiced</p>
           <p className="mt-1 text-2xl font-semibold">
             {summary?.totalInvoiced.toLocaleString() ?? "—"}
           </p>
         </Card>
         <Card>
-          <p className="text-sm text-slate-500">Collected</p>
+          <p className="text-sm text-muted">Collected</p>
           <p className="mt-1 text-2xl font-semibold text-emerald-600">
             {summary?.totalCollected.toLocaleString() ?? "—"}
           </p>
         </Card>
         <Card>
-          <p className="text-sm text-slate-500">Outstanding</p>
+          <p className="text-sm text-muted">Outstanding</p>
           <p className="mt-1 text-2xl font-semibold text-red-600">
             {summary?.outstanding.toLocaleString() ?? "—"}
           </p>
@@ -398,9 +398,9 @@ export default function FeesPage() {
       ) : invoices.length === 0 ? (
         <EmptyState message="No invoices found" />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-xl border border-line bg-surface">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+            <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
               <tr>
                 <th className="px-4 py-3">Invoice</th>
                 <th className="px-4 py-3">Student</th>
@@ -411,13 +411,13 @@ export default function FeesPage() {
                 <th className="px-4 py-3" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-line">
               {invoices.map((invoice) => (
-                <tr key={invoice.id} className="hover:bg-slate-50">
+                <tr key={invoice.id} className="hover:bg-surface-2">
                   <td className="px-4 py-3 font-mono text-xs">
                     {invoice.invoiceNo}
                   </td>
-                  <td className="px-4 py-3 font-medium text-slate-900">
+                  <td className="px-4 py-3 font-medium text-ink">
                     {invoice.studentName}
                   </td>
                   <td className="px-4 py-3">{invoice.description}</td>
@@ -436,7 +436,7 @@ export default function FeesPage() {
                     <div className="flex justify-end gap-3">
                       <button
                         onClick={() => viewPayments(invoice)}
-                        className="text-xs font-medium text-brand-600 hover:text-brand-700"
+                        className="text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-300"
                       >
                         View payments
                       </button>
@@ -444,7 +444,7 @@ export default function FeesPage() {
                         invoice.status !== "cancelled" && (
                           <button
                             onClick={() => setPayingInvoice(invoice)}
-                            className="text-xs font-medium text-brand-600 hover:text-brand-700"
+                            className="text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-300"
                           >
                             Record payment
                           </button>
@@ -817,7 +817,7 @@ export default function FeesPage() {
           onSubmit={paymentForm.handleSubmit(recordPayment)}
           className="space-y-4"
         >
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-muted">
             Outstanding:{" "}
             <strong>
               {payingInvoice

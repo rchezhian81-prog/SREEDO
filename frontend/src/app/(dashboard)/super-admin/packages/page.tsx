@@ -95,9 +95,9 @@ export default function SuperAdminPackagesPage() {
       ) : packages.length === 0 ? (
         <EmptyState message="No packages yet" />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-xl border border-line bg-surface">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+            <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
               <tr>
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Price</th>
@@ -107,10 +107,10 @@ export default function SuperAdminPackagesPage() {
                 <th className="px-4 py-3">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-line">
               {packages.map((pkg) => (
-                <tr key={pkg.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium text-slate-900">{pkg.name}</td>
+                <tr key={pkg.id} className="hover:bg-surface-2">
+                  <td className="px-4 py-3 font-medium text-ink">{pkg.name}</td>
                   <td className="px-4 py-3">{Number(pkg.price).toLocaleString()}</td>
                   <td className="px-4 py-3 capitalize">{pkg.billingCycle}</td>
                   <td className="px-4 py-3">{pkg.maxStudents ?? "∞"}</td>
