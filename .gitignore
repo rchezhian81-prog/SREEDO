@@ -35,3 +35,7 @@ mobile/windows/
 .idea/
 .vscode/
 *.log
+
+# Generated team-handoff packages — regenerate with scripts/create-handoff-zip.sh
+# (the script + docs/governance/HANDOFF_ZIP_MANIFEST.md are committed; ZIPs are not)
+handoff-packages/*.zip
