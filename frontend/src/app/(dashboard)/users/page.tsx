@@ -203,9 +203,9 @@ export default function UsersPage() {
       ) : users.length === 0 ? (
         <EmptyState message="No users found" />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-xl border border-line bg-surface">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+            <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
               <tr>
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Email</th>
@@ -214,13 +214,13 @@ export default function UsersPage() {
                 <th className="px-4 py-3" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-line">
               {users.map((user) => (
-                <tr key={user.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium text-slate-900">
+                <tr key={user.id} className="hover:bg-surface-2">
+                  <td className="px-4 py-3 font-medium text-ink">
                     {user.fullName}
                     {user.phone && (
-                      <span className="block text-xs text-slate-400">
+                      <span className="block text-xs text-faint">
                         {user.phone}
                       </span>
                     )}
@@ -236,7 +236,7 @@ export default function UsersPage() {
                     <div className="flex justify-end gap-3">
                       <button
                         onClick={() => openEdit(user)}
-                        className="text-xs font-medium text-brand-600 hover:text-brand-700"
+                        className="text-xs font-medium text-brand-600 hover:text-brand-600 dark:text-brand-300"
                       >
                         Edit
                       </button>
@@ -266,7 +266,7 @@ export default function UsersPage() {
           >
             Previous
           </Button>
-          <span className="text-slate-500">
+          <span className="text-muted">
             Page {page} of {totalPages}
           </span>
           <Button
@@ -329,7 +329,7 @@ export default function UsersPage() {
         onClose={() => setEditing(null)}
       >
         <form onSubmit={editForm.handleSubmit(onEdit)} className="space-y-4">
-          <p className="text-sm text-slate-500">{editing?.email}</p>
+          <p className="text-sm text-muted">{editing?.email}</p>
           <Field
             label="Full name"
             error={editForm.formState.errors.fullName?.message}
@@ -350,7 +350,7 @@ export default function UsersPage() {
               <Input {...editForm.register("phone")} />
             </Field>
           </div>
-          <label className="flex items-center gap-2 text-sm text-slate-700">
+          <label className="flex items-center gap-2 text-sm text-ink">
             <input type="checkbox" {...editForm.register("isActive")} />
             Account active
           </label>

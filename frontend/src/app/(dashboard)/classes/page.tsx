@@ -104,7 +104,7 @@ export default function ClassesPage() {
           {classes.map((schoolClass) => (
             <Card key={schoolClass.id}>
               <div className="flex items-start justify-between">
-                <h3 className="font-semibold text-slate-900">
+                <h3 className="font-semibold text-ink">
                   {schoolClass.name}
                 </h3>
                 <button
@@ -116,17 +116,17 @@ export default function ClassesPage() {
               </div>
               <div className="mt-3 space-y-2">
                 {schoolClass.sections.length === 0 ? (
-                  <p className="text-sm text-slate-400">No sections</p>
+                  <p className="text-sm text-faint">No sections</p>
                 ) : (
                   schoolClass.sections.map((section) => (
                     <div
                       key={section.id}
-                      className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm"
+                      className="flex items-center justify-between rounded-lg bg-surface-2 px-3 py-2 text-sm"
                     >
                       <span className="font-medium">
                         Section {section.name}
                       </span>
-                      <span className="text-slate-500">
+                      <span className="text-muted">
                         {section.studentCount}/{section.capacity} students
                       </span>
                     </div>

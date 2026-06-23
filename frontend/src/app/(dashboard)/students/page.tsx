@@ -154,9 +154,9 @@ export default function StudentsPage() {
       ) : students.length === 0 ? (
         <EmptyState message="No students found" />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-xl border border-line bg-surface">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+            <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
               <tr>
                 <th className="px-4 py-3">Admission No</th>
                 <th className="px-4 py-3">Name</th>
@@ -166,13 +166,13 @@ export default function StudentsPage() {
                 <th className="px-4 py-3" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-line">
               {students.map((student) => (
-                <tr key={student.id} className="hover:bg-slate-50">
+                <tr key={student.id} className="hover:bg-surface-2">
                   <td className="px-4 py-3 font-mono text-xs">
                     {student.admissionNo}
                   </td>
-                  <td className="px-4 py-3 font-medium text-slate-900">
+                  <td className="px-4 py-3 font-medium text-ink">
                     {student.firstName} {student.lastName}
                   </td>
                   <td className="px-4 py-3">
@@ -183,7 +183,7 @@ export default function StudentsPage() {
                   <td className="px-4 py-3">
                     {student.guardianName ?? "—"}
                     {student.guardianPhone && (
-                      <span className="block text-xs text-slate-400">
+                      <span className="block text-xs text-faint">
                         {student.guardianPhone}
                       </span>
                     )}
@@ -217,7 +217,7 @@ export default function StudentsPage() {
           >
             Previous
           </Button>
-          <span className="text-slate-500">
+          <span className="text-muted">
             Page {page} of {totalPages}
           </span>
           <Button

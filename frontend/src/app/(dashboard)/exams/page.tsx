@@ -243,9 +243,9 @@ export default function ExamsPage() {
       ) : exams.length === 0 ? (
         <EmptyState message="No exams yet" />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-xl border border-line bg-surface">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+            <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
               <tr>
                 <th className="px-4 py-3">Exam</th>
                 <th className="px-4 py-3">Academic year</th>
@@ -253,19 +253,19 @@ export default function ExamsPage() {
                 <th className="px-4 py-3" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-line">
               {exams.map((exam) => (
                 <tr
                   key={exam.id}
                   className={
-                    exam.id === selectedExamId ? "bg-brand-50" : "hover:bg-slate-50"
+                    exam.id === selectedExamId ? "bg-brand-500/12" : "hover:bg-surface-2"
                   }
                 >
-                  <td className="px-4 py-3 font-medium text-slate-900">
+                  <td className="px-4 py-3 font-medium text-ink">
                     {exam.name}
                   </td>
                   <td className="px-4 py-3">{exam.academicYearName ?? "—"}</td>
-                  <td className="px-4 py-3 text-slate-500">
+                  <td className="px-4 py-3 text-muted">
                     {formatDate(exam.startDate)} – {formatDate(exam.endDate)}
                   </td>
                   <td className="px-4 py-3 text-right">
@@ -290,7 +290,7 @@ export default function ExamsPage() {
       {selectedExam && (
         <Card className="mt-6">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-lg font-semibold text-slate-900">
+            <h2 className="text-lg font-semibold text-ink">
               {selectedExam.name} — mark entry
             </h2>
             <Badge tone="blue">
@@ -304,7 +304,7 @@ export default function ExamsPage() {
             <>
               <div className="mb-4 flex flex-wrap items-end gap-3">
                 <div className="w-56">
-                  <span className="mb-1 block text-sm font-medium text-slate-700">
+                  <span className="mb-1 block text-sm font-medium text-ink">
                     Section
                   </span>
                   <Select
@@ -319,7 +319,7 @@ export default function ExamsPage() {
                   </Select>
                 </div>
                 <div className="w-48">
-                  <span className="mb-1 block text-sm font-medium text-slate-700">
+                  <span className="mb-1 block text-sm font-medium text-ink">
                     Subject
                   </span>
                   <Select
@@ -334,7 +334,7 @@ export default function ExamsPage() {
                   </Select>
                 </div>
                 <div className="w-28">
-                  <span className="mb-1 block text-sm font-medium text-slate-700">
+                  <span className="mb-1 block text-sm font-medium text-ink">
                     Max marks
                   </span>
                   <Input
@@ -352,7 +352,7 @@ export default function ExamsPage() {
               </div>
 
               {message && (
-                <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                <p className="mb-3 rounded-lg bg-emerald-500/12 px-3 py-2 text-sm text-emerald-600 dark:text-emerald-400">
                   {message}
                 </p>
               )}
@@ -363,9 +363,9 @@ export default function ExamsPage() {
               ) : roster.length === 0 ? (
                 <EmptyState message="No students in this section" />
               ) : (
-                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                <div className="overflow-x-auto rounded-xl border border-line">
                   <table className="w-full text-left text-sm">
-                    <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+                    <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
                       <tr>
                         <th className="px-4 py-3">Student</th>
                         <th className="px-4 py-3">Admission No</th>
@@ -374,10 +374,10 @@ export default function ExamsPage() {
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
+                    <tbody className="divide-y divide-line">
                       {roster.map((student) => (
                         <tr key={student.id}>
-                          <td className="px-4 py-3 font-medium text-slate-900">
+                          <td className="px-4 py-3 font-medium text-ink">
                             {student.firstName} {student.lastName}
                           </td>
                           <td className="px-4 py-3 font-mono text-xs">
@@ -408,12 +408,12 @@ export default function ExamsPage() {
 
               {sortedResults.length > 0 && (
                 <div className="mt-6">
-                  <h3 className="mb-2 text-sm font-semibold text-slate-700">
+                  <h3 className="mb-2 text-sm font-semibold text-ink">
                     Recorded results for this section
                   </h3>
-                  <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <div className="overflow-x-auto rounded-xl border border-line">
                     <table className="w-full text-left text-sm">
-                      <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+                      <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
                         <tr>
                           <th className="px-4 py-3">Student</th>
                           <th className="px-4 py-3">Subject</th>
@@ -421,7 +421,7 @@ export default function ExamsPage() {
                           <th className="px-4 py-3">Grade</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-100">
+                      <tbody className="divide-y divide-line">
                         {sortedResults.map((row) => (
                           <tr key={`${row.studentId}-${row.subjectName}`}>
                             <td className="px-4 py-3">

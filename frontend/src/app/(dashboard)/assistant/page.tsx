@@ -56,14 +56,14 @@ export default function AssistantPage() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-6rem)] flex-col">
+    <div className="flex h-[calc(100vh-11rem)] flex-col">
       <PageHeader
         title="AI Assistant"
         subtitle="Ask about students, attendance, fees — powered by GPT-4o with live school data"
       />
-      <div className="flex-1 space-y-3 overflow-y-auto rounded-xl border border-slate-200 bg-white p-4">
+      <div className="flex-1 space-y-3 overflow-y-auto rounded-xl border border-line bg-surface p-4">
         {messages.length === 0 && (
-          <div className="py-16 text-center text-sm text-slate-400">
+          <div className="py-16 text-center text-sm text-faint">
             <p className="text-3xl">✨</p>
             <p className="mt-2">
               Try: “How many students are enrolled?” or “What fees are
@@ -78,14 +78,14 @@ export default function AssistantPage() {
               "max-w-[80%] rounded-2xl px-4 py-2.5 text-sm",
               message.role === "user"
                 ? "ml-auto bg-brand-600 text-white"
-                : "bg-slate-100 text-slate-800"
+                : "bg-hover text-ink"
             )}
           >
             <p className="whitespace-pre-wrap">{message.content}</p>
           </div>
         ))}
         {busy && (
-          <div className="max-w-[80%] rounded-2xl bg-slate-100 px-4 py-2.5 text-sm text-slate-400">
+          <div className="max-w-[80%] rounded-2xl bg-hover px-4 py-2.5 text-sm text-faint">
             Thinking…
           </div>
         )}

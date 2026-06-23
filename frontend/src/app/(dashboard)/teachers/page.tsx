@@ -96,9 +96,9 @@ export default function TeachersPage() {
       ) : teachers.length === 0 ? (
         <EmptyState message="No teachers yet" />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-xl border border-line bg-surface">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+            <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
               <tr>
                 <th className="px-4 py-3">Employee No</th>
                 <th className="px-4 py-3">Name</th>
@@ -108,19 +108,19 @@ export default function TeachersPage() {
                 <th className="px-4 py-3" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-line">
               {teachers.map((teacher) => (
-                <tr key={teacher.id} className="hover:bg-slate-50">
+                <tr key={teacher.id} className="hover:bg-surface-2">
                   <td className="px-4 py-3 font-mono text-xs">
                     {teacher.employeeNo}
                   </td>
-                  <td className="px-4 py-3 font-medium text-slate-900">
+                  <td className="px-4 py-3 font-medium text-ink">
                     {teacher.firstName} {teacher.lastName}
                   </td>
                   <td className="px-4 py-3">
                     {teacher.email ?? "—"}
                     {teacher.phone && (
-                      <span className="block text-xs text-slate-400">
+                      <span className="block text-xs text-faint">
                         {teacher.phone}
                       </span>
                     )}

@@ -146,9 +146,9 @@ export default function SuperAdminInstitutionsPage() {
           ) : institutions.length === 0 ? (
             <EmptyState message="No institutions yet" />
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+            <div className="overflow-x-auto rounded-xl border border-line bg-surface">
               <table className="w-full text-left text-sm">
-                <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+                <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
                   <tr>
                     <th className="px-4 py-3">Name</th>
                     <th className="px-4 py-3">Code</th>
@@ -158,13 +158,13 @@ export default function SuperAdminInstitutionsPage() {
                     <th className="px-4 py-3" />
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-line">
                   {institutions.map((inst) => (
                     <tr
                       key={inst.id}
-                      className={selected?.id === inst.id ? "bg-brand-50" : "hover:bg-slate-50"}
+                      className={selected?.id === inst.id ? "bg-brand-500/12" : "hover:bg-surface-2"}
                     >
-                      <td className="px-4 py-3 font-medium text-slate-900">{inst.name}</td>
+                      <td className="px-4 py-3 font-medium text-ink">{inst.name}</td>
                       <td className="px-4 py-3 font-mono text-xs">{inst.code}</td>
                       <td className="px-4 py-3 capitalize">{inst.type}</td>
                       <td className="px-4 py-3">{inst.branchCount ?? 0}</td>
@@ -191,8 +191,8 @@ export default function SuperAdminInstitutionsPage() {
             <Card>
               <div className="mb-3 flex items-center justify-between">
                 <div>
-                  <h2 className="text-lg font-semibold text-slate-900">{selected.name}</h2>
-                  <p className="font-mono text-xs text-slate-500">{selected.code}</p>
+                  <h2 className="text-lg font-semibold text-ink">{selected.name}</h2>
+                  <p className="font-mono text-xs text-muted">{selected.code}</p>
                 </div>
                 <Button variant="secondary" onClick={toggleActive}>
                   {selected.isActive ? "Deactivate" : "Activate"}
@@ -202,14 +202,14 @@ export default function SuperAdminInstitutionsPage() {
               <ErrorNote message={panelError} />
 
               <div className="mt-4">
-                <h3 className="mb-2 text-sm font-semibold text-slate-700">Subscription</h3>
+                <h3 className="mb-2 text-sm font-semibold text-ink">Subscription</h3>
                 {selected.subscription ? (
-                  <p className="text-sm text-slate-600">
+                  <p className="text-sm text-muted">
                     <Badge tone="blue">{selected.subscription.packageName}</Badge>{" "}
                     <span className="capitalize">{selected.subscription.status}</span>
                   </p>
                 ) : (
-                  <p className="text-sm text-slate-400">No active subscription</p>
+                  <p className="text-sm text-faint">No active subscription</p>
                 )}
                 <div className="mt-2 flex gap-2">
                   <Select value={packageId} onChange={(e) => setPackageId(e.target.value)}>
@@ -227,18 +227,18 @@ export default function SuperAdminInstitutionsPage() {
               </div>
 
               <div className="mt-6">
-                <h3 className="mb-2 text-sm font-semibold text-slate-700">
+                <h3 className="mb-2 text-sm font-semibold text-ink">
                   Branches ({selected.branches?.length ?? 0})
                 </h3>
-                <ul className="mb-3 space-y-1 text-sm text-slate-600">
+                <ul className="mb-3 space-y-1 text-sm text-muted">
                   {(selected.branches ?? []).map((branch) => (
                     <li key={branch.id} className="flex justify-between">
                       <span>{branch.name}</span>
-                      <span className="text-xs text-slate-400">{branch.timezone}</span>
+                      <span className="text-xs text-faint">{branch.timezone}</span>
                     </li>
                   ))}
                   {(selected.branches?.length ?? 0) === 0 && (
-                    <li className="text-slate-400">No branches yet</li>
+                    <li className="text-faint">No branches yet</li>
                   )}
                 </ul>
                 <div className="space-y-2">
@@ -260,7 +260,7 @@ export default function SuperAdminInstitutionsPage() {
             </Card>
           ) : (
             <Card>
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-muted">
                 Select an institution to manage its branches and subscription.
               </p>
             </Card>
