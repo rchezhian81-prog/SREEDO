@@ -28,7 +28,7 @@ export const authRouter = Router();
  *   post:
  *     tags: [Auth]
  *     summary: Log in with email and password (and a 2FA code if enabled)
- *     description: If the account has two-factor enabled and no valid totpCode is supplied, responds 200 with { twoFactorRequired: true } and no tokens; resubmit with totpCode.
+ *     description: "If two-factor is enabled and no valid totpCode is supplied, responds 200 with twoFactorRequired=true and no tokens; resubmit with totpCode."
  *     requestBody:
  *       required: true
  *       content:
@@ -42,7 +42,7 @@ export const authRouter = Router();
  *               totpCode: { type: string, description: 6-digit authenticator code (only if 2FA is enabled) }
  *     responses:
  *       200:
- *         description: Access and refresh tokens with the user profile, OR { twoFactorRequired true }
+ *         description: "Tokens with the user profile, or twoFactorRequired=true when a second factor is needed"
  *       401:
  *         description: Invalid credentials or invalid 2FA code
  */
@@ -175,7 +175,7 @@ authRouter.post("/reset-password", authRateLimiter, async (req, res) => {
  *               password: { type: string }
  *               totpCode: { type: string }
  *     responses:
- *       200: { description: "{ user } with Set-Cookie tokens, or { twoFactorRequired true }" }
+ *       200: { description: "user object with Set-Cookie tokens, or twoFactorRequired=true" }
  *       401: { description: Invalid credentials }
  *       403: { description: Not a student/parent account }
  */
@@ -300,7 +300,7 @@ authRouter.post("/change-password", authenticate, async (req, res) => {
  *     summary: Whether two-factor authentication is enabled for the caller
  *     security: [{ bearerAuth: [] }]
  *     responses:
- *       200: { description: "{ enabled: boolean }" }
+ *       200: { description: "Whether two-factor is enabled" }
  */
 authRouter.get("/2fa/status", authenticate, async (req, res) => {
   res.json(await authService.twoFactorStatus(req.user!.id));
@@ -314,7 +314,7 @@ authRouter.get("/2fa/status", authenticate, async (req, res) => {
  *     summary: Begin two-factor enrollment — returns a secret + otpauth URI
  *     security: [{ bearerAuth: [] }]
  *     responses:
- *       200: { description: "{ secret, otpauthUrl } — add to an authenticator app, then call enable" }
+ *       200: { description: "Returns secret and otpauthUrl to add to an authenticator app, then call enable" }
  *       400: { description: Already enabled }
  */
 authRouter.post("/2fa/setup", authenticate, async (req, res) => {
