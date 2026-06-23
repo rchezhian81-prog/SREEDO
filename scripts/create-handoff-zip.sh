@@ -1,0 +1,208 @@
+#!/usr/bin/env bash
+#
+# create-handoff-zip.sh — build the GoCampus team-handoff package.
+#
+# Produces a safe, shareable ZIP of the latest docs + non-secret config so a new
+# team can understand, run, and deploy the project. It uses a strict WHITELIST
+# (only approved paths are copied), scrubs anything risky that might slip in, and
+# ABORTS if any secret-looking material is detected.
+#
+# Usage:
+#   scripts/create-handoff-zip.sh [version]      # version defaults to v1.0
+#
+# Output:
+#   handoff-packages/gocampusos_team-handoff_YYYY-MM-DD_vX.Y.zip
+#   docs/governance/HANDOFF_ZIP_MANIFEST.md      (regenerated)
+#
+# The ZIP is git-ignored (do NOT commit generated ZIPs); commit this script and
+# the manifest only.
+#
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$ROOT"
+
+VERSION="${1:-v1.0}"
+DATE="$(date +%F)"                                  # YYYY-MM-DD
+PKG_NAME="gocampusos_team-handoff_${DATE}_${VERSION}"
+OUT_DIR="$ROOT/handoff-packages"
+STAGE="$(mktemp -d)"
+DEST="$STAGE/$PKG_NAME"
+MANIFEST="$ROOT/docs/governance/HANDOFF_ZIP_MANIFEST.md"
+MANIFEST_REL="docs/governance/HANDOFF_ZIP_MANIFEST.md"
+
+cleanup() { rm -rf "$STAGE"; }
+trap cleanup EXIT
+
+mkdir -p "$OUT_DIR" "$DEST"
+echo "▶ Building ${PKG_NAME} ..."
+
+# ----------------------------------------------------------------------------
+# 1. WHITELIST — only these are copied (directory structure is preserved).
+# ----------------------------------------------------------------------------
+INCLUDE_FILES=(
+  "README.md"
+  "CLAUDE.md"
+  "docker-compose.yml"
+  "docker-compose.prod.yml"          # included only if present
+  ".env.example"
+  ".env.production.example"
+  "backend/.env.example"
+  "frontend/.env.example"
+  "backend/package.json"
+  "frontend/package.json"
+  "mobile/pubspec.yaml"
+)
+INCLUDE_DIRS=(
+  "docs"                             # all documentation (modules, diagrams, governance, templates...)
+  "infra/nginx"                      # nginx reference configs (no secrets)
+)
+
+copy_file() {
+  local f="$1"
+  if [[ -f "$f" ]]; then
+    mkdir -p "$DEST/$(dirname "$f")"
+    cp "$f" "$DEST/$f"
+  fi
+}
+
+for f in "${INCLUDE_FILES[@]}"; do copy_file "$f"; done
+for d in "${INCLUDE_DIRS[@]}"; do
+  if [[ -d "$d" ]]; then
+    mkdir -p "$DEST/$d"
+    cp -r "$d/." "$DEST/$d/"
+  fi
+done
+
+# Start the manifest clean each run (it is regenerated below).
+rm -f "$DEST/$MANIFEST_REL"
+
+# ----------------------------------------------------------------------------
+# 2. SCRUB — defense in depth: delete anything forbidden that may have slipped in.
+# ----------------------------------------------------------------------------
+find "$DEST" -type d \( \
+  -name node_modules -o -name .next -o -name dist -o -name build \
+  -o -name .git -o -name certbot -o -name coverage -o -name .turbo \
+\) -prune -exec rm -rf {} + 2>/dev/null || true
+
+find "$DEST" -type f \( \
+  -name "*.pem" -o -name "*.key" -o -name "id_rsa*" -o -name "*.ppk" \
+  -o -name "*.log" -o -name "*.sql" -o -name "*.dump" -o -name "*.sqlite" \
+  -o -name "*.tmp" -o -name "*.bak" \
+\) -delete 2>/dev/null || true
+
+# Delete any REAL dotenv files, but keep the *.example templates.
+find "$DEST" -type f -name ".env"            -delete 2>/dev/null || true
+find "$DEST" -type f -name ".env.local"      -delete 2>/dev/null || true
+find "$DEST" -type f -name ".env.production"  ! -name "*.example" -delete 2>/dev/null || true
+
+# ----------------------------------------------------------------------------
+# 3. SECRET SCAN — abort hard if anything looks like a credential.
+# ----------------------------------------------------------------------------
+echo "▶ Scanning staged files for secrets ..."
+SECRET_HITS="$(grep -rElI \
+  'BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY|-----BEGIN|AKIA[0-9A-Z]{16}|xox[baprs]-|AIza[0-9A-Za-z_-]{20,}|ghp_[0-9A-Za-z]{36}' \
+  "$DEST" 2>/dev/null || true)"
+LEFTOVER_ENV="$(find "$DEST" -type f -name ".env" 2>/dev/null || true)"
+
+if [[ -n "${SECRET_HITS}${LEFTOVER_ENV}" ]]; then
+  echo "✖ ABORT: potential secret material detected — package NOT created:" >&2
+  [[ -n "$SECRET_HITS" ]]   && echo "$SECRET_HITS"   >&2
+  [[ -n "$LEFTOVER_ENV" ]]  && echo "$LEFTOVER_ENV"  >&2
+  exit 1
+fi
+echo "✔ No secrets detected (only *.env.example templates are included)."
+
+# ----------------------------------------------------------------------------
+# 4. MANIFEST — regenerate docs/governance/HANDOFF_ZIP_MANIFEST.md
+# ----------------------------------------------------------------------------
+LISTING="$( cd "$DEST" && find . -type f | sed 's|^\./||' | sort | while read -r rel; do
+  printf '| `%s` | %s |\n' "$rel" "$(du -h "$rel" | cut -f1)"
+done )"
+# the manifest itself is added to the package after this point:
+LISTING="${LISTING}
+| \`${MANIFEST_REL}\` | (this file) |"
+
+mkdir -p "$(dirname "$MANIFEST")"
+cat > "$MANIFEST" <<EOF
+# Handoff ZIP Manifest
+
+> **Status:** Auto-generated by \`scripts/create-handoff-zip.sh\` · **Last generated:** ${DATE} · **Package version:** ${VERSION}
+>
+> Lists every file in the GoCampus team-handoff ZIP. Regenerate it (and the ZIP)
+> whenever the docs change — see [How to regenerate](#how-to-regenerate). Naming
+> follows the [File Naming Standard](./FILE_NAMING_STANDARD.md).
+
+## Package
+
+- **ZIP name:** \`${PKG_NAME}.zip\`
+- **Location:** \`handoff-packages/${PKG_NAME}.zip\`
+- **Secrets:** none — only \`*.env.example\` templates. Private keys, real \`.env\`
+  files, DB dumps, \`node_modules\`, build output, logs, and uploads are excluded
+  by whitelist + scrub + an automated secret scan that aborts the build on any hit.
+
+## What's included & when to update
+
+| Category | Contents | Purpose | When to update |
+|---|---|---|---|
+| Project overview | \`README.md\`, \`CLAUDE.md\` | Orientation & conventions | When stack/conventions change |
+| Setup manifests | \`backend/package.json\`, \`frontend/package.json\`, \`mobile/pubspec.yaml\` | Understand deps & scripts | When dependencies/scripts change |
+| Deployment | \`docker-compose*.yml\`, \`infra/nginx/*\`, \`docs/DEPLOYMENT.md\` | Reproduce & operate production | When infra/deploy changes |
+| Env templates | \`.env.example\`, \`.env.production.example\`, \`backend/.env.example\`, \`frontend/.env.example\` | Configure safely (no secrets) | When env vars change |
+| Documentation | everything under \`docs/\` | Full reference & onboarding | When any doc changes |
+| Module docs | \`docs/modules/*\` | Per-module reference | When a module changes |
+| Diagrams | \`docs/diagrams/*\` | Flow/pipeline diagrams | When a flow changes |
+| Templates | \`docs/templates/*\` | Reusable checklists | When the process changes |
+| Governance | \`docs/governance/*\` | Naming, process, registers | When governance changes |
+
+## Full file listing
+
+| File | Size |
+|---|---|
+${LISTING}
+
+## How to regenerate
+
+\`\`\`bash
+scripts/create-handoff-zip.sh ${VERSION}      # or a new version, e.g. v1.1
+\`\`\`
+
+This recreates \`handoff-packages/${PKG_NAME}.zip\` and rewrites this manifest. The
+ZIP is **git-ignored** — commit the script and this manifest, then share the ZIP
+out-of-band (it is not stored in git).
+EOF
+
+# add the freshly generated manifest into the package
+mkdir -p "$DEST/$(dirname "$MANIFEST_REL")"
+cp "$MANIFEST" "$DEST/$MANIFEST_REL"
+
+FILE_COUNT="$(find "$DEST" -type f | wc -l | tr -d ' ')"
+
+# ----------------------------------------------------------------------------
+# 5. ZIP — prefer `zip`, fall back to python3's zipfile.
+# ----------------------------------------------------------------------------
+ZIP_PATH="$OUT_DIR/${PKG_NAME}.zip"
+rm -f "$ZIP_PATH"
+if command -v zip >/dev/null 2>&1; then
+  ( cd "$STAGE" && zip -rq "$ZIP_PATH" "$PKG_NAME" )
+elif command -v python3 >/dev/null 2>&1; then
+  ( cd "$STAGE" && python3 -m zipfile -c "$ZIP_PATH" "$PKG_NAME" )
+else
+  echo "✖ Neither 'zip' nor 'python3' is available to create the archive." >&2
+  exit 1
+fi
+
+ZIP_SIZE="$(du -h "$ZIP_PATH" | cut -f1)"
+
+# ----------------------------------------------------------------------------
+# 6. REPORT
+# ----------------------------------------------------------------------------
+echo ""
+echo "✔ Handoff package created"
+echo "   ZIP name : ${PKG_NAME}.zip"
+echo "   ZIP path : ${ZIP_PATH}"
+echo "   ZIP size : ${ZIP_SIZE}"
+echo "   Files    : ${FILE_COUNT}"
+echo "   Manifest : ${MANIFEST}"
+echo "   Secrets  : none included (verified by scan)"
