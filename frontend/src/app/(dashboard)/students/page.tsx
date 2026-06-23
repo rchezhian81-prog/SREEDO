@@ -19,6 +19,7 @@ import {
 } from "@/components/ui";
 import type { Paginated, SchoolClass, Student } from "@/types";
 import { useI18n } from "@/i18n/I18nProvider";
+import { ImportCsvModal, type ImportColumn } from "@/components/ImportCsvModal";
 
 const studentSchema = z.object({
   firstName: z.string().min(1, "Required"),
@@ -37,6 +38,30 @@ const studentSchema = z.object({
 
 type StudentForm = z.infer<typeof studentSchema>;
 
+const IMPORT_COLUMNS: ImportColumn[] = [
+  { key: "firstName", label: "First name", required: true },
+  { key: "lastName", label: "Last name", required: true },
+  { key: "dateOfBirth", label: "Date of birth (YYYY-MM-DD)" },
+  { key: "gender", label: "Gender (male/female/other)" },
+  { key: "guardianName", label: "Guardian name" },
+  { key: "guardianPhone", label: "Guardian phone" },
+  { key: "guardianEmail", label: "Guardian email" },
+  { key: "address", label: "Address" },
+  { key: "admissionNo", label: "Admission no (auto if blank)" },
+];
+
+const IMPORT_SAMPLE: Record<string, string> = {
+  firstName: "Asha",
+  lastName: "Rao",
+  dateOfBirth: "2014-05-10",
+  gender: "female",
+  guardianName: "Ramesh Rao",
+  guardianPhone: "9000000000",
+  guardianEmail: "ramesh@example.com",
+  address: "12 Main Street",
+  admissionNo: "",
+};
+
 interface SectionOption {
   id: string;
   label: string;
@@ -51,6 +76,7 @@ export default function StudentsPage() {
   const [sections, setSections] = useState<SectionOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
 
   const limit = 10;
@@ -134,7 +160,12 @@ export default function StudentsPage() {
         title={t("pages.students.title")}
         subtitle={t("pages.students.subtitle")}
         action={
-          <Button onClick={() => setModalOpen(true)}>+ Add student</Button>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => setImportOpen(true)}>
+              Import CSV
+            </Button>
+            <Button onClick={() => setModalOpen(true)}>+ Add student</Button>
+          </div>
         }
       />
 
@@ -293,6 +324,17 @@ export default function StudentsPage() {
           </div>
         </form>
       </Modal>
+
+      <ImportCsvModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        title="Import students from CSV"
+        endpoint="/students/import"
+        columns={IMPORT_COLUMNS}
+        sample={IMPORT_SAMPLE}
+        templateName="students-template.csv"
+        onImported={load}
+      />
     </>
   );
 }

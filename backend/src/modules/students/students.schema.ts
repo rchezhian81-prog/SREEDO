@@ -34,3 +34,10 @@ export const listStudentsQuerySchema = z.object({
 export const deleteStudentQuerySchema = z.object({
   hard: z.coerce.boolean().optional(),
 });
+
+export const importStudentsSchema = z.object({
+  rows: z
+    .array(createStudentSchema)
+    .min(1, "At least one row is required")
+    .max(1000, "Import is limited to 1000 rows at a time"),
+});
