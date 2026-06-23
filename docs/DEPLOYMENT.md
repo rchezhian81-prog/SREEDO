@@ -261,6 +261,29 @@ docker compose up -d --build
 > deploy goes bad, roll back the code and **restore the backup** if the schema changed.
 > Keep the `pgdata` volume across updates (it persists by default).
 
+### Automated deploy (optional CI/CD)
+
+`.github/workflows/deploy.yml` can deploy automatically on every push to `main`
+(or on demand via *Actions → Deploy → Run workflow*). It SSHes to the VPS and runs
+the same `git pull` + `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build`
+you'd run by hand (data volumes preserved).
+
+It is **off by default** and is skipped until you opt in, so it never affects CI.
+To enable it (GitHub → **Settings → Secrets and variables → Actions**):
+
+| Type | Name | Value |
+|---|---|---|
+| Variable | `DEPLOY_ENABLED` | `true` |
+| Variable | `DEPLOY_PATH` | `/opt/sreedo` *(optional; this is the default)* |
+| Secret | `VPS_HOST` | your VPS IP / hostname |
+| Secret | `VPS_USER` | the deploy SSH user (e.g. `root`) |
+| Secret | `VPS_SSH_KEY` | a private SSH key authorized on the VPS |
+| Secret | `VPS_PORT` | SSH port *(optional; default `22`)* |
+
+Use a dedicated deploy key (add its public half to `~/.ssh/authorized_keys` on the
+VPS). After a deploy, verify with `curl -fsS https://gocampusos.com/health`. Take a
+backup (§8) before deploys that include migrations.
+
 ## 12. Go-live checklist
 
 - [ ] DNS A record → VPS; firewall allows 80/443 only.
