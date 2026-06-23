@@ -1,6 +1,6 @@
-import { query } from "../../db/postgres";
+import { query, withTransaction } from "../../db/postgres";
 import { ApiError } from "../../utils/api-error";
-import { assertWithinPlanLimit } from "../../utils/plan-limits";
+import { activePlan, assertWithinPlanLimit } from "../../utils/plan-limits";
 import { paginatedResponse, type Pagination } from "../../utils/pagination";
 import { invalidateDashboard } from "../dashboard/dashboard.routes";
 import type { z } from "zod";
@@ -122,6 +122,69 @@ export async function createStudent(
   );
   invalidateDashboard(institutionId); // student count changed
   return getStudent(rows[0].id, institutionId);
+}
+
+/**
+ * Bulk-import students from validated rows (e.g. a parsed CSV). Atomic: every row
+ * is inserted in one transaction, so a failure rolls the whole batch back. The
+ * plan's student cap is enforced for the whole batch up front. Omitted admission
+ * numbers are auto-generated from the same sequence as single creates.
+ */
+export async function importStudents(
+  inputs: z.infer<typeof createStudentSchema>[],
+  institutionId: string
+): Promise<{ imported: number }> {
+  if (inputs.length === 0) return { imported: 0 };
+  const plan = await activePlan(institutionId);
+  if (plan.maxStudents != null) {
+    const { rows } = await query<{ c: number }>(
+      "SELECT count(*)::int AS c FROM students WHERE institution_id = $1",
+      [institutionId]
+    );
+    if (Number(rows[0].c) + inputs.length > plan.maxStudents) {
+      throw ApiError.forbidden(
+        `Plan limit: importing ${inputs.length} students would exceed the maximum (${plan.maxStudents}) for this plan`
+      );
+    }
+  }
+  try {
+    const imported = await withTransaction(async (client) => {
+      let count = 0;
+      for (const input of inputs) {
+        const admissionNo = input.admissionNo ?? (await nextAdmissionNo());
+        await client.query(
+          `INSERT INTO students (
+             institution_id, admission_no, first_name, last_name, date_of_birth,
+             gender, section_id, guardian_name, guardian_phone, guardian_email, address
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+          [
+            institutionId,
+            admissionNo,
+            input.firstName,
+            input.lastName,
+            input.dateOfBirth ?? null,
+            input.gender ?? null,
+            input.sectionId ?? null,
+            input.guardianName ?? null,
+            input.guardianPhone ?? null,
+            input.guardianEmail ?? null,
+            input.address ?? null,
+          ]
+        );
+        count++;
+      }
+      return count;
+    });
+    invalidateDashboard(institutionId);
+    return { imported };
+  } catch (err) {
+    if ((err as { code?: string }).code === "23505") {
+      throw ApiError.badRequest(
+        "Duplicate admission number in the file or already on record"
+      );
+    }
+    throw err;
+  }
 }
 
 const UPDATE_COLUMN_MAP: Record<string, string> = {

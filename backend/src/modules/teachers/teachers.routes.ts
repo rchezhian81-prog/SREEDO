@@ -5,6 +5,7 @@ import { requireTenant, tenantId } from "../../middleware/tenant";
 import { parsePagination } from "../../utils/pagination";
 import {
   createTeacherSchema,
+  importTeachersSchema,
   listTeachersQuerySchema,
   updateTeacherSchema,
 } from "./teachers.schema";
@@ -63,6 +64,38 @@ teachersRouter.get("/", async (req, res) => {
 teachersRouter.post("/", authorize("admin"), async (req, res) => {
   const input = createTeacherSchema.parse(req.body);
   res.status(201).json(await teachersService.createTeacher(input, tenantId(req)));
+});
+
+/**
+ * @openapi
+ * /teachers/import:
+ *   post:
+ *     tags: [Teachers]
+ *     summary: Bulk-import teachers from parsed CSV rows (admin)
+ *     description: Validates all rows and inserts them atomically (the whole batch rolls back on any error). Omitted employee numbers are auto-generated. Limited to 1000 rows per request.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [rows]
+ *             properties:
+ *               rows:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   required: [firstName, lastName]
+ *     responses:
+ *       201: { description: "{ imported: number }" }
+ *       400: { description: Validation failed or duplicate employee number }
+ *       403: { description: Plan limit exceeded }
+ */
+teachersRouter.post("/import", authorize("admin"), async (req, res) => {
+  const { rows } = importTeachersSchema.parse(req.body);
+  const result = await teachersService.importTeachers(rows, tenantId(req));
+  res.status(201).json(result);
 });
 
 /**

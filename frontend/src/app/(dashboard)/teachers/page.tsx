@@ -17,6 +17,7 @@ import {
   Spinner,
 } from "@/components/ui";
 import type { Paginated, Teacher } from "@/types";
+import { ImportCsvModal, type ImportColumn } from "@/components/ImportCsvModal";
 
 const teacherSchema = z.object({
   firstName: z.string().min(1, "Required"),
@@ -29,11 +30,34 @@ const teacherSchema = z.object({
 
 type TeacherForm = z.infer<typeof teacherSchema>;
 
+const IMPORT_COLUMNS: ImportColumn[] = [
+  { key: "firstName", label: "First name", required: true },
+  { key: "lastName", label: "Last name", required: true },
+  { key: "email", label: "Email" },
+  { key: "phone", label: "Phone" },
+  { key: "qualification", label: "Qualification" },
+  { key: "specialization", label: "Specialization" },
+  { key: "joiningDate", label: "Joining date (YYYY-MM-DD)" },
+  { key: "employeeNo", label: "Employee no (auto if blank)" },
+];
+
+const IMPORT_SAMPLE: Record<string, string> = {
+  firstName: "Meena",
+  lastName: "Iyer",
+  email: "meena@example.com",
+  phone: "9000000001",
+  qualification: "M.Sc, B.Ed",
+  specialization: "Mathematics",
+  joiningDate: "2024-06-01",
+  employeeNo: "",
+};
+
 export default function TeachersPage() {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -87,7 +111,12 @@ export default function TeachersPage() {
         title="Teachers"
         subtitle={`${total} on staff`}
         action={
-          <Button onClick={() => setModalOpen(true)}>+ Add teacher</Button>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => setImportOpen(true)}>
+              Import CSV
+            </Button>
+            <Button onClick={() => setModalOpen(true)}>+ Add teacher</Button>
+          </div>
         }
       />
 
@@ -191,6 +220,17 @@ export default function TeachersPage() {
           </div>
         </form>
       </Modal>
+
+      <ImportCsvModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        title="Import teachers from CSV"
+        endpoint="/teachers/import"
+        columns={IMPORT_COLUMNS}
+        sample={IMPORT_SAMPLE}
+        templateName="teachers-template.csv"
+        onImported={load}
+      />
     </>
   );
 }

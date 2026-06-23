@@ -1,6 +1,6 @@
-import { query } from "../../db/postgres";
+import { query, withTransaction } from "../../db/postgres";
 import { ApiError } from "../../utils/api-error";
-import { assertWithinPlanLimit } from "../../utils/plan-limits";
+import { activePlan, assertWithinPlanLimit } from "../../utils/plan-limits";
 import { paginatedResponse, type Pagination } from "../../utils/pagination";
 import type { z } from "zod";
 import type {
@@ -87,6 +87,65 @@ export async function createTeacher(
     ]
   );
   return rows[0];
+}
+
+/**
+ * Bulk-import teachers from validated rows (e.g. a parsed CSV). Atomic: the whole
+ * batch is inserted in one transaction. The plan's staff cap is enforced for the
+ * batch up front. Omitted employee numbers are auto-generated.
+ */
+export async function importTeachers(
+  inputs: z.infer<typeof createTeacherSchema>[],
+  institutionId: string
+): Promise<{ imported: number }> {
+  if (inputs.length === 0) return { imported: 0 };
+  const plan = await activePlan(institutionId);
+  if (plan.maxStaff != null) {
+    const { rows } = await query<{ c: number }>(
+      "SELECT count(*)::int AS c FROM teachers WHERE institution_id = $1",
+      [institutionId]
+    );
+    if (Number(rows[0].c) + inputs.length > plan.maxStaff) {
+      throw ApiError.forbidden(
+        `Plan limit: importing ${inputs.length} staff would exceed the maximum (${plan.maxStaff}) for this plan`
+      );
+    }
+  }
+  try {
+    const imported = await withTransaction(async (client) => {
+      let count = 0;
+      for (const input of inputs) {
+        const employeeNo = input.employeeNo ?? (await nextEmployeeNo());
+        await client.query(
+          `INSERT INTO teachers (
+             institution_id, employee_no, first_name, last_name, email, phone,
+             qualification, specialization, joining_date
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          [
+            institutionId,
+            employeeNo,
+            input.firstName,
+            input.lastName,
+            input.email ?? null,
+            input.phone ?? null,
+            input.qualification ?? null,
+            input.specialization ?? null,
+            input.joiningDate ?? null,
+          ]
+        );
+        count++;
+      }
+      return count;
+    });
+    return { imported };
+  } catch (err) {
+    if ((err as { code?: string }).code === "23505") {
+      throw ApiError.badRequest(
+        "Duplicate employee number in the file or already on record"
+      );
+    }
+    throw err;
+  }
 }
 
 const UPDATE_COLUMN_MAP: Record<string, string> = {

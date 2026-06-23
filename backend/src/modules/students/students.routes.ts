@@ -7,6 +7,7 @@ import { accessibleStudentIds, assertStudentAccess } from "../../utils/scope";
 import {
   createStudentSchema,
   deleteStudentQuerySchema,
+  importStudentsSchema,
   listStudentsQuerySchema,
   updateStudentSchema,
 } from "./students.schema";
@@ -71,6 +72,38 @@ studentsRouter.post("/", authorize("admin"), async (req, res) => {
   const input = createStudentSchema.parse(req.body);
   const student = await studentsService.createStudent(input, tenantId(req));
   res.status(201).json(student);
+});
+
+/**
+ * @openapi
+ * /students/import:
+ *   post:
+ *     tags: [Students]
+ *     summary: Bulk-import students from parsed CSV rows (admin)
+ *     description: Validates all rows and inserts them atomically (the whole batch rolls back on any error). Omitted admission numbers are auto-generated. Limited to 1000 rows per request.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [rows]
+ *             properties:
+ *               rows:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   required: [firstName, lastName]
+ *     responses:
+ *       201: { description: "{ imported: number }" }
+ *       400: { description: Validation failed or duplicate admission number }
+ *       403: { description: Plan limit exceeded }
+ */
+studentsRouter.post("/import", authorize("admin"), async (req, res) => {
+  const { rows } = importStudentsSchema.parse(req.body);
+  const result = await studentsService.importStudents(rows, tenantId(req));
+  res.status(201).json(result);
 });
 
 /**

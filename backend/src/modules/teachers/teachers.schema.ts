@@ -20,3 +20,10 @@ export const listTeachersQuerySchema = z.object({
   limit: z.coerce.number().int().positive().optional(),
   search: z.string().max(200).optional(),
 });
+
+export const importTeachersSchema = z.object({
+  rows: z
+    .array(createTeacherSchema)
+    .min(1, "At least one row is required")
+    .max(1000, "Import is limited to 1000 rows at a time"),
+});
