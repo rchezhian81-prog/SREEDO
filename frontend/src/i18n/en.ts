@@ -115,6 +115,9 @@ export const en = {
   "login.passwordRequired": "Password is required",
   "login.serverError": "Unable to reach the server",
   "login.forgotPassword": "Forgot password?",
+  "login.twoFactorCode": "Authenticator code",
+  "login.twoFactorHint": "Enter the 6-digit code from your authenticator app.",
+  "login.verify": "Verify",
 
   // Forgot password
   "forgotPassword.title": "Forgot password",

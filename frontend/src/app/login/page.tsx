@@ -20,6 +20,7 @@ import type { User } from "@/types";
 const loginSchema = z.object({
   email: z.string().email("login.invalidEmail"),
   password: z.string().min(1, "login.passwordRequired"),
+  totpCode: z.string().optional(),
 });
 
 type LoginForm = z.infer<typeof loginSchema>;
@@ -30,11 +31,14 @@ interface LoginResponse {
   user: User;
 }
 
+type LoginResult = LoginResponse | { twoFactorRequired: true };
+
 export default function LoginPage() {
   const router = useRouter();
   const { t } = useI18n();
   const setSession = useAuthStore((state) => state.setSession);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [twoFactorRequired, setTwoFactorRequired] = useState(false);
   const {
     register,
     handleSubmit,
@@ -44,8 +48,15 @@ export default function LoginPage() {
   const onSubmit = async (values: LoginForm) => {
     setServerError(null);
     try {
-      const session = await api.post<LoginResponse>("/auth/login", values);
-      setSession(session);
+      const res = await api.post<LoginResult>("/auth/login", {
+        ...values,
+        totpCode: values.totpCode || undefined,
+      });
+      if ("twoFactorRequired" in res) {
+        setTwoFactorRequired(true); // prompt for the authenticator code
+        return;
+      }
+      setSession(res);
       router.replace("/dashboard");
     } catch (err) {
       setServerError(err instanceof ApiError ? err.message : t("login.serverError"));
@@ -92,17 +103,36 @@ export default function LoginPage() {
                 {...register("password")}
               />
             </Field>
-            <div className="-mt-1 flex justify-end">
-              <Link
-                href="/forgot-password"
-                className="text-xs font-medium text-brand-600 hover:underline"
-              >
-                {t("login.forgotPassword")}
-              </Link>
-            </div>
+            {!twoFactorRequired && (
+              <div className="-mt-1 flex justify-end">
+                <Link
+                  href="/forgot-password"
+                  className="text-xs font-medium text-brand-600 hover:underline"
+                >
+                  {t("login.forgotPassword")}
+                </Link>
+              </div>
+            )}
+            {twoFactorRequired && (
+              <Field label={t("login.twoFactorCode")}>
+                <Input
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="123456"
+                  maxLength={6}
+                  autoFocus
+                  {...register("totpCode")}
+                />
+                <p className="mt-1 text-xs text-muted">{t("login.twoFactorHint")}</p>
+              </Field>
+            )}
             <ErrorNote message={serverError} />
             <Button type="submit" disabled={isSubmitting} className="w-full">
-              {isSubmitting ? t("login.signingIn") : t("login.signIn")}
+              {isSubmitting
+                ? t("login.signingIn")
+                : twoFactorRequired
+                  ? t("login.verify")
+                  : t("login.signIn")}
             </Button>
           </form>
           <p className="mt-4 text-center text-xs text-muted">

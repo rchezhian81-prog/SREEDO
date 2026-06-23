@@ -111,3 +111,21 @@ usersRouter.delete("/:id", async (req, res) => {
   await usersService.deactivateUser(uuidParam(req), tenantId(req));
   res.status(204).end();
 });
+
+/**
+ * @openapi
+ * /users/{id}/disable-2fa:
+ *   post:
+ *     tags: [Users]
+ *     summary: Reset (disable) a user's two-factor authentication — admin recovery
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       204: { description: Two-factor reset for the user }
+ *       404: { description: User not found }
+ */
+usersRouter.post("/:id/disable-2fa", async (req, res) => {
+  await usersService.resetUserTwoFactor(uuidParam(req), tenantId(req));
+  res.status(204).end();
+});

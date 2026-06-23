@@ -111,6 +111,9 @@ export const ta: Partial<Record<keyof typeof en, string>> = {
   "login.passwordRequired": "கடவுச்சொல் தேவை",
   "login.serverError": "சேவையகத்தை அணுக முடியவில்லை",
   "login.forgotPassword": "கடவுச்சொல் மறந்துவிட்டதா?",
+  "login.twoFactorCode": "அங்கீகரிப்பு குறியீடு",
+  "login.twoFactorHint": "உங்கள் அங்கீகரிப்பு செயலியில் உள்ள 6-இலக்கக் குறியீட்டை உள்ளிடவும்.",
+  "login.verify": "சரிபார்",
 
   // Forgot password
   "forgotPassword.title": "கடவுச்சொல் மீட்டமைப்பு",

@@ -11,6 +11,8 @@ import {
 } from "../../utils/cookies";
 import {
   changePasswordSchema,
+  disableTwoFactorSchema,
+  enableTwoFactorSchema,
   forgotPasswordSchema,
   loginSchema,
   refreshSchema,
@@ -25,7 +27,8 @@ export const authRouter = Router();
  * /auth/login:
  *   post:
  *     tags: [Auth]
- *     summary: Log in with email and password
+ *     summary: Log in with email and password (and a 2FA code if enabled)
+ *     description: If the account has two-factor enabled and no valid totpCode is supplied, responds 200 with { twoFactorRequired: true } and no tokens; resubmit with totpCode.
  *     requestBody:
  *       required: true
  *       content:
@@ -36,15 +39,16 @@ export const authRouter = Router();
  *             properties:
  *               email: { type: string, format: email }
  *               password: { type: string }
+ *               totpCode: { type: string, description: 6-digit authenticator code (only if 2FA is enabled) }
  *     responses:
  *       200:
- *         description: Access and refresh tokens with the user profile
+ *         description: Access and refresh tokens with the user profile, OR { twoFactorRequired true }
  *       401:
- *         description: Invalid credentials
+ *         description: Invalid credentials or invalid 2FA code
  */
 authRouter.post("/login", authRateLimiter, async (req, res) => {
-  const { email, password } = loginSchema.parse(req.body);
-  const result = await authService.login(email, password);
+  const { email, password, totpCode } = loginSchema.parse(req.body);
+  const result = await authService.login(email, password, totpCode);
   res.json(result);
 });
 
@@ -169,14 +173,19 @@ authRouter.post("/reset-password", authRateLimiter, async (req, res) => {
  *             properties:
  *               email: { type: string, format: email }
  *               password: { type: string }
+ *               totpCode: { type: string }
  *     responses:
- *       200: { description: "{ user } with Set-Cookie access/refresh tokens" }
+ *       200: { description: "{ user } with Set-Cookie tokens, or { twoFactorRequired true }" }
  *       401: { description: Invalid credentials }
  *       403: { description: Not a student/parent account }
  */
 authRouter.post("/portal/login", authRateLimiter, async (req, res) => {
-  const { email, password } = loginSchema.parse(req.body);
-  const result = await authService.login(email, password);
+  const { email, password, totpCode } = loginSchema.parse(req.body);
+  const result = await authService.login(email, password, totpCode);
+  if ("twoFactorRequired" in result) {
+    res.json(result);
+    return;
+  }
   if (result.user.role !== "student" && result.user.role !== "parent") {
     // Staff accounts must use the Bearer flow at /auth/login.
     await authService.logout(result.refreshToken);
@@ -280,5 +289,86 @@ authRouter.get("/permissions", authenticate, async (req, res) => {
 authRouter.post("/change-password", authenticate, async (req, res) => {
   const { currentPassword, newPassword } = changePasswordSchema.parse(req.body);
   await authService.changePassword(req.user!.id, currentPassword, newPassword);
+  res.status(204).end();
+});
+
+/**
+ * @openapi
+ * /auth/2fa/status:
+ *   get:
+ *     tags: [Auth]
+ *     summary: Whether two-factor authentication is enabled for the caller
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ enabled: boolean }" }
+ */
+authRouter.get("/2fa/status", authenticate, async (req, res) => {
+  res.json(await authService.twoFactorStatus(req.user!.id));
+});
+
+/**
+ * @openapi
+ * /auth/2fa/setup:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Begin two-factor enrollment — returns a secret + otpauth URI
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ secret, otpauthUrl } — add to an authenticator app, then call enable" }
+ *       400: { description: Already enabled }
+ */
+authRouter.post("/2fa/setup", authenticate, async (req, res) => {
+  res.json(await authService.beginTwoFactorSetup(req.user!.id));
+});
+
+/**
+ * @openapi
+ * /auth/2fa/enable:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Confirm a code and turn on two-factor authentication
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [code]
+ *             properties:
+ *               code: { type: string, description: 6-digit code from the authenticator app }
+ *     responses:
+ *       204: { description: Two-factor enabled }
+ *       400: { description: Invalid code or setup not started }
+ */
+authRouter.post("/2fa/enable", authenticate, async (req, res) => {
+  const { code } = enableTwoFactorSchema.parse(req.body);
+  await authService.enableTwoFactor(req.user!.id, code);
+  res.status(204).end();
+});
+
+/**
+ * @openapi
+ * /auth/2fa/disable:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Turn off two-factor authentication (requires the account password)
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [password]
+ *             properties:
+ *               password: { type: string }
+ *     responses:
+ *       204: { description: Two-factor disabled }
+ *       400: { description: Incorrect password }
+ */
+authRouter.post("/2fa/disable", authenticate, async (req, res) => {
+  const { password } = disableTwoFactorSchema.parse(req.body);
+  await authService.disableTwoFactor(req.user!.id, password);
   res.status(204).end();
 });
