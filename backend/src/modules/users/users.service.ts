@@ -119,3 +119,15 @@ export async function deactivateUser(
   if (!rowCount) throw ApiError.notFound("User not found");
   await query("DELETE FROM refresh_tokens WHERE user_id = $1", [id]);
 }
+
+/** Admin recovery: clear a user's two-factor so they can sign in with a password. */
+export async function resetUserTwoFactor(
+  id: string,
+  institutionId: string
+): Promise<void> {
+  const { rowCount } = await query(
+    "UPDATE users SET totp_secret = null, totp_enabled = false WHERE id = $1 AND institution_id = $2",
+    [id, institutionId]
+  );
+  if (!rowCount) throw ApiError.notFound("User not found");
+}

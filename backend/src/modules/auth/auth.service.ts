@@ -9,6 +9,7 @@ import {
   refreshTokenExpiry,
   signAccessToken,
 } from "../../utils/jwt";
+import { generateBase32Secret, otpauthUrl, verifyTotp } from "../../utils/totp";
 import { hashPassword, verifyPassword } from "../../utils/password";
 import type { UserRole } from "../../types";
 
@@ -21,6 +22,8 @@ interface UserRow {
   phone: string | null;
   is_active: boolean;
   institution_id: string | null;
+  totp_secret: string | null;
+  totp_enabled: boolean;
 }
 
 export interface AuthTokens {
@@ -33,6 +36,9 @@ export interface AuthTokens {
     role: UserRole;
   };
 }
+
+/** Either a full session, or a signal that a 2FA code is still required. */
+export type LoginResult = AuthTokens | { twoFactorRequired: true };
 
 async function issueTokens(user: UserRow): Promise<AuthTokens> {
   const accessToken = signAccessToken({
@@ -70,8 +76,9 @@ async function purgeStaleRefreshTokens(): Promise<void> {
 
 export async function login(
   email: string,
-  password: string
-): Promise<AuthTokens> {
+  password: string,
+  totpCode?: string
+): Promise<LoginResult> {
   const { rows } = await query<UserRow>(
     "SELECT * FROM users WHERE email = $1",
     [email]
@@ -83,6 +90,14 @@ export async function login(
   const valid = await verifyPassword(password, user.password_hash);
   if (!valid) {
     throw ApiError.unauthorized("Invalid email or password");
+  }
+  // Second factor: only for users who have enrolled. A missing code is a soft
+  // signal (not an error) so the client can prompt for it; a wrong code is 401.
+  if (user.totp_enabled) {
+    if (!totpCode) return { twoFactorRequired: true };
+    if (!user.totp_secret || !verifyTotp(user.totp_secret, totpCode)) {
+      throw ApiError.unauthorized("Invalid two-factor code");
+    }
   }
   await purgeStaleRefreshTokens();
   return issueTokens(user);
@@ -140,7 +155,7 @@ export async function logout(refreshToken: string): Promise<void> {
 
 export async function getProfile(userId: string) {
   const { rows } = await query<UserRow>(
-    "SELECT id, email, full_name, role, phone, is_active, institution_id FROM users WHERE id = $1",
+    "SELECT id, email, full_name, role, phone, is_active, institution_id, totp_enabled FROM users WHERE id = $1",
     [userId]
   );
   const user = rows[0];
@@ -154,6 +169,7 @@ export async function getProfile(userId: string) {
     role: user.role,
     phone: user.phone,
     institutionId: user.institution_id ?? null,
+    twoFactorEnabled: user.totp_enabled,
   };
 }
 
@@ -292,4 +308,78 @@ export async function resetPassword(
       stored.user_id,
     ]);
   });
+}
+
+// --- Two-factor authentication (TOTP) -----------------------------------------
+
+export async function twoFactorStatus(
+  userId: string
+): Promise<{ enabled: boolean }> {
+  const { rows } = await query<{ totp_enabled: boolean }>(
+    "SELECT totp_enabled FROM users WHERE id = $1",
+    [userId]
+  );
+  if (!rows[0]) throw ApiError.notFound("User not found");
+  return { enabled: rows[0].totp_enabled };
+}
+
+/**
+ * Begin enrollment: store a fresh (pending) secret and return it plus an
+ * otpauth:// URI to add to an authenticator app. Not active until confirmed.
+ */
+export async function beginTwoFactorSetup(
+  userId: string
+): Promise<{ secret: string; otpauthUrl: string }> {
+  const { rows } = await query<UserRow>("SELECT * FROM users WHERE id = $1", [
+    userId,
+  ]);
+  const user = rows[0];
+  if (!user) throw ApiError.notFound("User not found");
+  if (user.totp_enabled) {
+    throw ApiError.badRequest("Two-factor authentication is already enabled");
+  }
+  const secret = generateBase32Secret();
+  await query(
+    "UPDATE users SET totp_secret = $1, totp_enabled = false WHERE id = $2",
+    [secret, userId]
+  );
+  return { secret, otpauthUrl: otpauthUrl(secret, user.email) };
+}
+
+/** Confirm a code against the pending secret and turn 2FA on. */
+export async function enableTwoFactor(
+  userId: string,
+  code: string
+): Promise<void> {
+  const { rows } = await query<UserRow>("SELECT * FROM users WHERE id = $1", [
+    userId,
+  ]);
+  const user = rows[0];
+  if (!user) throw ApiError.notFound("User not found");
+  if (!user.totp_secret) {
+    throw ApiError.badRequest("Start two-factor setup first");
+  }
+  if (!verifyTotp(user.totp_secret, code)) {
+    throw ApiError.badRequest("Invalid two-factor code");
+  }
+  await query("UPDATE users SET totp_enabled = true WHERE id = $1", [userId]);
+}
+
+/** Disable 2FA after confirming the account password. */
+export async function disableTwoFactor(
+  userId: string,
+  password: string
+): Promise<void> {
+  const { rows } = await query<UserRow>("SELECT * FROM users WHERE id = $1", [
+    userId,
+  ]);
+  const user = rows[0];
+  if (!user) throw ApiError.notFound("User not found");
+  if (!(await verifyPassword(password, user.password_hash))) {
+    throw ApiError.badRequest("Password is incorrect");
+  }
+  await query(
+    "UPDATE users SET totp_secret = null, totp_enabled = false WHERE id = $1",
+    [userId]
+  );
 }
