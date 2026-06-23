@@ -11,8 +11,10 @@ import {
 } from "../../utils/cookies";
 import {
   changePasswordSchema,
+  forgotPasswordSchema,
   loginSchema,
   refreshSchema,
+  resetPasswordSchema,
 } from "./auth.schema";
 import * as authService from "./auth.service";
 
@@ -92,6 +94,61 @@ authRouter.post("/refresh", async (req, res) => {
 authRouter.post("/logout", async (req, res) => {
   const { refreshToken } = refreshSchema.parse(req.body);
   await authService.logout(refreshToken);
+  res.status(204).end();
+});
+
+/**
+ * @openapi
+ * /auth/forgot-password:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Request a password-reset email
+ *     description: Always returns 200 and never reveals whether the email exists. When the account exists, a single-use reset link is emailed (requires SMTP to be configured to deliver).
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email]
+ *             properties:
+ *               email: { type: string, format: email }
+ *     responses:
+ *       200: { description: A reset link has been sent if the account exists }
+ */
+authRouter.post("/forgot-password", authRateLimiter, async (req, res) => {
+  const { email } = forgotPasswordSchema.parse(req.body);
+  await authService.requestPasswordReset(email);
+  res.json({
+    message:
+      "If an account exists for that email, a password-reset link has been sent.",
+  });
+});
+
+/**
+ * @openapi
+ * /auth/reset-password:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Set a new password using a reset token
+ *     description: Consumes a single-use token from the emailed link, sets the new password, and revokes all existing sessions.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [token, newPassword]
+ *             properties:
+ *               token: { type: string }
+ *               newPassword: { type: string, minLength: 8 }
+ *     responses:
+ *       204: { description: Password reset — sign in with the new password }
+ *       400: { description: Invalid or expired reset link }
+ */
+authRouter.post("/reset-password", authRateLimiter, async (req, res) => {
+  const { token, newPassword } = resetPasswordSchema.parse(req.body);
+  await authService.resetPassword(token, newPassword);
   res.status(204).end();
 });
 

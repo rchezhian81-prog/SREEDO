@@ -92,6 +92,14 @@ export default function LoginPage() {
                 {...register("password")}
               />
             </Field>
+            <div className="-mt-1 flex justify-end">
+              <Link
+                href="/forgot-password"
+                className="text-xs font-medium text-brand-600 hover:underline"
+              >
+                {t("login.forgotPassword")}
+              </Link>
+            </div>
             <ErrorNote message={serverError} />
             <Button type="submit" disabled={isSubmitting} className="w-full">
               {isSubmitting ? t("login.signingIn") : t("login.signIn")}
