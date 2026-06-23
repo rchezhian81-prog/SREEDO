@@ -110,6 +110,33 @@ export const ta: Partial<Record<keyof typeof en, string>> = {
   "login.invalidEmail": "சரியான மின்னஞ்சலை உள்ளிடவும்",
   "login.passwordRequired": "கடவுச்சொல் தேவை",
   "login.serverError": "சேவையகத்தை அணுக முடியவில்லை",
+  "login.forgotPassword": "கடவுச்சொல் மறந்துவிட்டதா?",
+
+  // Forgot password
+  "forgotPassword.title": "கடவுச்சொல் மீட்டமைப்பு",
+  "forgotPassword.subtitle": "மீட்டமைப்பு இணைப்பை மின்னஞ்சலில் அனுப்புவோம்",
+  "forgotPassword.email": "மின்னஞ்சல்",
+  "forgotPassword.submit": "மீட்டமைப்பு இணைப்பை அனுப்பு",
+  "forgotPassword.sending": "அனுப்புகிறது…",
+  "forgotPassword.backToLogin": "உள்நுழைவுக்குத் திரும்பு",
+  "forgotPassword.sent":
+    "அந்த மின்னஞ்சலுக்கு கணக்கு இருந்தால், கடவுச்சொல் மீட்டமைப்பு இணைப்பு அனுப்பப்பட்டுள்ளது. உங்கள் உள்பெட்டியைச் சரிபார்க்கவும்.",
+  "forgotPassword.invalidEmail": "சரியான மின்னஞ்சலை உள்ளிடவும்",
+
+  // Reset password
+  "resetPassword.title": "புதிய கடவுச்சொல்லை அமைக்கவும்",
+  "resetPassword.subtitle": "வலுவான புதிய கடவுச்சொல்லைத் தேர்ந்தெடுக்கவும்",
+  "resetPassword.newPassword": "புதிய கடவுச்சொல்",
+  "resetPassword.confirmPassword": "கடவுச்சொல்லை உறுதிப்படுத்தவும்",
+  "resetPassword.submit": "கடவுச்சொல்லை மீட்டமை",
+  "resetPassword.resetting": "மீட்டமைக்கிறது…",
+  "resetPassword.success":
+    "உங்கள் கடவுச்சொல் மீட்டமைக்கப்பட்டது. இப்போது உள்நுழையலாம்.",
+  "resetPassword.backToLogin": "உள்நுழைவுக்குத் திரும்பு",
+  "resetPassword.missingToken": "இந்த மீட்டமைப்பு இணைப்பு தவறானது அல்லது முழுமையற்றது.",
+  "resetPassword.mismatch": "கடவுச்சொற்கள் பொருந்தவில்லை",
+  "resetPassword.weak": "குறைந்தது 8 எழுத்துகள், ஒரு எழுத்து மற்றும் ஒரு எண் உட்பட",
+  "resetPassword.serverError": "கடவுச்சொல்லை மீட்டமைக்க முடியவில்லை",
 
   // Portal login
   "portalLogin.subtitle": "பெற்றோர் & மாணவர் போர்ட்டல்",

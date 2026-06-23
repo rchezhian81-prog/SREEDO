@@ -1,5 +1,8 @@
-import { query } from "../../db/postgres";
+import crypto from "node:crypto";
+import { query, withTransaction } from "../../db/postgres";
+import { env } from "../../config/env";
 import { ApiError } from "../../utils/api-error";
+import { sendMail } from "../../utils/mailer";
 import {
   generateRefreshToken,
   hashRefreshToken,
@@ -177,4 +180,116 @@ export async function changePassword(
   ]);
   // Invalidate every existing session after a password change.
   await query("DELETE FROM refresh_tokens WHERE user_id = $1", [userId]);
+}
+
+// --- Self-service password reset ----------------------------------------------
+
+/** Opaque reset token; only its SHA-256 hash is ever stored (raw token emailed). */
+function generateResetToken(): { token: string; tokenHash: string } {
+  const token = crypto.randomBytes(48).toString("hex");
+  const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+  return { token, tokenHash };
+}
+
+function resetTokenExpiry(): Date {
+  return new Date(Date.now() + env.passwordResetTtlMinutes * 60 * 1000);
+}
+
+/**
+ * Begin a self-service password reset. Always resolves and never reveals whether
+ * the email exists (no account enumeration). When the account exists and is
+ * active, a single-use token is stored (hashed) and a reset link is emailed
+ * best-effort — a missing SMTP config or a send failure never fails the request.
+ */
+export async function requestPasswordReset(email: string): Promise<void> {
+  const { rows } = await query<UserRow>(
+    "SELECT id, email, full_name, is_active FROM users WHERE email = $1",
+    [email]
+  );
+  const user = rows[0];
+  if (!user || !user.is_active) {
+    return; // silent no-op — do not leak whether the account exists
+  }
+
+  // Invalidate any outstanding unused tokens before issuing a fresh one.
+  await query(
+    "DELETE FROM password_reset_tokens WHERE user_id = $1 AND used_at IS NULL",
+    [user.id]
+  );
+  const { token, tokenHash } = generateResetToken();
+  await query(
+    `INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
+     VALUES ($1, $2, $3)`,
+    [user.id, tokenHash, resetTokenExpiry()]
+  );
+
+  const base = (env.appPublicUrl ?? env.corsOrigin[0] ?? "http://localhost:3000")
+    .replace(/\/$/, "");
+  const resetUrl = `${base}/reset-password?token=${token}`;
+  const minutes = env.passwordResetTtlMinutes;
+  await sendMail({
+    to: user.email,
+    subject: "Reset your GoCampus password",
+    text:
+      `Hello ${user.full_name},\n\n` +
+      `We received a request to reset your GoCampus password. Use the link ` +
+      `below within ${minutes} minutes to choose a new password:\n\n` +
+      `${resetUrl}\n\n` +
+      `If you didn't request this, you can safely ignore this email — your ` +
+      `password will not change.\n`,
+    html:
+      `<p>Hello ${user.full_name},</p>` +
+      `<p>We received a request to reset your GoCampus password. Use the link ` +
+      `below within <strong>${minutes} minutes</strong> to choose a new ` +
+      `password:</p>` +
+      `<p><a href="${resetUrl}">Reset my password</a></p>` +
+      `<p>If you didn't request this, you can safely ignore this email — your ` +
+      `password will not change.</p>`,
+  });
+}
+
+/**
+ * Complete a password reset with a token from the emailed link. Validates the
+ * token (exists, unused, unexpired), sets the new password, marks the token
+ * used, and revokes every existing session and outstanding reset token for the
+ * user — all in one transaction.
+ */
+export async function resetPassword(
+  token: string,
+  newPassword: string
+): Promise<void> {
+  const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+  const { rows } = await query<{
+    id: string;
+    user_id: string;
+    expires_at: Date;
+    used_at: Date | null;
+  }>(
+    `SELECT id, user_id, expires_at, used_at
+     FROM password_reset_tokens WHERE token_hash = $1`,
+    [tokenHash]
+  );
+  const stored = rows[0];
+  if (!stored || stored.used_at || new Date(stored.expires_at) < new Date()) {
+    throw ApiError.badRequest("This reset link is invalid or has expired");
+  }
+  const newHash = await hashPassword(newPassword);
+  await withTransaction(async (client) => {
+    await client.query("UPDATE users SET password_hash = $1 WHERE id = $2", [
+      newHash,
+      stored.user_id,
+    ]);
+    await client.query(
+      "UPDATE password_reset_tokens SET used_at = now() WHERE id = $1",
+      [stored.id]
+    );
+    // Invalidate other outstanding reset tokens and every active session.
+    await client.query(
+      "DELETE FROM password_reset_tokens WHERE user_id = $1 AND used_at IS NULL",
+      [stored.user_id]
+    );
+    await client.query("DELETE FROM refresh_tokens WHERE user_id = $1", [
+      stored.user_id,
+    ]);
+  });
 }

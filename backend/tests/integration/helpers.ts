@@ -92,6 +92,7 @@ const TABLES = [
   "branches",
   "subscription_packages",
   "institutions",
+  "password_reset_tokens",
   "refresh_tokens",
   "payments",
   "invoices",

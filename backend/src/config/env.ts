@@ -38,6 +38,12 @@ export const env = {
   jwtAccessTtl: process.env.JWT_ACCESS_TTL ?? "15m",
   jwtRefreshTtlDays: Number(process.env.JWT_REFRESH_TTL_DAYS ?? 7),
 
+  // Public base URL of the web app — used to build links in transactional email
+  // (e.g. the password-reset link). Falls back to the first CORS origin when unset.
+  appPublicUrl: optional("APP_PUBLIC_URL"),
+  // Self-service password-reset token lifetime, in minutes.
+  passwordResetTtlMinutes: Number(process.env.PASSWORD_RESET_TTL_MINUTES ?? 60),
+
   rateLimitWindowMinutes: Number(process.env.RATE_LIMIT_WINDOW_MINUTES ?? 15),
   rateLimitMax: Number(process.env.RATE_LIMIT_MAX ?? 300),
   authRateLimitMax: Number(process.env.AUTH_RATE_LIMIT_MAX ?? 10),

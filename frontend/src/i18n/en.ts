@@ -114,6 +114,32 @@ export const en = {
   "login.invalidEmail": "Enter a valid email",
   "login.passwordRequired": "Password is required",
   "login.serverError": "Unable to reach the server",
+  "login.forgotPassword": "Forgot password?",
+
+  // Forgot password
+  "forgotPassword.title": "Forgot password",
+  "forgotPassword.subtitle": "We'll email you a reset link",
+  "forgotPassword.email": "Email",
+  "forgotPassword.submit": "Send reset link",
+  "forgotPassword.sending": "Sending…",
+  "forgotPassword.backToLogin": "Back to sign in",
+  "forgotPassword.sent":
+    "If an account exists for that email, a password-reset link has been sent. Please check your inbox.",
+  "forgotPassword.invalidEmail": "Enter a valid email",
+
+  // Reset password
+  "resetPassword.title": "Set a new password",
+  "resetPassword.subtitle": "Choose a strong new password",
+  "resetPassword.newPassword": "New password",
+  "resetPassword.confirmPassword": "Confirm password",
+  "resetPassword.submit": "Reset password",
+  "resetPassword.resetting": "Resetting…",
+  "resetPassword.success": "Your password has been reset. You can now sign in.",
+  "resetPassword.backToLogin": "Back to sign in",
+  "resetPassword.missingToken": "This reset link is invalid or incomplete.",
+  "resetPassword.mismatch": "Passwords do not match",
+  "resetPassword.weak": "At least 8 characters, including a letter and a number",
+  "resetPassword.serverError": "Unable to reset the password",
 
   // Portal login
   "portalLogin.subtitle": "Parent & student portal",
