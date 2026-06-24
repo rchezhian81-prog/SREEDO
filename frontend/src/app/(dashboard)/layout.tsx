@@ -44,6 +44,7 @@ const SCHOOL_NAV: NavItem[] = [
   { href: "/documents", label: "Documents", icon: "file" },
   { href: "/homework", label: "Homework", icon: "board" },
   { href: "/study-materials", label: "Study Materials", icon: "file" },
+  { href: "/quizzes", label: "Quizzes", icon: "board" },
   { href: "/id-cards", label: "ID Cards", icon: "card" },
   { href: "/transfer-certificates", label: "Transfer Certificates", icon: "file" },
   { href: "/reports-center", label: "Reports Center", icon: "barChart" },
