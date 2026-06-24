@@ -7,6 +7,7 @@ import { accessibleStudentIds, assertStudentAccess } from "../../utils/scope";
 import * as portalService from "./portal.service";
 import * as disciplinaryService from "../disciplinary/disciplinary.service";
 import * as messService from "../mess/mess.service";
+import * as studyMaterialsService from "../studymaterials/studymaterials.service";
 
 export const portalRouter = Router();
 
@@ -42,6 +43,25 @@ portalRouter.get("/mess-menu", async (req, res) => {
 portalRouter.get("/children", async (req, res) => {
   const ids = (await accessibleStudentIds(req)) ?? [];
   res.json(await portalService.listChildren(ids, req.user!.id, tenantId(req)));
+});
+
+/**
+ * @openapi
+ * /portal/students/{studentId}/materials:
+ *   get:
+ *     tags: [Portal]
+ *     summary: Study materials for an accessible student's class (+ school-wide)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: studentId, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: Study materials list }
+ *       403: { description: Not an accessible student }
+ */
+portalRouter.get("/students/:studentId/materials", async (req, res) => {
+  const studentId = uuidParam(req, "studentId");
+  assertStudentAccess(await accessibleStudentIds(req), studentId);
+  res.json(await studyMaterialsService.listMaterialsForStudent(studentId, tenantId(req)));
 });
 
 /**
