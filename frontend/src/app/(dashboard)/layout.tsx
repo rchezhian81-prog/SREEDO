@@ -53,6 +53,7 @@ const SCHOOL_NAV: NavItem[] = [
   { href: "/announcements", label: "Announcements", icon: "megaphone" },
   { href: "/communication", label: "Communication", icon: "mail" },
   { href: "/messaging", label: "Messaging", icon: "message" },
+  { href: "/feedback", label: "Feedback", icon: "message", adminOnly: true },
   { href: "/assistant", label: "AI Assistant", icon: "sparkles" },
   { href: "/ai-insights", label: "AI Insights", icon: "trendUp" },
   { href: "/jobs", label: "Jobs", icon: "gear", adminOnly: true },

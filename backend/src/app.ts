@@ -20,6 +20,7 @@ import { admissionsRouter } from "./modules/admissions/admissions.routes";
 import { financeRouter } from "./modules/finance/finance.routes";
 import { calendarRouter } from "./modules/calendar/calendar.routes";
 import { visitorsRouter } from "./modules/visitors/visitors.routes";
+import { feedbackRouter } from "./modules/feedback/feedback.routes";
 import { aiRouter } from "./modules/ai/ai.routes";
 import { aiInsightsRouter } from "./modules/aiinsights/aiinsights.routes";
 import { announcementsRouter } from "./modules/announcements/announcements.routes";
@@ -165,6 +166,7 @@ export function createApp(): express.Express {
   api.use("/finance", financeRouter); // accounting: income/expense ledger
   api.use("/calendar", calendarRouter); // events & academic calendar
   api.use("/visitors", visitorsRouter); // front office: visitor log
+  api.use("/feedback", feedbackRouter); // feedback / grievance tracker
   api.use("/platform", platformRouter); // super-admin platform hardening
   api.use("/", superAdminRouter); // /institutions, /branches, /packages
   app.use("/api/v1", api);
