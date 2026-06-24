@@ -10,6 +10,22 @@ function required(name: string, fallback?: string): string {
   return value;
 }
 
+// Like `required`, but refuses to fall back to the published dev default when
+// NODE_ENV=production. Otherwise a missing JWT secret would silently sign tokens
+// with a secret that is committed to this repo — anyone could forge a valid
+// session. Fail fast at boot instead of running insecure.
+export function requiredSecret(name: string, devFallback: string): string {
+  const raw = process.env[name];
+  const value = raw === undefined || raw === "" ? devFallback : raw;
+  if (process.env.NODE_ENV === "production" && value === devFallback) {
+    throw new Error(
+      `${name} must be set to a strong, unique value in production ` +
+        `(the dev default is published in this repository).`
+    );
+  }
+  return value;
+}
+
 function optional(name: string): string | undefined {
   const value = process.env[name];
   return value === undefined || value === "" ? undefined : value;
@@ -30,8 +46,11 @@ export const env = {
   mongoUrl: optional("MONGO_URL"),
   mongoDb: process.env.MONGO_DB ?? "sreedo",
 
-  jwtAccessSecret: required("JWT_ACCESS_SECRET", "dev-access-secret-change-me"),
-  jwtRefreshSecret: required(
+  jwtAccessSecret: requiredSecret(
+    "JWT_ACCESS_SECRET",
+    "dev-access-secret-change-me"
+  ),
+  jwtRefreshSecret: requiredSecret(
     "JWT_REFRESH_SECRET",
     "dev-refresh-secret-change-me"
   ),
