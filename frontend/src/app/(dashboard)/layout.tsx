@@ -32,6 +32,7 @@ const SCHOOL_NAV: NavItem[] = [
   { href: "/hostel", label: "Hostel", icon: "building" },
   { href: "/inventory", label: "Inventory", icon: "package" },
   { href: "/staff", label: "Staff Attendance", icon: "briefcase" },
+  { href: "/front-office", label: "Front Office", icon: "help", adminOnly: true },
   { href: "/leave", label: "Leave", icon: "calcheck" },
   { href: "/payroll", label: "Payroll", icon: "wallet" },
   { href: "/attendance", label: "Attendance", icon: "calcheck" },
