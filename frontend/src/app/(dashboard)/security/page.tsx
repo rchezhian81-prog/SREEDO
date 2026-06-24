@@ -40,6 +40,13 @@ export default function SecurityPage() {
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
 
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [pwBusy, setPwBusy] = useState(false);
+  const [pwError, setPwError] = useState<string | null>(null);
+  const [pwNotice, setPwNotice] = useState<string | null>(null);
+
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [sessionsError, setSessionsError] = useState<string | null>(null);
 
@@ -128,11 +135,46 @@ export default function SecurityPage() {
     }
   };
 
+  const changePasswordHandler = async () => {
+    setPwError(null);
+    setPwNotice(null);
+    if (
+      newPassword.length < 8 ||
+      !/[A-Za-z]/.test(newPassword) ||
+      !/[0-9]/.test(newPassword)
+    ) {
+      setPwError(
+        "New password must be at least 8 characters and include a letter and a number."
+      );
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPwError("New password and confirmation do not match.");
+      return;
+    }
+    setPwBusy(true);
+    try {
+      await api.post("/auth/change-password", { currentPassword, newPassword });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setPwNotice(
+        "Password updated. You'll need to sign in again on your other devices."
+      );
+    } catch (err) {
+      setPwError(
+        err instanceof ApiError ? err.message : "Could not change password"
+      );
+    } finally {
+      setPwBusy(false);
+    }
+  };
+
   return (
     <>
       <PageHeader
         title="Security"
-        subtitle="Protect your account with two-factor authentication"
+        subtitle="Manage your password, two-factor authentication, and active sessions"
       />
       {loading ? (
         <Spinner />
@@ -245,6 +287,61 @@ export default function SecurityPage() {
             Lost your device? An administrator can reset your two-factor from the
             Users page.
           </p>
+
+          <div className="rounded-xl border border-line bg-surface p-5">
+            <div className="mb-3">
+              <h2 className="font-semibold text-ink">Change password</h2>
+              <p className="text-sm text-muted">
+                Use a strong, unique password — at least 8 characters with a
+                letter and a number.
+              </p>
+            </div>
+            {pwNotice && (
+              <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
+                {pwNotice}
+              </p>
+            )}
+            <ErrorNote message={pwError} />
+            <div className="space-y-3">
+              <Field label="Current password">
+                <Input
+                  type="password"
+                  autoComplete="current-password"
+                  placeholder="••••••••"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                />
+              </Field>
+              <Field label="New password">
+                <Input
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder="At least 8 characters"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                />
+              </Field>
+              <Field label="Confirm new password">
+                <Input
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder="Re-enter new password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                />
+              </Field>
+              <Button
+                type="button"
+                disabled={pwBusy || !currentPassword || !newPassword || !confirmPassword}
+                onClick={changePasswordHandler}
+              >
+                {pwBusy ? "Updating…" : "Update password"}
+              </Button>
+              <p className="text-xs text-faint">
+                Changing your password signs you out on all other devices.
+              </p>
+            </div>
+          </div>
 
           <div className="rounded-xl border border-line bg-surface p-5">
             <div className="mb-3">
