@@ -280,6 +280,7 @@ export interface AccountUser {
   role: UserRole;
   phone: string | null;
   isActive: boolean;
+  twoFactorEnabled: boolean;
   createdAt: string;
 }
 
