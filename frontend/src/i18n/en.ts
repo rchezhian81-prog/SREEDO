@@ -97,6 +97,7 @@ export const en = {
   "portalNav.documents": "Documents",
   "portalNav.certificates": "Certificates",
   "portalNav.homework": "Homework",
+  "portalNav.mess": "Mess Menu",
   "portalNav.disciplinary": "Disciplinary",
   "portalNav.fees": "Fees",
   "portalNav.notices": "Notices",
