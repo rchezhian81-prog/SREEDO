@@ -23,6 +23,7 @@ const NAV: { href: string; tkey: TranslationKey; icon: string }[] = [
   { href: "/portal/materials", tkey: "portalNav.materials", icon: "📒" },
   { href: "/portal/quizzes", tkey: "portalNav.quizzes", icon: "📝" },
   { href: "/portal/library", tkey: "portalNav.library", icon: "📖" },
+  { href: "/portal/polls", tkey: "portalNav.polls", icon: "📊" },
   { href: "/portal/mess", tkey: "portalNav.mess", icon: "🍽️" },
   { href: "/portal/disciplinary", tkey: "portalNav.disciplinary", icon: "⚖️" },
   { href: "/portal/fees", tkey: "portalNav.fees", icon: "💳" },

@@ -15,6 +15,8 @@ import {
   createReservationSchema,
   listAvailableBooksQuerySchema,
 } from "../reservations/reservations.schema";
+import * as pollsService from "../polls/polls.service";
+import { voteSchema } from "../polls/polls.schema";
 
 export const portalRouter = Router();
 
@@ -229,6 +231,77 @@ portalRouter.post("/students/:studentId/reservations/:id/cancel", async (req, re
   assertStudentAccess(await accessibleStudentIds(req), studentId);
   await reservationsService.cancelStudentReservation(uuidParam(req, "id"), studentId, tenantId(req));
   res.status(204).end();
+});
+
+/**
+ * @openapi
+ * /portal/students/{studentId}/polls:
+ *   get:
+ *     tags: [Portal]
+ *     summary: Published polls available to an accessible student (with voted status)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: studentId, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: Polls list }
+ */
+portalRouter.get("/students/:studentId/polls", async (req, res) => {
+  const studentId = uuidParam(req, "studentId");
+  assertStudentAccess(await accessibleStudentIds(req), studentId);
+  res.json(await pollsService.listStudentPolls(studentId, tenantId(req)));
+});
+
+/**
+ * @openapi
+ * /portal/students/{studentId}/polls/{pollId}:
+ *   get:
+ *     tags: [Portal]
+ *     summary: A poll to vote in (results revealed after voting or once closed)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: studentId, required: true, schema: { type: string, format: uuid } }
+ *       - { in: path, name: pollId, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: Poll with options }
+ *       404: { description: Poll not available }
+ */
+portalRouter.get("/students/:studentId/polls/:pollId", async (req, res) => {
+  const studentId = uuidParam(req, "studentId");
+  assertStudentAccess(await accessibleStudentIds(req), studentId);
+  res.json(await pollsService.getPollForStudent(uuidParam(req, "pollId"), studentId, tenantId(req)));
+});
+
+/**
+ * @openapi
+ * /portal/students/{studentId}/polls/{pollId}/vote:
+ *   post:
+ *     tags: [Portal]
+ *     summary: Cast a vote in a poll (one per student)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: studentId, required: true, schema: { type: string, format: uuid } }
+ *       - { in: path, name: pollId, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [optionId]
+ *             properties:
+ *               optionId: { type: string, format: uuid }
+ *     responses:
+ *       201: { description: Vote recorded }
+ *       400: { description: Poll closed / invalid option }
+ *       409: { description: Already voted }
+ */
+portalRouter.post("/students/:studentId/polls/:pollId/vote", async (req, res) => {
+  const studentId = uuidParam(req, "studentId");
+  assertStudentAccess(await accessibleStudentIds(req), studentId);
+  const { optionId } = voteSchema.parse(req.body);
+  res
+    .status(201)
+    .json(await pollsService.vote(uuidParam(req, "pollId"), studentId, tenantId(req), optionId));
 });
 
 /**
