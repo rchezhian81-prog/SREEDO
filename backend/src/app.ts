@@ -28,6 +28,7 @@ import { studyMaterialsRouter } from "./modules/studymaterials/studymaterials.ro
 import { quizzesRouter } from "./modules/quizzes/quizzes.routes";
 import { reservationsRouter } from "./modules/reservations/reservations.routes";
 import { biometricRouter } from "./modules/biometric/biometric.routes";
+import { feeRefundsRouter } from "./modules/feerefunds/feerefunds.routes";
 import { aiRouter } from "./modules/ai/ai.routes";
 import { aiInsightsRouter } from "./modules/aiinsights/aiinsights.routes";
 import { announcementsRouter } from "./modules/announcements/announcements.routes";
@@ -181,6 +182,7 @@ export function createApp(): express.Express {
   api.use("/quizzes", quizzesRouter); // online quizzes authoring (admin/teacher)
   api.use("/reservations", reservationsRouter); // library reservations (admin)
   api.use("/biometric", biometricRouter); // biometric / RFID attendance devices
+  api.use("/fee-refunds", feeRefundsRouter); // fee refunds against payments (admin)
   api.use("/platform", platformRouter); // super-admin platform hardening
   api.use("/", superAdminRouter); // /institutions, /branches, /packages
   app.use("/api/v1", api);
