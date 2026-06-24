@@ -21,6 +21,7 @@ type NavItem = {
 
 const SCHOOL_NAV: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: "grid" },
+  { href: "/analytics", label: "Analytics", icon: "trendUp" },
   { href: "/students", label: "Students", icon: "cap" },
   { href: "/admissions", label: "Admissions", icon: "card", adminOnly: true },
   { href: "/teachers", label: "Teachers", icon: "board" },
