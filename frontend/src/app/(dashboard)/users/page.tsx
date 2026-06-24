@@ -150,6 +150,17 @@ export default function UsersPage() {
     await load();
   };
 
+  const resetTwoFactor = async (user: AccountUser) => {
+    if (
+      !confirm(
+        `Reset two-factor authentication for ${user.fullName}? They'll be able to sign in with just their password until they set it up again.`
+      )
+    )
+      return;
+    await api.post(`/users/${user.id}/disable-2fa`);
+    await load();
+  };
+
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
   if (!isAdmin) {
@@ -228,9 +239,19 @@ export default function UsersPage() {
                   <td className="px-4 py-3">{user.email}</td>
                   <td className="px-4 py-3 capitalize">{user.role}</td>
                   <td className="px-4 py-3">
-                    <Badge tone={user.isActive ? "green" : "slate"}>
-                      {user.isActive ? "active" : "inactive"}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge tone={user.isActive ? "green" : "slate"}>
+                        {user.isActive ? "active" : "inactive"}
+                      </Badge>
+                      {user.twoFactorEnabled && (
+                        <span
+                          title="Two-factor authentication enabled"
+                          className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
+                        >
+                          2FA
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex justify-end gap-3">
@@ -240,6 +261,14 @@ export default function UsersPage() {
                       >
                         Edit
                       </button>
+                      {user.twoFactorEnabled && (
+                        <button
+                          onClick={() => resetTwoFactor(user)}
+                          className="text-xs font-medium text-amber-600 hover:text-amber-700"
+                        >
+                          Reset 2FA
+                        </button>
+                      )}
                       {user.isActive && (
                         <button
                           onClick={() => deactivate(user)}

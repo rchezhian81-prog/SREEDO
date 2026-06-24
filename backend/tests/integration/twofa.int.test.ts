@@ -116,10 +116,27 @@ describe("two-factor authentication", () => {
       .send({ email: "staff@2fa.dev", password: "Passw0rd!" });
     expect(needsCode.body.twoFactorRequired).toBe(true);
 
+    // Admins can see 2FA status on the users list.
+    const listed = await request(app)
+      .get("/api/v1/users?limit=50")
+      .set("Authorization", `Bearer ${token}`);
+    const staffRow = listed.body.data.find(
+      (u: { id: string }) => u.id === staff.id
+    );
+    expect(staffRow.twoFactorEnabled).toBe(true);
+
     const reset = await request(app)
       .post(`/api/v1/users/${staff.id}/disable-2fa`)
       .set("Authorization", `Bearer ${token}`);
     expect(reset.status).toBe(204);
+
+    const afterReset = await request(app)
+      .get("/api/v1/users?limit=50")
+      .set("Authorization", `Bearer ${token}`);
+    expect(
+      afterReset.body.data.find((u: { id: string }) => u.id === staff.id)
+        .twoFactorEnabled
+    ).toBe(false);
 
     const login = await request(app)
       .post("/api/v1/auth/login")
