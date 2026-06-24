@@ -44,6 +44,11 @@ export const env = {
   // Self-service password-reset token lifetime, in minutes.
   passwordResetTtlMinutes: Number(process.env.PASSWORD_RESET_TTL_MINUTES ?? 60),
 
+  // Per-account lockout: after this many consecutive failed logins the account
+  // is locked for the configured number of minutes (an admin can unlock sooner).
+  authMaxFailedAttempts: Number(process.env.AUTH_MAX_FAILED_ATTEMPTS ?? 5),
+  authLockoutMinutes: Number(process.env.AUTH_LOCKOUT_MINUTES ?? 15),
+
   rateLimitWindowMinutes: Number(process.env.RATE_LIMIT_WINDOW_MINUTES ?? 15),
   rateLimitMax: Number(process.env.RATE_LIMIT_MAX ?? 300),
   authRateLimitMax: Number(process.env.AUTH_RATE_LIMIT_MAX ?? 10),

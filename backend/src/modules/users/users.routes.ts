@@ -129,3 +129,21 @@ usersRouter.post("/:id/disable-2fa", async (req, res) => {
   await usersService.resetUserTwoFactor(uuidParam(req), tenantId(req));
   res.status(204).end();
 });
+
+/**
+ * @openapi
+ * /users/{id}/unlock:
+ *   post:
+ *     tags: [Users]
+ *     summary: Unlock a user locked out by failed logins — admin recovery
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       204: { description: Account unlocked }
+ *       404: { description: User not found }
+ */
+usersRouter.post("/:id/unlock", async (req, res) => {
+  await usersService.unlockUser(uuidParam(req), tenantId(req));
+  res.status(204).end();
+});

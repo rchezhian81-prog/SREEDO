@@ -24,6 +24,8 @@ interface UserRow {
   institution_id: string | null;
   totp_secret: string | null;
   totp_enabled: boolean;
+  failed_login_attempts: number;
+  locked_until: Date | null;
 }
 
 export interface AuthTokens {
@@ -65,6 +67,37 @@ async function issueTokens(user: UserRow): Promise<AuthTokens> {
   };
 }
 
+/**
+ * Record a failed password attempt and, once the threshold is reached, lock the
+ * account for the configured window. Per-account complement to the IP limiter.
+ */
+async function registerFailedLogin(user: UserRow): Promise<void> {
+  const attempts = user.failed_login_attempts + 1;
+  if (attempts >= env.authMaxFailedAttempts) {
+    await query(
+      `UPDATE users
+       SET failed_login_attempts = $1,
+           locked_until = now() + make_interval(mins => $2::int)
+       WHERE id = $3`,
+      [attempts, env.authLockoutMinutes, user.id]
+    );
+  } else {
+    await query("UPDATE users SET failed_login_attempts = $1 WHERE id = $2", [
+      attempts,
+      user.id,
+    ]);
+  }
+}
+
+/** Clear the failed-attempt counter and any lock after a successful password. */
+async function clearFailedLogins(user: UserRow): Promise<void> {
+  if (user.failed_login_attempts === 0 && !user.locked_until) return;
+  await query(
+    "UPDATE users SET failed_login_attempts = 0, locked_until = null WHERE id = $1",
+    [user.id]
+  );
+}
+
 /** Housekeeping: drop expired tokens and revoked ones past the detection window. */
 async function purgeStaleRefreshTokens(): Promise<void> {
   await query(
@@ -87,10 +120,20 @@ export async function login(
   if (!user || !user.is_active) {
     throw ApiError.unauthorized("Invalid email or password");
   }
+  // Per-account lock: reject early (before checking the password) while active.
+  if (user.locked_until && new Date(user.locked_until) > new Date()) {
+    throw new ApiError(
+      423,
+      "Account locked after too many failed attempts. Try again later or contact an administrator."
+    );
+  }
   const valid = await verifyPassword(password, user.password_hash);
   if (!valid) {
+    await registerFailedLogin(user);
     throw ApiError.unauthorized("Invalid email or password");
   }
+  // Password is correct — clear any prior failed-attempt counter / stale lock.
+  await clearFailedLogins(user);
   // Second factor: only for users who have enrolled. A missing code is a soft
   // signal (not an error) so the client can prompt for it; a wrong code is 401.
   if (user.totp_enabled) {
