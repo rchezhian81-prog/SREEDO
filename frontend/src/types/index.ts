@@ -184,6 +184,16 @@ export interface Subject {
   code: string;
 }
 
+export interface ClassSubject {
+  id: string;
+  sectionId: string;
+  subjectId: string;
+  subjectName: string;
+  subjectCode: string;
+  teacherId: string | null;
+  teacherName: string | null;
+}
+
 export interface Homework {
   id: string;
   sectionId: string;

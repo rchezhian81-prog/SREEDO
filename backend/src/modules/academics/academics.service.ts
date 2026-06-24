@@ -2,10 +2,12 @@ import { query, withTransaction } from "../../db/postgres";
 import { ApiError } from "../../utils/api-error";
 import type { z } from "zod";
 import type {
+  assignSectionSubjectSchema,
   createAcademicYearSchema,
   createClassSchema,
   createSectionSchema,
   createSubjectSchema,
+  updateClassSubjectSchema,
 } from "./academics.schema";
 
 // --- Academic years ---
@@ -159,4 +161,126 @@ export async function removeSubject(
     [id, institutionId]
   );
   if (!rowCount) throw ApiError.notFound("Subject not found");
+}
+
+// --- Section subject assignments (class_subjects) ---
+// Which teacher teaches which subject to a given section.
+
+const CLASS_SUBJECT_COLUMNS = `cs.id, cs.section_id AS "sectionId",
+            cs.subject_id AS "subjectId", sub.name AS "subjectName",
+            sub.code AS "subjectCode", cs.teacher_id AS "teacherId",
+            CASE WHEN t.id IS NOT NULL
+                 THEN t.first_name || ' ' || t.last_name END AS "teacherName"`;
+
+async function assertSectionInTenant(
+  sectionId: string,
+  institutionId: string
+): Promise<void> {
+  const { rows } = await query(
+    "SELECT id FROM sections WHERE id = $1 AND institution_id = $2",
+    [sectionId, institutionId]
+  );
+  if (!rows[0]) throw ApiError.notFound("Section not found");
+}
+
+/** A single enriched class_subjects row, scoped to the tenant. */
+async function getClassSubject(id: string, institutionId: string) {
+  const { rows } = await query(
+    `SELECT ${CLASS_SUBJECT_COLUMNS}
+     FROM class_subjects cs
+     JOIN subjects sub ON sub.id = cs.subject_id
+     LEFT JOIN teachers t ON t.id = cs.teacher_id
+     WHERE cs.id = $1 AND cs.institution_id = $2`,
+    [id, institutionId]
+  );
+  if (!rows[0]) throw ApiError.notFound("Subject assignment not found");
+  return rows[0];
+}
+
+export async function listSectionSubjects(
+  sectionId: string,
+  institutionId: string
+) {
+  await assertSectionInTenant(sectionId, institutionId);
+  const { rows } = await query(
+    `SELECT ${CLASS_SUBJECT_COLUMNS}
+     FROM class_subjects cs
+     JOIN subjects sub ON sub.id = cs.subject_id
+     LEFT JOIN teachers t ON t.id = cs.teacher_id
+     WHERE cs.section_id = $1 AND cs.institution_id = $2
+     ORDER BY sub.name`,
+    [sectionId, institutionId]
+  );
+  return rows;
+}
+
+export async function assignSectionSubject(
+  sectionId: string,
+  input: z.infer<typeof assignSectionSubjectSchema>,
+  institutionId: string
+) {
+  await assertSectionInTenant(sectionId, institutionId);
+
+  const { rows: subjectRows } = await query(
+    "SELECT id FROM subjects WHERE id = $1 AND institution_id = $2",
+    [input.subjectId, institutionId]
+  );
+  if (!subjectRows[0]) throw ApiError.notFound("Subject not found");
+
+  if (input.teacherId) {
+    const { rows: teacherRows } = await query(
+      "SELECT id FROM teachers WHERE id = $1 AND institution_id = $2",
+      [input.teacherId, institutionId]
+    );
+    if (!teacherRows[0]) throw ApiError.notFound("Teacher not found");
+  }
+
+  let id: string;
+  try {
+    const { rows } = await query<{ id: string }>(
+      `INSERT INTO class_subjects (institution_id, section_id, subject_id, teacher_id)
+       VALUES ($1, $2, $3, $4) RETURNING id`,
+      [institutionId, sectionId, input.subjectId, input.teacherId ?? null]
+    );
+    id = rows[0].id;
+  } catch (err) {
+    if ((err as { code?: string }).code === "23505") {
+      throw ApiError.badRequest(
+        "That subject is already assigned to this section"
+      );
+    }
+    throw err;
+  }
+  return getClassSubject(id, institutionId);
+}
+
+export async function updateClassSubject(
+  id: string,
+  input: z.infer<typeof updateClassSubjectSchema>,
+  institutionId: string
+) {
+  if (input.teacherId) {
+    const { rows: teacherRows } = await query(
+      "SELECT id FROM teachers WHERE id = $1 AND institution_id = $2",
+      [input.teacherId, institutionId]
+    );
+    if (!teacherRows[0]) throw ApiError.notFound("Teacher not found");
+  }
+  const { rowCount } = await query(
+    "UPDATE class_subjects SET teacher_id = $1 WHERE id = $2 AND institution_id = $3",
+    [input.teacherId, id, institutionId]
+  );
+  if (!rowCount) throw ApiError.notFound("Subject assignment not found");
+  return getClassSubject(id, institutionId);
+}
+
+export async function removeClassSubject(
+  id: string,
+  institutionId: string
+): Promise<void> {
+  const { rowCount } = await query(
+    "DELETE FROM class_subjects WHERE id = $1 AND institution_id = $2",
+    [id, institutionId]
+  );
+  if (!rowCount) throw ApiError.notFound("Subject assignment not found");
 }

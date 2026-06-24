@@ -3,10 +3,12 @@ import { uuidParam } from "../../utils/params";
 import { authenticate, authorize } from "../../middleware/auth";
 import { requireTenant, tenantId } from "../../middleware/tenant";
 import {
+  assignSectionSubjectSchema,
   createAcademicYearSchema,
   createClassSchema,
   createSectionSchema,
   createSubjectSchema,
+  updateClassSubjectSchema,
 } from "./academics.schema";
 import * as academicsService from "./academics.service";
 
@@ -229,3 +231,124 @@ academicsRouter.delete("/subjects/:id", ...guard, authorize("admin"), async (req
   await academicsService.removeSubject(uuidParam(req), tenantId(req));
   res.status(204).end();
 });
+
+/**
+ * @openapi
+ * /sections/{sectionId}/subjects:
+ *   get:
+ *     tags: [Academics]
+ *     summary: List the subject and teacher assignments for a section
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: sectionId, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: Subject assignments ordered by subject name }
+ *       404: { description: Section not found }
+ *   post:
+ *     tags: [Academics]
+ *     summary: Assign a subject (optionally with a teacher) to a section (admin)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: sectionId, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [subjectId]
+ *             properties:
+ *               subjectId: { type: string, format: uuid }
+ *               teacherId: { type: string, format: uuid, nullable: true }
+ *     responses:
+ *       201: { description: Created subject assignment }
+ *       400: { description: Subject already assigned to this section }
+ *       404: { description: Section, subject, or teacher not found }
+ */
+academicsRouter.get(
+  "/sections/:sectionId/subjects",
+  ...guard,
+  async (req, res) => {
+    res.json(
+      await academicsService.listSectionSubjects(
+        uuidParam(req, "sectionId"),
+        tenantId(req)
+      )
+    );
+  }
+);
+
+academicsRouter.post(
+  "/sections/:sectionId/subjects",
+  ...guard,
+  authorize("admin"),
+  async (req, res) => {
+    const input = assignSectionSubjectSchema.parse(req.body);
+    res
+      .status(201)
+      .json(
+        await academicsService.assignSectionSubject(
+          uuidParam(req, "sectionId"),
+          input,
+          tenantId(req)
+        )
+      );
+  }
+);
+
+/**
+ * @openapi
+ * /class-subjects/{id}:
+ *   patch:
+ *     tags: [Academics]
+ *     summary: Reassign or clear the teacher on a section's subject (admin)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [teacherId]
+ *             properties:
+ *               teacherId: { type: string, format: uuid, nullable: true }
+ *     responses:
+ *       200: { description: Updated subject assignment }
+ *       404: { description: Subject assignment or teacher not found }
+ *   delete:
+ *     tags: [Academics]
+ *     summary: Remove a subject assignment from a section (admin)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       204: { description: Deleted }
+ *       404: { description: Subject assignment not found }
+ */
+academicsRouter.patch(
+  "/class-subjects/:id",
+  ...guard,
+  authorize("admin"),
+  async (req, res) => {
+    const input = updateClassSubjectSchema.parse(req.body);
+    res.json(
+      await academicsService.updateClassSubject(
+        uuidParam(req),
+        input,
+        tenantId(req)
+      )
+    );
+  }
+);
+
+academicsRouter.delete(
+  "/class-subjects/:id",
+  ...guard,
+  authorize("admin"),
+  async (req, res) => {
+    await academicsService.removeClassSubject(uuidParam(req), tenantId(req));
+    res.status(204).end();
+  }
+);
