@@ -291,6 +291,8 @@ export interface AccountUser {
   phone: string | null;
   isActive: boolean;
   twoFactorEnabled: boolean;
+  isLocked: boolean;
+  lockedUntil: string | null;
   createdAt: string;
 }
 

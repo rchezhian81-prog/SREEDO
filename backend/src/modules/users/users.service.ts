@@ -7,7 +7,7 @@ import type { z } from "zod";
 import type { createUserSchema, updateUserSchema } from "./users.schema";
 
 const USER_COLUMNS =
-  "id, email, full_name AS \"fullName\", role, phone, is_active AS \"isActive\", totp_enabled AS \"twoFactorEnabled\", created_at AS \"createdAt\"";
+  "id, email, full_name AS \"fullName\", role, phone, is_active AS \"isActive\", totp_enabled AS \"twoFactorEnabled\", (locked_until IS NOT NULL AND locked_until > now()) AS \"isLocked\", locked_until AS \"lockedUntil\", created_at AS \"createdAt\"";
 
 export async function listUsers(
   pagination: Pagination,
@@ -127,6 +127,18 @@ export async function resetUserTwoFactor(
 ): Promise<void> {
   const { rowCount } = await query(
     "UPDATE users SET totp_secret = null, totp_enabled = false WHERE id = $1 AND institution_id = $2",
+    [id, institutionId]
+  );
+  if (!rowCount) throw ApiError.notFound("User not found");
+}
+
+/** Admin recovery: clear a locked-out user's failed-attempt counter and lock. */
+export async function unlockUser(
+  id: string,
+  institutionId: string
+): Promise<void> {
+  const { rowCount } = await query(
+    "UPDATE users SET failed_login_attempts = 0, locked_until = null WHERE id = $1 AND institution_id = $2",
     [id, institutionId]
   );
   if (!rowCount) throw ApiError.notFound("User not found");

@@ -161,6 +161,17 @@ export default function UsersPage() {
     await load();
   };
 
+  const unlockAccount = async (user: AccountUser) => {
+    if (
+      !confirm(
+        `Unlock ${user.fullName}? This clears the failed-login lock so they can sign in again.`
+      )
+    )
+      return;
+    await api.post(`/users/${user.id}/unlock`);
+    await load();
+  };
+
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
   if (!isAdmin) {
@@ -243,6 +254,7 @@ export default function UsersPage() {
                       <Badge tone={user.isActive ? "green" : "slate"}>
                         {user.isActive ? "active" : "inactive"}
                       </Badge>
+                      {user.isLocked && <Badge tone="red">locked</Badge>}
                       {user.twoFactorEnabled && (
                         <span
                           title="Two-factor authentication enabled"
@@ -261,6 +273,14 @@ export default function UsersPage() {
                       >
                         Edit
                       </button>
+                      {user.isLocked && (
+                        <button
+                          onClick={() => unlockAccount(user)}
+                          className="text-xs font-medium text-emerald-600 hover:text-emerald-700"
+                        >
+                          Unlock
+                        </button>
+                      )}
                       {user.twoFactorEnabled && (
                         <button
                           onClick={() => resetTwoFactor(user)}
