@@ -67,6 +67,7 @@ const SCHOOL_NAV: NavItem[] = [
   { href: "/assistant", label: "AI Assistant", icon: "sparkles" },
   { href: "/ai-insights", label: "AI Insights", icon: "trendUp" },
   { href: "/jobs", label: "Jobs", icon: "gear", adminOnly: true },
+  { href: "/integrations", label: "Integrations", icon: "wrench", adminOnly: true },
   { href: "/users", label: "Users", icon: "users", adminOnly: true },
   { href: "/activity", label: "Activity Log", icon: "file", adminOnly: true },
   { href: "/security", label: "Security", icon: "shield" },
