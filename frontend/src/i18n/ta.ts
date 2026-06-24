@@ -96,6 +96,7 @@ export const ta: Partial<Record<keyof typeof en, string>> = {
   "portalNav.materials": "கற்றல் பொருட்கள்",
   "portalNav.quizzes": "வினாடி வினா",
   "portalNav.library": "நூலகம்",
+  "portalNav.polls": "கருத்துக் கணிப்பு",
   "portalNav.mess": "உணவு பட்டியல்",
   "portalNav.disciplinary": "ஒழுங்கு நடவடிக்கை",
   "portalNav.fees": "கட்டணம்",
