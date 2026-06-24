@@ -8,6 +8,8 @@ import * as portalService from "./portal.service";
 import * as disciplinaryService from "../disciplinary/disciplinary.service";
 import * as messService from "../mess/mess.service";
 import * as studyMaterialsService from "../studymaterials/studymaterials.service";
+import * as quizzesService from "../quizzes/quizzes.service";
+import { submitAttemptSchema } from "../quizzes/quizzes.schema";
 
 export const portalRouter = Router();
 
@@ -62,6 +64,84 @@ portalRouter.get("/students/:studentId/materials", async (req, res) => {
   const studentId = uuidParam(req, "studentId");
   assertStudentAccess(await accessibleStudentIds(req), studentId);
   res.json(await studyMaterialsService.listMaterialsForStudent(studentId, tenantId(req)));
+});
+
+/**
+ * @openapi
+ * /portal/students/{studentId}/quizzes:
+ *   get:
+ *     tags: [Portal]
+ *     summary: Published quizzes available to an accessible student (with attempt status)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: studentId, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: Quizzes with attempt score where attempted }
+ *       403: { description: Not an accessible student }
+ */
+portalRouter.get("/students/:studentId/quizzes", async (req, res) => {
+  const studentId = uuidParam(req, "studentId");
+  assertStudentAccess(await accessibleStudentIds(req), studentId);
+  res.json(await quizzesService.listStudentQuizzes(studentId, tenantId(req)));
+});
+
+/**
+ * @openapi
+ * /portal/students/{studentId}/quizzes/{quizId}:
+ *   get:
+ *     tags: [Portal]
+ *     summary: A quiz to take (answers hidden until attempted, then revealed for review)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: studentId, required: true, schema: { type: string, format: uuid } }
+ *       - { in: path, name: quizId, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: Quiz with questions (+ result if already attempted) }
+ *       403: { description: Not an accessible student }
+ *       404: { description: Quiz not available }
+ */
+portalRouter.get("/students/:studentId/quizzes/:quizId", async (req, res) => {
+  const studentId = uuidParam(req, "studentId");
+  assertStudentAccess(await accessibleStudentIds(req), studentId);
+  res.json(
+    await quizzesService.getQuizForStudent(uuidParam(req, "quizId"), studentId, tenantId(req))
+  );
+});
+
+/**
+ * @openapi
+ * /portal/students/{studentId}/quizzes/{quizId}/attempt:
+ *   post:
+ *     tags: [Portal]
+ *     summary: Submit a quiz attempt (auto-graded; one attempt per student)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: studentId, required: true, schema: { type: string, format: uuid } }
+ *       - { in: path, name: quizId, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [answers]
+ *             properties:
+ *               answers:
+ *                 type: object
+ *                 additionalProperties: { type: string, enum: [A, B, C, D] }
+ *     responses:
+ *       201: { description: "{ attemptId, score, total }" }
+ *       409: { description: Already attempted }
+ */
+portalRouter.post("/students/:studentId/quizzes/:quizId/attempt", async (req, res) => {
+  const studentId = uuidParam(req, "studentId");
+  assertStudentAccess(await accessibleStudentIds(req), studentId);
+  const input = submitAttemptSchema.parse(req.body);
+  res
+    .status(201)
+    .json(
+      await quizzesService.submitAttempt(uuidParam(req, "quizId"), studentId, tenantId(req), input)
+    );
 });
 
 /**
