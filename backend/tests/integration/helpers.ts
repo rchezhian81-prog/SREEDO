@@ -76,6 +76,7 @@ const TABLES = [
   "message_recipients",
   "messages",
   "device_tokens",
+  "notification_preferences",
   "grade_bands",
   "guardians",
   "staff_allocations",

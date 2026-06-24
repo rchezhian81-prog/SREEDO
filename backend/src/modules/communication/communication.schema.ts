@@ -44,3 +44,13 @@ export const absenceAlertSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD"),
   force: z.boolean().optional(),
 });
+
+export const updateNotificationPreferencesSchema = z
+  .object({
+    emailEnabled: z.boolean().optional(),
+    smsEnabled: z.boolean().optional(),
+    pushEnabled: z.boolean().optional(),
+  })
+  .refine((d) => Object.keys(d).length > 0, {
+    message: "Provide at least one preference to update",
+  });
