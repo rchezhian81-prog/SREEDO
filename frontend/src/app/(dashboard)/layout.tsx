@@ -54,6 +54,7 @@ const SCHOOL_NAV: NavItem[] = [
   { href: "/disciplinary", label: "Disciplinary", icon: "shield" },
   { href: "/fees", label: "Fees", icon: "card" },
   { href: "/fees/setup", label: "Fee Setup", icon: "gear" },
+  { href: "/fees/refunds", label: "Fee Refunds", icon: "wallet", adminOnly: true },
   { href: "/online-payments", label: "Online Payments", icon: "wallet" },
   { href: "/accounting", label: "Accounting", icon: "wallet", adminOnly: true },
   { href: "/announcements", label: "Announcements", icon: "megaphone" },
