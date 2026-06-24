@@ -35,6 +35,7 @@ import { galleryRouter } from "./modules/gallery/gallery.routes";
 import { integrationsRouter } from "./modules/integrations/integrations.routes";
 import { brandingRouter } from "./modules/branding/branding.routes";
 import { periodAttendanceRouter } from "./modules/periodattendance/periodattendance.routes";
+import { timetableGenRouter } from "./modules/timetablegen/timetablegen.routes";
 import { aiRouter } from "./modules/ai/ai.routes";
 import { aiInsightsRouter } from "./modules/aiinsights/aiinsights.routes";
 import { announcementsRouter } from "./modules/announcements/announcements.routes";
@@ -195,6 +196,7 @@ export function createApp(): express.Express {
   api.use("/integrations", integrationsRouter); // API keys + webhooks (admin)
   api.use("/branding", brandingRouter); // white-labeling / branding
   api.use("/period-attendance", periodAttendanceRouter); // per-period attendance (admin/teacher)
+  api.use("/timetable-gen", timetableGenRouter); // timetable auto-generation (admin)
   api.use("/platform", platformRouter); // super-admin platform hardening
   api.use("/", superAdminRouter); // /institutions, /branches, /packages
   app.use("/api/v1", api);
