@@ -26,6 +26,8 @@ const announcementSchema = z.object({
   body: z.string().min(1, "Required"),
   audience: z.enum(["all", "teachers", "students", "parents", "staff"]),
   isPinned: z.boolean(),
+  // datetime-local value (no timezone); converted to ISO on submit.
+  publishAt: z.string().optional(),
 });
 
 type AnnouncementForm = z.infer<typeof announcementSchema>;
@@ -65,9 +67,13 @@ export default function AnnouncementsPage() {
   const onSubmit = async (values: AnnouncementForm) => {
     setServerError(null);
     try {
-      await api.post("/announcements", values);
+      const { publishAt, ...rest } = values;
+      await api.post("/announcements", {
+        ...rest,
+        publishAt: publishAt ? new Date(publishAt).toISOString() : undefined,
+      });
       setModalOpen(false);
-      reset({ audience: "all", isPinned: false });
+      reset({ audience: "all", isPinned: false, publishAt: "" });
       await load();
     } catch (err) {
       setServerError(
@@ -110,11 +116,15 @@ export default function AnnouncementsPage() {
                       <Badge tone="amber">Pinned</Badge>
                     )}
                     <Badge tone="blue">{announcement.audience}</Badge>
+                    {announcement.scheduled && (
+                      <Badge tone="slate">Scheduled</Badge>
+                    )}
                   </div>
                   <p className="mt-2 whitespace-pre-wrap text-sm text-muted">
                     {announcement.body}
                   </p>
                   <p className="mt-2 text-xs text-faint">
+                    {announcement.scheduled ? "Scheduled for " : ""}
                     {new Date(announcement.publishedAt).toLocaleString()} ·{" "}
                     {announcement.createdByName ?? "System"}
                   </p>
@@ -162,6 +172,13 @@ export default function AnnouncementsPage() {
               Pin to top
             </label>
           </div>
+          <Field label="Schedule for (optional)">
+            <Input type="datetime-local" {...register("publishAt")} />
+          </Field>
+          <p className="-mt-2 text-xs text-faint">
+            Leave blank to publish now. Until the scheduled time, only
+            admins and teachers can see it.
+          </p>
           <ErrorNote message={serverError} />
           <div className="flex justify-end gap-2">
             <Button

@@ -154,6 +154,7 @@ export interface Announcement {
   audience: string;
   isPinned: boolean;
   publishedAt: string;
+  scheduled: boolean;
   createdByName: string | null;
 }
 

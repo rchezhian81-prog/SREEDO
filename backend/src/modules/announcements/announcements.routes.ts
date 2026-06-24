@@ -16,6 +16,11 @@ announcementsRouter.use(authenticate, requireTenant);
 
 const publisher = authorize("admin", "teacher");
 
+/** Publishers (admin/teacher) also see scheduled (future-dated) announcements. */
+function canSeeScheduled(req: { user?: { role?: string } }): boolean {
+  return req.user?.role === "admin" || req.user?.role === "teacher";
+}
+
 /**
  * @openapi
  * /announcements:
@@ -45,6 +50,7 @@ const publisher = authorize("admin", "teacher");
  *               body: { type: string }
  *               audience: { type: string, enum: [all, teachers, students, parents, staff] }
  *               isPinned: { type: boolean }
+ *               publishAt: { type: string, format: date-time, description: "Schedule for a future time; hidden from the audience until then" }
  *     responses:
  *       201: { description: Created announcement }
  */
@@ -52,7 +58,10 @@ announcementsRouter.get("/", async (req, res) => {
   const queryParams = listAnnouncementsQuerySchema.parse(req.query);
   const result = await announcementsService.listAnnouncements(
     parsePagination(queryParams),
-    { audience: queryParams.audience },
+    {
+      audience: queryParams.audience,
+      includeScheduled: canSeeScheduled(req),
+    },
     tenantId(req)
   );
   res.json(result);
@@ -100,7 +109,13 @@ announcementsRouter.post("/", publisher, async (req, res) => {
  *       204: { description: Deleted }
  */
 announcementsRouter.get("/:id", async (req, res) => {
-  res.json(await announcementsService.getAnnouncement(uuidParam(req), tenantId(req)));
+  res.json(
+    await announcementsService.getAnnouncement(
+      uuidParam(req),
+      tenantId(req),
+      canSeeScheduled(req)
+    )
+  );
 });
 
 announcementsRouter.patch("/:id", publisher, async (req, res) => {
