@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { Button, ErrorNote, Field, Input, PageHeader, Spinner } from "@/components/ui";
+import { NotificationPreferencesCard } from "@/components/NotificationPreferencesCard";
 import type { SessionInfo } from "@/types";
 
 /** Best-effort friendly device label from a raw User-Agent string. */
@@ -289,6 +290,8 @@ export default function SecurityPage() {
               </ul>
             )}
           </div>
+
+          <NotificationPreferencesCard client={api} />
         </div>
       )}
     </>

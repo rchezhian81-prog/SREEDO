@@ -6,9 +6,60 @@ import {
   feeReminderMessage,
 } from "./communication.templates";
 import type { z } from "zod";
-import type { sendMessageSchema } from "./communication.schema";
+import type {
+  sendMessageSchema,
+  updateNotificationPreferencesSchema,
+} from "./communication.schema";
 
 type AudienceType = z.infer<typeof sendMessageSchema>["audienceType"];
+
+const PREFERENCE_SELECT = `COALESCE(np.email_enabled, true) AS "emailEnabled",
+       COALESCE(np.sms_enabled, true) AS "smsEnabled",
+       COALESCE(np.push_enabled, true) AS "pushEnabled"`;
+
+/** The caller's notification channel preferences (defaults to all enabled). */
+export async function getNotificationPreferences(
+  userId: string,
+  institutionId: string
+) {
+  const { rows } = await query(
+    `SELECT ${PREFERENCE_SELECT}
+     FROM users u
+     LEFT JOIN notification_preferences np ON np.user_id = u.id
+     WHERE u.id = $1 AND u.institution_id = $2`,
+    [userId, institutionId]
+  );
+  if (!rows[0]) throw ApiError.notFound("User not found");
+  return rows[0];
+}
+
+/** Upsert the caller's preferences; omitted channels keep their current value. */
+export async function updateNotificationPreferences(
+  userId: string,
+  institutionId: string,
+  input: z.infer<typeof updateNotificationPreferencesSchema>
+) {
+  const { rows } = await query(
+    `INSERT INTO notification_preferences
+       (user_id, institution_id, email_enabled, sms_enabled, push_enabled)
+     VALUES ($1, $2, COALESCE($3, true), COALESCE($4, true), COALESCE($5, true))
+     ON CONFLICT (user_id) DO UPDATE SET
+       email_enabled = COALESCE($3, notification_preferences.email_enabled),
+       sms_enabled = COALESCE($4, notification_preferences.sms_enabled),
+       push_enabled = COALESCE($5, notification_preferences.push_enabled),
+       updated_at = now()
+     RETURNING email_enabled AS "emailEnabled", sms_enabled AS "smsEnabled",
+               push_enabled AS "pushEnabled"`,
+    [
+      userId,
+      institutionId,
+      input.emailEnabled ?? null,
+      input.smsEnabled ?? null,
+      input.pushEnabled ?? null,
+    ]
+  );
+  return rows[0];
+}
 
 /** Resolves an audience to a de-duplicated set of recipient user ids (tenant-scoped). */
 export async function resolveAudience(

@@ -9,6 +9,7 @@ import {
   feeReminderSchema,
   inboxQuerySchema,
   sendMessageSchema,
+  updateNotificationPreferencesSchema,
 } from "./communication.schema";
 import {
   addParticipantsSchema,
@@ -231,6 +232,49 @@ communicationRouter.delete("/device-tokens", async (req, res) => {
   const { token } = deviceTokenSchema.parse(req.body);
   await service.removeDeviceToken(token, req.user!.id, tenantId(req));
   res.status(204).end();
+});
+
+/**
+ * @openapi
+ * /communication/preferences:
+ *   get:
+ *     tags: [Communication]
+ *     summary: The caller's notification channel preferences
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ emailEnabled, smsEnabled, pushEnabled }" }
+ *   patch:
+ *     tags: [Communication]
+ *     summary: Update the caller's notification channel preferences
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               emailEnabled: { type: boolean }
+ *               smsEnabled: { type: boolean }
+ *               pushEnabled: { type: boolean }
+ *     responses:
+ *       200: { description: Updated preferences }
+ */
+communicationRouter.get("/preferences", async (req, res) => {
+  res.json(
+    await service.getNotificationPreferences(req.user!.id, tenantId(req))
+  );
+});
+
+communicationRouter.patch("/preferences", async (req, res) => {
+  const input = updateNotificationPreferencesSchema.parse(req.body);
+  res.json(
+    await service.updateNotificationPreferences(
+      req.user!.id,
+      tenantId(req),
+      input
+    )
+  );
 });
 
 // --- Threaded messaging (conversation threads + replies + read state) ---

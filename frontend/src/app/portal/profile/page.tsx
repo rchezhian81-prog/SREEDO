@@ -13,6 +13,7 @@ import {
   PageHeader,
   Spinner,
 } from "@/components/ui";
+import { NotificationPreferencesCard } from "@/components/NotificationPreferencesCard";
 import type { StudentSummary } from "@/types";
 
 async function downloadPortalPdf(path: string, filename: string) {
@@ -158,6 +159,9 @@ export default function PortalProfilePage() {
           </div>
         </Card>
       )}
+      <div className="mt-4 max-w-2xl">
+        <NotificationPreferencesCard client={portalApi} />
+      </div>
     </>
   );
 }

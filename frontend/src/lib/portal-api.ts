@@ -57,4 +57,5 @@ async function req<T>(
 export const portalApi = {
   get: <T>(p: string) => req<T>(p),
   post: <T>(p: string, body?: unknown) => req<T>(p, { method: "POST", body }),
+  patch: <T>(p: string, body?: unknown) => req<T>(p, { method: "PATCH", body }),
 };

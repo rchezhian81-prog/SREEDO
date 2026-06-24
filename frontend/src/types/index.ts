@@ -292,6 +292,12 @@ export interface SessionInfo {
   current: boolean;
 }
 
+export interface NotificationPreferences {
+  emailEnabled: boolean;
+  smsEnabled: boolean;
+  pushEnabled: boolean;
+}
+
 export interface AccountUser {
   id: string;
   email: string;
