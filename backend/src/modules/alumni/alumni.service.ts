@@ -16,7 +16,7 @@ const SELECT = `
   a.email,
   a.phone,
   a.current_company AS "currentCompany",
-  a.current_role AS "currentRole",
+  a.designation AS "currentRole",
   a.location,
   a.higher_education AS "higherEducation",
   a.notes,
@@ -72,7 +72,7 @@ export async function createAlumnus(
   const { rows } = await query<{ id: string }>(
     `INSERT INTO alumni (
        institution_id, student_id, full_name, batch_year, email, phone,
-       current_company, current_role, location, higher_education, notes, created_by
+       current_company, designation, location, higher_education, notes, created_by
      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
      RETURNING id`,
     [
@@ -100,7 +100,7 @@ const UPDATE_COLUMN_MAP: Record<string, string> = {
   email: "email",
   phone: "phone",
   currentCompany: "current_company",
-  currentRole: "current_role",
+  currentRole: "designation",
   location: "location",
   higherEducation: "higher_education",
   notes: "notes",

@@ -11,7 +11,7 @@ CREATE TABLE alumni (
   email TEXT,
   phone TEXT,
   current_company TEXT,
-  current_role TEXT,
+  designation TEXT,
   location TEXT,
   higher_education TEXT,
   notes TEXT,
