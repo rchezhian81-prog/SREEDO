@@ -31,6 +31,13 @@ foundation, ID-card PDF generation) and have been **excluded** here.
 - **GAP-S01** — Forgot-password / self-service reset (PR #45)
 - **GAP-F01** — Bulk CSV import for students & staff (PR #46)
 - **GAP-T01** — Automated deploy workflow, gated/opt-in (PR #47) — activate by adding the VPS secrets + `DEPLOY_ENABLED=true` (see [DEPLOYMENT.md → Automated deploy](../DEPLOYMENT.md))
+- **GAP-S03** — Two-factor auth (TOTP) + admin reset (PR #48, #49)
+- **GAP-T02** — `class_subjects` API + section-subjects UI (PR #50)
+- **GAP-S02** — Per-account lockout + admin unlock (PR #51)
+- **GAP-S04** — Active-session list + per-session sign-out (PR #52)
+- **GAP-F10** — Scheduled / deferred announcements (PR #53)
+
+> With S01–S04 shipped, the auth-hardening cluster is complete.
 
 ---
 

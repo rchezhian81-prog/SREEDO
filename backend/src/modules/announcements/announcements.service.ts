@@ -11,13 +11,14 @@ const ANNOUNCEMENT_SELECT = `
   a.id, a.title, a.body, a.audience,
   a.is_pinned AS "isPinned",
   a.published_at AS "publishedAt",
+  (a.published_at > now()) AS "scheduled",
   u.full_name AS "createdByName"
 FROM announcements a
 LEFT JOIN users u ON u.id = a.created_by`;
 
 export async function listAnnouncements(
   pagination: Pagination,
-  filters: { audience?: string },
+  filters: { audience?: string; includeScheduled?: boolean },
   institutionId: string
 ) {
   const params: unknown[] = [institutionId];
@@ -25,6 +26,11 @@ export async function listAnnouncements(
   if (filters.audience && filters.audience !== "all") {
     params.push(filters.audience);
     conditions.push(`a.audience IN ('all', $${params.length})`);
+  }
+  // The audience only sees announcements once published; publishers see
+  // upcoming (scheduled) ones too so they can manage them.
+  if (!filters.includeScheduled) {
+    conditions.push("a.published_at <= now()");
   }
   const where = `WHERE ${conditions.join(" AND ")}`;
   const countResult = await query<{ count: string }>(
@@ -46,8 +52,8 @@ export async function createAnnouncement(
   institutionId: string
 ) {
   const { rows } = await query<{ id: string }>(
-    `INSERT INTO announcements (institution_id, title, body, audience, is_pinned, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO announcements (institution_id, title, body, audience, is_pinned, created_by, published_at)
+     VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7::timestamptz, now()))
      RETURNING id`,
     [
       institutionId,
@@ -56,14 +62,22 @@ export async function createAnnouncement(
       input.audience ?? "all",
       input.isPinned ?? false,
       createdBy,
+      input.publishAt ?? null,
     ]
   );
-  return getAnnouncement(rows[0].id, institutionId);
+  // Publishers always get the created row back (even when scheduled for later).
+  return getAnnouncement(rows[0].id, institutionId, true);
 }
 
-export async function getAnnouncement(id: string, institutionId: string) {
+export async function getAnnouncement(
+  id: string,
+  institutionId: string,
+  includeScheduled = false
+) {
+  const conditions = ["a.id = $1", "a.institution_id = $2"];
+  if (!includeScheduled) conditions.push("a.published_at <= now()");
   const { rows } = await query(
-    `SELECT ${ANNOUNCEMENT_SELECT} WHERE a.id = $1 AND a.institution_id = $2`,
+    `SELECT ${ANNOUNCEMENT_SELECT} WHERE ${conditions.join(" AND ")}`,
     [id, institutionId]
   );
   if (!rows[0]) throw ApiError.notFound("Announcement not found");
@@ -82,6 +96,7 @@ export async function updateAnnouncement(
     body: "body",
     audience: "audience",
     isPinned: "is_pinned",
+    publishAt: "published_at",
   };
   for (const [field, column] of Object.entries(columnMap)) {
     const value = (input as Record<string, unknown>)[field];
@@ -100,7 +115,7 @@ export async function updateAnnouncement(
     params
   );
   if (!rowCount) throw ApiError.notFound("Announcement not found");
-  return getAnnouncement(id, institutionId);
+  return getAnnouncement(id, institutionId, true);
 }
 
 export async function removeAnnouncement(
