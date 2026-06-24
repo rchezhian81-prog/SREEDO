@@ -42,6 +42,7 @@ const SCHOOL_NAV: NavItem[] = [
   { href: "/leave", label: "Leave", icon: "calcheck" },
   { href: "/payroll", label: "Payroll", icon: "wallet" },
   { href: "/attendance", label: "Attendance", icon: "calcheck" },
+  { href: "/period-attendance", label: "Period Attendance", icon: "calcheck" },
   { href: "/exams", label: "Exams", icon: "file" },
   { href: "/reports", label: "Reports", icon: "barChart" },
   { href: "/documents", label: "Documents", icon: "file" },
