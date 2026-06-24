@@ -31,6 +31,7 @@ import { biometricRouter } from "./modules/biometric/biometric.routes";
 import { feeRefundsRouter } from "./modules/feerefunds/feerefunds.routes";
 import { pollsRouter } from "./modules/polls/polls.routes";
 import { lostFoundRouter } from "./modules/lostfound/lostfound.routes";
+import { galleryRouter } from "./modules/gallery/gallery.routes";
 import { aiRouter } from "./modules/ai/ai.routes";
 import { aiInsightsRouter } from "./modules/aiinsights/aiinsights.routes";
 import { announcementsRouter } from "./modules/announcements/announcements.routes";
@@ -187,6 +188,7 @@ export function createApp(): express.Express {
   api.use("/fee-refunds", feeRefundsRouter); // fee refunds against payments (admin)
   api.use("/polls", pollsRouter); // polls / surveys authoring (admin/teacher)
   api.use("/lost-found", lostFoundRouter); // lost & found register (admin)
+  api.use("/gallery", galleryRouter); // photo gallery (admin)
   api.use("/platform", platformRouter); // super-admin platform hardening
   api.use("/", superAdminRouter); // /institutions, /branches, /packages
   app.use("/api/v1", api);
