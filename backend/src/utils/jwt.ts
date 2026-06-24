@@ -8,6 +8,8 @@ export interface AccessTokenPayload {
   email: string;
   role: UserRole;
   institutionId: string | null;
+  /** Refresh-token (session) id, so the API can flag the caller's own session. */
+  sid?: string;
 }
 
 export function signAccessToken(payload: AccessTokenPayload): string {

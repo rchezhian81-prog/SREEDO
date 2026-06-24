@@ -283,6 +283,14 @@ export interface GradeBand {
   sortOrder: number;
 }
 
+export interface SessionInfo {
+  id: string;
+  userAgent: string | null;
+  createdAt: string;
+  lastUsedAt: string;
+  current: boolean;
+}
+
 export interface AccountUser {
   id: string;
   email: string;

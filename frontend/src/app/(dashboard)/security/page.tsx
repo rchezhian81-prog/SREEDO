@@ -3,6 +3,28 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { Button, ErrorNote, Field, Input, PageHeader, Spinner } from "@/components/ui";
+import type { SessionInfo } from "@/types";
+
+/** Best-effort friendly device label from a raw User-Agent string. */
+function deviceLabel(userAgent: string | null): string {
+  if (!userAgent) return "Unknown device";
+  const browser =
+    /Edg/.test(userAgent) ? "Edge"
+    : /OPR|Opera/.test(userAgent) ? "Opera"
+    : /Chrome/.test(userAgent) ? "Chrome"
+    : /Firefox/.test(userAgent) ? "Firefox"
+    : /Safari/.test(userAgent) ? "Safari"
+    : null;
+  const os =
+    /Windows/.test(userAgent) ? "Windows"
+    : /Android/.test(userAgent) ? "Android"
+    : /iPhone|iPad|iOS/.test(userAgent) ? "iOS"
+    : /Mac OS X|Macintosh/.test(userAgent) ? "macOS"
+    : /Linux/.test(userAgent) ? "Linux"
+    : null;
+  if (browser && os) return `${browser} on ${os}`;
+  return browser ?? os ?? userAgent.slice(0, 40);
+}
 
 export default function SecurityPage() {
   const [loading, setLoading] = useState(true);
@@ -17,6 +39,9 @@ export default function SecurityPage() {
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
 
+  const [sessions, setSessions] = useState<SessionInfo[]>([]);
+  const [sessionsError, setSessionsError] = useState<string | null>(null);
+
   const loadStatus = useCallback(async () => {
     setLoading(true);
     try {
@@ -27,9 +52,33 @@ export default function SecurityPage() {
     }
   }, []);
 
+  const loadSessions = useCallback(async () => {
+    setSessionsError(null);
+    try {
+      setSessions(await api.get<SessionInfo[]>("/auth/sessions"));
+    } catch (err) {
+      setSessionsError(
+        err instanceof ApiError ? err.message : "Could not load sessions"
+      );
+    }
+  }, []);
+
   useEffect(() => {
     loadStatus().catch(() => setLoading(false));
-  }, [loadStatus]);
+    loadSessions();
+  }, [loadStatus, loadSessions]);
+
+  const signOutSession = async (session: SessionInfo) => {
+    if (!confirm("Sign out this device?")) return;
+    try {
+      await api.delete(`/auth/sessions/${session.id}`);
+      await loadSessions();
+    } catch (err) {
+      setSessionsError(
+        err instanceof ApiError ? err.message : "Could not sign out the device"
+      );
+    }
+  };
 
   const beginSetup = async () => {
     setError(null);
@@ -195,6 +244,51 @@ export default function SecurityPage() {
             Lost your device? An administrator can reset your two-factor from the
             Users page.
           </p>
+
+          <div className="rounded-xl border border-line bg-surface p-5">
+            <div className="mb-3">
+              <h2 className="font-semibold text-ink">Active sessions</h2>
+              <p className="text-sm text-muted">
+                Devices currently signed in to your account. Sign out any you
+                don&apos;t recognise.
+              </p>
+            </div>
+            <ErrorNote message={sessionsError} />
+            {sessions.length === 0 ? (
+              <p className="text-sm text-faint">No active sessions.</p>
+            ) : (
+              <ul className="divide-y divide-line">
+                {sessions.map((session) => (
+                  <li
+                    key={session.id}
+                    className="flex items-center justify-between gap-3 py-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-medium text-ink">
+                        {deviceLabel(session.userAgent)}
+                        {session.current && (
+                          <span className="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
+                            This device
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-xs text-faint">
+                        Last active {new Date(session.lastUsedAt).toLocaleString()}
+                      </p>
+                    </div>
+                    {!session.current && (
+                      <button
+                        onClick={() => signOutSession(session)}
+                        className="shrink-0 text-xs font-medium text-red-600 hover:text-red-700"
+                      >
+                        Sign out
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       )}
     </>

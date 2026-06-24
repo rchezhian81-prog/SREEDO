@@ -11,6 +11,8 @@ export interface AuthenticatedUser {
   email: string;
   role: UserRole;
   institutionId: string | null;
+  /** Refresh-token (session) id carried in the access token, for "this device". */
+  sessionId?: string;
 }
 
 declare global {

@@ -42,19 +42,32 @@ export interface AuthTokens {
 /** Either a full session, or a signal that a 2FA code is still required. */
 export type LoginResult = AuthTokens | { twoFactorRequired: true };
 
-async function issueTokens(user: UserRow): Promise<AuthTokens> {
+/** Per-request session metadata captured at login/refresh (e.g. the browser). */
+export interface SessionMeta {
+  userAgent?: string | null;
+}
+
+async function issueTokens(
+  user: UserRow,
+  meta?: SessionMeta
+): Promise<AuthTokens> {
+  // Insert the refresh-token row first so its id can be embedded in the access
+  // token as the session id ("sid"), letting the API flag the caller's own
+  // session in the active-sessions list.
+  const { token: refreshToken, tokenHash } = generateRefreshToken();
+  const { rows } = await query<{ id: string }>(
+    `INSERT INTO refresh_tokens (user_id, token_hash, expires_at, user_agent)
+     VALUES ($1, $2, $3, $4)
+     RETURNING id`,
+    [user.id, tokenHash, refreshTokenExpiry(), meta?.userAgent ?? null]
+  );
   const accessToken = signAccessToken({
     sub: user.id,
     email: user.email,
     role: user.role,
     institutionId: user.institution_id ?? null,
+    sid: rows[0].id,
   });
-  const { token: refreshToken, tokenHash } = generateRefreshToken();
-  await query(
-    `INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
-     VALUES ($1, $2, $3)`,
-    [user.id, tokenHash, refreshTokenExpiry()]
-  );
   return {
     accessToken,
     refreshToken,
@@ -110,7 +123,8 @@ async function purgeStaleRefreshTokens(): Promise<void> {
 export async function login(
   email: string,
   password: string,
-  totpCode?: string
+  totpCode?: string,
+  meta?: SessionMeta
 ): Promise<LoginResult> {
   const { rows } = await query<UserRow>(
     "SELECT * FROM users WHERE email = $1",
@@ -143,18 +157,22 @@ export async function login(
     }
   }
   await purgeStaleRefreshTokens();
-  return issueTokens(user);
+  return issueTokens(user, meta);
 }
 
-export async function refresh(refreshToken: string): Promise<AuthTokens> {
+export async function refresh(
+  refreshToken: string,
+  meta?: SessionMeta
+): Promise<AuthTokens> {
   const tokenHash = hashRefreshToken(refreshToken);
   const { rows } = await query<{
     id: string;
     user_id: string;
     expires_at: Date;
     revoked_at: Date | null;
+    user_agent: string | null;
   }>(
-    "SELECT id, user_id, expires_at, revoked_at FROM refresh_tokens WHERE token_hash = $1",
+    "SELECT id, user_id, expires_at, revoked_at, user_agent FROM refresh_tokens WHERE token_hash = $1",
     [tokenHash]
   );
   const stored = rows[0];
@@ -187,13 +205,55 @@ export async function refresh(refreshToken: string): Promise<AuthTokens> {
   if (!user) {
     throw ApiError.unauthorized("User no longer active");
   }
-  return issueTokens(user);
+  // Carry the session's device label across rotation so it keeps its identity.
+  return issueTokens(user, {
+    userAgent: stored.user_agent ?? meta?.userAgent ?? null,
+  });
 }
 
 export async function logout(refreshToken: string): Promise<void> {
   await query("DELETE FROM refresh_tokens WHERE token_hash = $1", [
     hashRefreshToken(refreshToken),
   ]);
+}
+
+export interface SessionInfo {
+  id: string;
+  userAgent: string | null;
+  createdAt: Date;
+  lastUsedAt: Date;
+  current: boolean;
+}
+
+/** Active (non-revoked, unexpired) sessions for a user, newest activity first. */
+export async function listSessions(
+  userId: string,
+  currentSessionId?: string
+): Promise<SessionInfo[]> {
+  const { rows } = await query<Omit<SessionInfo, "current">>(
+    `SELECT id, user_agent AS "userAgent", created_at AS "createdAt",
+            last_used_at AS "lastUsedAt"
+     FROM refresh_tokens
+     WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > now()
+     ORDER BY last_used_at DESC`,
+    [userId]
+  );
+  return rows.map((row) => ({
+    ...row,
+    current: !!currentSessionId && row.id === currentSessionId,
+  }));
+}
+
+/** Revoke one of the user's own sessions (sign out that device). */
+export async function revokeSession(
+  userId: string,
+  sessionId: string
+): Promise<void> {
+  const { rowCount } = await query(
+    "DELETE FROM refresh_tokens WHERE id = $1 AND user_id = $2",
+    [sessionId, userId]
+  );
+  if (!rowCount) throw ApiError.notFound("Session not found");
 }
 
 export async function getProfile(userId: string) {

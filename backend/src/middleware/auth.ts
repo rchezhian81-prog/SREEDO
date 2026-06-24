@@ -27,6 +27,7 @@ export function authenticate(
       email: payload.email,
       role: payload.role,
       institutionId: payload.institutionId ?? null,
+      sessionId: payload.sid,
     };
     next();
   } catch {
