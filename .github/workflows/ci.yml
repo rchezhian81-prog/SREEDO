@@ -5,10 +5,17 @@ on:
     branches: [main]
   pull_request:
 
+# Cancel an in-progress run when a newer commit lands on the same ref, so PRs
+# don't pile up redundant runs (and the latest push gets a runner sooner).
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   backend:
     name: Backend (typecheck, test, build)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:16-alpine
@@ -49,6 +56,7 @@ jobs:
   frontend:
     name: Frontend (typecheck, test, build)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: frontend
@@ -70,6 +78,7 @@ jobs:
   mobile:
     name: Mobile (analyze)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: mobile
@@ -85,6 +94,7 @@ jobs:
   docker:
     name: Docker images build
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: [backend, frontend]
     if: github.event_name == 'push'
     steps:
