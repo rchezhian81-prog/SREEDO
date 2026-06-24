@@ -33,6 +33,7 @@ const SCHOOL_NAV: NavItem[] = [
   { href: "/inventory", label: "Inventory", icon: "package" },
   { href: "/staff", label: "Staff Attendance", icon: "briefcase" },
   { href: "/front-office", label: "Front Office", icon: "help", adminOnly: true },
+  { href: "/lost-found", label: "Lost & Found", icon: "search", adminOnly: true },
   { href: "/infirmary", label: "Infirmary", icon: "file", adminOnly: true },
   { href: "/alumni", label: "Alumni", icon: "users", adminOnly: true },
   { href: "/cafeteria", label: "Cafeteria", icon: "grid", adminOnly: true },
