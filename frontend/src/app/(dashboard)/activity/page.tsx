@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/api";
+import { useAuthStore } from "@/stores/auth-store";
 import {
   Badge,
   Button,
@@ -14,6 +15,32 @@ import {
   Spinner,
 } from "@/components/ui";
 import type { AuditLogResponse } from "@/types";
+
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
+
+async function downloadFile(path: string, filename: string) {
+  const token = useAuthStore.getState().accessToken;
+  const res = await fetch(`${BASE}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    let m = res.statusText;
+    try {
+      const d = await res.json();
+      if (typeof d.error === "string") m = d.error;
+    } catch {
+      // non-JSON error body — keep statusText
+    }
+    throw new ApiError(res.status, m);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 function methodTone(method: string): "green" | "amber" | "red" | "slate" {
   switch (method.toUpperCase()) {
@@ -38,6 +65,9 @@ export default function ActivityLogPage() {
   const [result, setResult] = useState<AuditLogResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const queryString = useMemo(() => {
     const params = new URLSearchParams();
@@ -68,6 +98,20 @@ export default function ActivityLogPage() {
     load("");
   }, [load]);
 
+  const onExport = async () => {
+    setExporting(true);
+    setExportError(null);
+    try {
+      await downloadFile(`/activity/export${queryString}`, "activity-log.csv");
+    } catch (err) {
+      setExportError(
+        err instanceof ApiError ? err.message : "Failed to export CSV"
+      );
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const available = result?.available ?? true;
 
   return (
@@ -75,6 +119,15 @@ export default function ActivityLogPage() {
       <PageHeader
         title="Activity log"
         subtitle="Who changed what in your institution"
+        action={
+          <Button
+            variant="secondary"
+            onClick={onExport}
+            disabled={exporting || !available}
+          >
+            {exporting ? "Exporting…" : "Download CSV"}
+          </Button>
+        }
       />
 
       <Card className="mb-6">
@@ -123,7 +176,10 @@ export default function ActivityLogPage() {
         </div>
       </Card>
 
-      <ErrorNote message={error} />
+      <ErrorNote message={exportError} />
+      <div className="mt-2">
+        <ErrorNote message={error} />
+      </div>
 
       {loading ? (
         <Spinner />

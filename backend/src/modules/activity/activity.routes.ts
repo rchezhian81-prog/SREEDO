@@ -2,7 +2,7 @@ import { Router } from "express";
 import { authenticate, authorize } from "../../middleware/auth";
 import { ApiError } from "../../utils/api-error";
 import { activityQuerySchema } from "./activity.schema";
-import { listAuditLogs } from "../adminconsole/adminconsole.service";
+import { listAuditLogs, auditLogsCsv } from "../adminconsole/adminconsole.service";
 
 /**
  * Institution-admin activity log: a read-only view of the audit trail, always
@@ -52,4 +52,38 @@ activityRouter.get("/", async (req, res) => {
       limit: filters.limit ?? 100,
     })
   );
+});
+
+/**
+ * @openapi
+ * /activity/export:
+ *   get:
+ *     tags: [Activity]
+ *     summary: Export your institution's activity log as CSV
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: module, schema: { type: string } }
+ *       - { in: query, name: action, schema: { type: string, example: POST } }
+ *       - { in: query, name: dateFrom, schema: { type: string, format: date } }
+ *       - { in: query, name: dateTo, schema: { type: string, format: date } }
+ *     responses:
+ *       200: { description: CSV file, content: { text/csv: {} } }
+ *       403: { description: Caller has no institution context }
+ */
+activityRouter.get("/export", async (req, res) => {
+  const institutionId = req.user!.institutionId;
+  if (!institutionId) {
+    throw ApiError.forbidden("No institution context for the activity log");
+  }
+  const filters = activityQuerySchema.parse(req.query);
+  const csv = await auditLogsCsv({
+    institutionId,
+    userId: filters.userId,
+    module: filters.module,
+    action: filters.action,
+    dateFrom: filters.dateFrom,
+    dateTo: filters.dateTo,
+    limit: filters.limit ?? 500,
+  });
+  res.type("text/csv").attachment("activity-log.csv").send(csv);
 });
