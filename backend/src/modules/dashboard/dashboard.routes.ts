@@ -79,3 +79,79 @@ dashboardRouter.get("/stats", authenticate, requireTenant, async (req, res) => {
   const inst = tenantId(req);
   res.json(await cached(dashboardKey(inst), DASHBOARD_TTL_MS, () => computeStats(inst)));
 });
+
+/** Chart-friendly aggregations (distributions + time series) for analytics. */
+async function computeCharts(inst: string) {
+  const enrollment = await query<{ label: string; value: number }>(
+    `SELECT c.name AS label,
+            count(s.id) FILTER (WHERE s.status = 'active')::int AS value
+     FROM classes c
+     LEFT JOIN sections sec ON sec.class_id = c.id
+     LEFT JOIN students s ON s.section_id = sec.id AND s.institution_id = $1
+     WHERE c.institution_id = $1
+     GROUP BY c.id, c.name, c.grade_level
+     ORDER BY c.grade_level, c.name`,
+    [inst]
+  );
+
+  const attendance = await query<{ date: string; present: number; total: number }>(
+    `SELECT to_char(date, 'YYYY-MM-DD') AS date,
+            count(*) FILTER (WHERE status IN ('present', 'late'))::int AS present,
+            count(*)::int AS total
+     FROM attendance_records
+     WHERE institution_id = $1 AND date >= CURRENT_DATE - INTERVAL '13 days'
+     GROUP BY date ORDER BY date`,
+    [inst]
+  );
+
+  const fees = await query<{ month: string; amount: number }>(
+    `SELECT to_char(date_trunc('month', paid_at), 'YYYY-MM') AS month,
+            COALESCE(sum(amount), 0)::float8 AS amount
+     FROM payments
+     WHERE institution_id = $1
+       AND paid_at >= date_trunc('month', CURRENT_DATE) - INTERVAL '5 months'
+     GROUP BY 1 ORDER BY 1`,
+    [inst]
+  );
+
+  const gender = await query<{ label: string | null; value: number }>(
+    `SELECT gender AS label, count(*)::int AS value
+     FROM students
+     WHERE institution_id = $1 AND status = 'active'
+     GROUP BY gender`,
+    [inst]
+  );
+
+  return {
+    enrollmentByClass: enrollment.rows,
+    attendanceTrend: attendance.rows.map((r) => ({
+      date: r.date,
+      rate: r.total > 0 ? r.present / r.total : 0,
+      present: r.present,
+      total: r.total,
+    })),
+    feeCollectionByMonth: fees.rows,
+    studentsByGender: gender.rows.map((r) => ({
+      label: r.label ?? "unspecified",
+      value: r.value,
+    })),
+  };
+}
+
+/**
+ * @openapi
+ * /dashboard/charts:
+ *   get:
+ *     tags: [Dashboard]
+ *     summary: Chart datasets — enrollment by class, attendance trend, fee collection, gender split
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Aggregated series for the analytics view }
+ */
+dashboardRouter.get("/charts", authenticate, requireTenant, async (req, res) => {
+  requireStaff(req);
+  const inst = tenantId(req);
+  res.json(
+    await cached(`dashboard:charts:${inst}`, DASHBOARD_TTL_MS, () => computeCharts(inst))
+  );
+});
