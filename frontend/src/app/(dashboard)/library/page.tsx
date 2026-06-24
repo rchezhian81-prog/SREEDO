@@ -45,6 +45,12 @@ const SUB_PAGES: { href: string; label: string; icon: string; desc: string }[] =
       icon: "📈",
       desc: "Stock, overdue, fines and more",
     },
+    {
+      href: "/library/reservations",
+      label: "Reservations",
+      icon: "🔖",
+      desc: "Student book reservation requests",
+    },
   ];
 
 const settingsSchema = z.object({

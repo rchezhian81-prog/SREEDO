@@ -10,6 +10,11 @@ import * as messService from "../mess/mess.service";
 import * as studyMaterialsService from "../studymaterials/studymaterials.service";
 import * as quizzesService from "../quizzes/quizzes.service";
 import { submitAttemptSchema } from "../quizzes/quizzes.schema";
+import * as reservationsService from "../reservations/reservations.service";
+import {
+  createReservationSchema,
+  listAvailableBooksQuerySchema,
+} from "../reservations/reservations.schema";
 
 export const portalRouter = Router();
 
@@ -142,6 +147,88 @@ portalRouter.post("/students/:studentId/quizzes/:quizId/attempt", async (req, re
     .json(
       await quizzesService.submitAttempt(uuidParam(req, "quizId"), studentId, tenantId(req), input)
     );
+});
+
+/**
+ * @openapi
+ * /portal/library/books:
+ *   get:
+ *     tags: [Portal]
+ *     summary: Browse the library catalogue with available-copy counts (for reserving)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: search, schema: { type: string } }
+ *     responses:
+ *       200: { description: Books with availableCopies }
+ */
+portalRouter.get("/library/books", async (req, res) => {
+  const { search } = listAvailableBooksQuerySchema.parse(req.query);
+  res.json(await reservationsService.listAvailableBooks(tenantId(req), search));
+});
+
+/**
+ * @openapi
+ * /portal/students/{studentId}/reservations:
+ *   get:
+ *     tags: [Portal]
+ *     summary: An accessible student's book reservations
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: studentId, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: Reservations list }
+ *   post:
+ *     tags: [Portal]
+ *     summary: Reserve a book for an accessible student
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: studentId, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [bookId]
+ *             properties:
+ *               bookId: { type: string, format: uuid }
+ *               notes: { type: string }
+ *     responses:
+ *       201: { description: Created reservation }
+ *       409: { description: Already reserved }
+ */
+portalRouter.get("/students/:studentId/reservations", async (req, res) => {
+  const studentId = uuidParam(req, "studentId");
+  assertStudentAccess(await accessibleStudentIds(req), studentId);
+  res.json(await reservationsService.listStudentReservations(studentId, tenantId(req)));
+});
+
+portalRouter.post("/students/:studentId/reservations", async (req, res) => {
+  const studentId = uuidParam(req, "studentId");
+  assertStudentAccess(await accessibleStudentIds(req), studentId);
+  const input = createReservationSchema.parse(req.body);
+  res.status(201).json(await reservationsService.createStudentReservation(studentId, tenantId(req), input));
+});
+
+/**
+ * @openapi
+ * /portal/students/{studentId}/reservations/{id}/cancel:
+ *   post:
+ *     tags: [Portal]
+ *     summary: Cancel a pending reservation (own)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: studentId, required: true, schema: { type: string, format: uuid } }
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       204: { description: Cancelled }
+ *       404: { description: Pending reservation not found }
+ */
+portalRouter.post("/students/:studentId/reservations/:id/cancel", async (req, res) => {
+  const studentId = uuidParam(req, "studentId");
+  assertStudentAccess(await accessibleStudentIds(req), studentId);
+  await reservationsService.cancelStudentReservation(uuidParam(req, "id"), studentId, tenantId(req));
+  res.status(204).end();
 });
 
 /**

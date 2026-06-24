@@ -26,6 +26,7 @@ import { alumniRouter } from "./modules/alumni/alumni.routes";
 import { messRouter } from "./modules/mess/mess.routes";
 import { studyMaterialsRouter } from "./modules/studymaterials/studymaterials.routes";
 import { quizzesRouter } from "./modules/quizzes/quizzes.routes";
+import { reservationsRouter } from "./modules/reservations/reservations.routes";
 import { aiRouter } from "./modules/ai/ai.routes";
 import { aiInsightsRouter } from "./modules/aiinsights/aiinsights.routes";
 import { announcementsRouter } from "./modules/announcements/announcements.routes";
@@ -177,6 +178,7 @@ export function createApp(): express.Express {
   api.use("/cafeteria", messRouter); // cafeteria / mess menu (admin)
   api.use("/study-materials", studyMaterialsRouter); // LMS study materials (admin/teacher)
   api.use("/quizzes", quizzesRouter); // online quizzes authoring (admin/teacher)
+  api.use("/reservations", reservationsRouter); // library reservations (admin)
   api.use("/platform", platformRouter); // super-admin platform hardening
   api.use("/", superAdminRouter); // /institutions, /branches, /packages
   app.use("/api/v1", api);
