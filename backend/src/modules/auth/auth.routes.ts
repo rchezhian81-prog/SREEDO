@@ -1,8 +1,10 @@
 import { Router } from "express";
+import type { Request } from "express";
 import { authenticate } from "../../middleware/auth";
 import { permissionsForRole } from "../../middleware/permissions";
 import { authRateLimiter } from "../../middleware/rate-limit";
 import { ApiError } from "../../utils/api-error";
+import { uuidParam } from "../../utils/params";
 import {
   REFRESH_COOKIE,
   clearAuthCookies,
@@ -21,6 +23,11 @@ import {
 import * as authService from "./auth.service";
 
 export const authRouter = Router();
+
+/** Session metadata captured from the request (the browser/device label). */
+function sessionMeta(req: Request): { userAgent: string | null } {
+  return { userAgent: req.headers["user-agent"] ?? null };
+}
 
 /**
  * @openapi
@@ -48,7 +55,12 @@ export const authRouter = Router();
  */
 authRouter.post("/login", authRateLimiter, async (req, res) => {
   const { email, password, totpCode } = loginSchema.parse(req.body);
-  const result = await authService.login(email, password, totpCode);
+  const result = await authService.login(
+    email,
+    password,
+    totpCode,
+    sessionMeta(req)
+  );
   res.json(result);
 });
 
@@ -73,7 +85,7 @@ authRouter.post("/login", authRateLimiter, async (req, res) => {
  */
 authRouter.post("/refresh", async (req, res) => {
   const { refreshToken } = refreshSchema.parse(req.body);
-  const result = await authService.refresh(refreshToken);
+  const result = await authService.refresh(refreshToken, sessionMeta(req));
   res.json(result);
 });
 
@@ -181,7 +193,12 @@ authRouter.post("/reset-password", authRateLimiter, async (req, res) => {
  */
 authRouter.post("/portal/login", authRateLimiter, async (req, res) => {
   const { email, password, totpCode } = loginSchema.parse(req.body);
-  const result = await authService.login(email, password, totpCode);
+  const result = await authService.login(
+    email,
+    password,
+    totpCode,
+    sessionMeta(req)
+  );
   if ("twoFactorRequired" in result) {
     res.json(result);
     return;
@@ -209,7 +226,7 @@ authRouter.post("/portal/refresh", async (req, res) => {
   const token = getCookie(req, REFRESH_COOKIE);
   if (!token) throw ApiError.unauthorized();
   try {
-    const result = await authService.refresh(token);
+    const result = await authService.refresh(token, sessionMeta(req));
     setAuthCookies(res, result.accessToken, result.refreshToken);
     res.json({ user: result.user });
   } catch (err) {
@@ -289,6 +306,41 @@ authRouter.get("/permissions", authenticate, async (req, res) => {
 authRouter.post("/change-password", authenticate, async (req, res) => {
   const { currentPassword, newPassword } = changePasswordSchema.parse(req.body);
   await authService.changePassword(req.user!.id, currentPassword, newPassword);
+  res.status(204).end();
+});
+
+/**
+ * @openapi
+ * /auth/sessions:
+ *   get:
+ *     tags: [Auth]
+ *     summary: List the caller's active sessions (devices)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Active sessions, the current one flagged, newest activity first }
+ *       401: { description: Not authenticated }
+ */
+authRouter.get("/sessions", authenticate, async (req, res) => {
+  res.json(
+    await authService.listSessions(req.user!.id, req.user!.sessionId)
+  );
+});
+
+/**
+ * @openapi
+ * /auth/sessions/{id}:
+ *   delete:
+ *     tags: [Auth]
+ *     summary: Revoke one of the caller's sessions (sign out that device)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       204: { description: Session revoked }
+ *       404: { description: Session not found }
+ */
+authRouter.delete("/sessions/:id", authenticate, async (req, res) => {
+  await authService.revokeSession(req.user!.id, uuidParam(req));
   res.status(204).end();
 });
 
