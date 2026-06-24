@@ -6,6 +6,7 @@ import { requirePermission } from "../../middleware/permissions";
 import { accessibleStudentIds, assertStudentAccess } from "../../utils/scope";
 import * as portalService from "./portal.service";
 import * as disciplinaryService from "../disciplinary/disciplinary.service";
+import * as messService from "../mess/mess.service";
 
 export const portalRouter = Router();
 
@@ -13,6 +14,20 @@ export const portalRouter = Router();
 // Every handler is owner-scoped: a student sees only self, a parent only their
 // linked children (accessibleStudentIds + assertStudentAccess).
 portalRouter.use(authenticate, requireTenant, authorize("student", "parent"));
+
+/**
+ * @openapi
+ * /portal/mess-menu:
+ *   get:
+ *     tags: [Portal]
+ *     summary: This week's cafeteria / mess menu for the caller's institution
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Weekly menu items ordered by day & meal }
+ */
+portalRouter.get("/mess-menu", async (req, res) => {
+  res.json(await messService.listWeeklyMenu(tenantId(req)));
+});
 
 /**
  * @openapi

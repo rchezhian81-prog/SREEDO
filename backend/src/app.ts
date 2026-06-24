@@ -23,6 +23,7 @@ import { visitorsRouter } from "./modules/visitors/visitors.routes";
 import { feedbackRouter } from "./modules/feedback/feedback.routes";
 import { infirmaryRouter } from "./modules/infirmary/infirmary.routes";
 import { alumniRouter } from "./modules/alumni/alumni.routes";
+import { messRouter } from "./modules/mess/mess.routes";
 import { aiRouter } from "./modules/ai/ai.routes";
 import { aiInsightsRouter } from "./modules/aiinsights/aiinsights.routes";
 import { announcementsRouter } from "./modules/announcements/announcements.routes";
@@ -171,6 +172,7 @@ export function createApp(): express.Express {
   api.use("/feedback", feedbackRouter); // feedback / grievance tracker
   api.use("/infirmary", infirmaryRouter); // health / infirmary visit log
   api.use("/alumni", alumniRouter); // alumni & placement directory
+  api.use("/cafeteria", messRouter); // cafeteria / mess menu (admin)
   api.use("/platform", platformRouter); // super-admin platform hardening
   api.use("/", superAdminRouter); // /institutions, /branches, /packages
   app.use("/api/v1", api);
