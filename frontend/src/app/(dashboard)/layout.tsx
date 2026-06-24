@@ -47,6 +47,7 @@ const SCHOOL_NAV: NavItem[] = [
   { href: "/fees", label: "Fees", icon: "card" },
   { href: "/fees/setup", label: "Fee Setup", icon: "gear" },
   { href: "/online-payments", label: "Online Payments", icon: "wallet" },
+  { href: "/accounting", label: "Accounting", icon: "wallet", adminOnly: true },
   { href: "/announcements", label: "Announcements", icon: "megaphone" },
   { href: "/communication", label: "Communication", icon: "mail" },
   { href: "/messaging", label: "Messaging", icon: "message" },
