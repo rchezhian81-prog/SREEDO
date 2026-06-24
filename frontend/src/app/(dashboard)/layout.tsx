@@ -27,6 +27,7 @@ const SCHOOL_NAV: NavItem[] = [
   { href: "/teachers", label: "Teachers", icon: "board" },
   { href: "/classes", label: "Classes", icon: "school" },
   { href: "/timetable", label: "Timetable", icon: "calendar" },
+  { href: "/timetable/generate", label: "Auto Timetable", icon: "sparkles", adminOnly: true },
   { href: "/calendar", label: "Calendar", icon: "calendar" },
   { href: "/college", label: "College", icon: "building" },
   { href: "/library", label: "Library", icon: "file" },
