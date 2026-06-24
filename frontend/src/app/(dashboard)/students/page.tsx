@@ -20,6 +20,7 @@ import {
 import type { Paginated, SchoolClass, Student } from "@/types";
 import { useI18n } from "@/i18n/I18nProvider";
 import { ImportCsvModal, type ImportColumn } from "@/components/ImportCsvModal";
+import { CertificateModal } from "@/components/CertificateModal";
 
 const studentSchema = z.object({
   firstName: z.string().min(1, "Required"),
@@ -77,6 +78,7 @@ export default function StudentsPage() {
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [certFor, setCertFor] = useState<Student | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
 
   const limit = 10;
@@ -225,12 +227,20 @@ export default function StudentsPage() {
                     </Badge>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => removeStudent(student)}
-                      className="text-xs font-medium text-red-600 hover:text-red-700"
-                    >
-                      Delete
-                    </button>
+                    <div className="flex justify-end gap-3">
+                      <button
+                        onClick={() => setCertFor(student)}
+                        className="text-xs font-medium text-brand-600 hover:text-brand-600 dark:text-brand-300"
+                      >
+                        Certificate
+                      </button>
+                      <button
+                        onClick={() => removeStudent(student)}
+                        className="text-xs font-medium text-red-600 hover:text-red-700"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -335,6 +345,8 @@ export default function StudentsPage() {
         templateName="students-template.csv"
         onImported={load}
       />
+
+      <CertificateModal student={certFor} onClose={() => setCertFor(null)} />
     </>
   );
 }

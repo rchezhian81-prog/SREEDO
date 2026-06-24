@@ -190,6 +190,60 @@ export function bulkIdCardsPdf(cards: IdCardData[]): Promise<Buffer> {
   });
 }
 
+export interface CertificateData {
+  institutionName: string;
+  logo: PdfImage | null;
+  title: string; // e.g. "BONAFIDE CERTIFICATE"
+  certNo: string;
+  date: string; // YYYY-MM-DD
+  body: string; // the prose paragraph(s)
+}
+
+/** A generic prose certificate (bonafide / conduct / character) on A4. */
+export function certificatePdf(data: CertificateData): Promise<Buffer> {
+  return renderPdf({ size: "A4", margin: 56 }, (doc) => {
+    const left = 56;
+    const width = doc.page.width - 112;
+
+    if (!tryImage(doc, data.logo, left, 48, { fit: [56, 56] })) {
+      doc.rect(left, 48, 56, 56).stroke();
+      doc.fontSize(7).fillColor("#999").text("LOGO", left, 72, { width: 56, align: "center" });
+      doc.fillColor("#000");
+    }
+    doc.font("Helvetica-Bold").fontSize(19).text(data.institutionName, left + 68, 52, {
+      width: width - 68,
+      align: "center",
+    });
+    doc.font("Helvetica").fontSize(14).text(data.title, left + 68, 82, {
+      width: width - 68,
+      align: "center",
+    });
+    doc.moveTo(left, 120).lineTo(left + width, 120).stroke();
+
+    let y = 136;
+    doc.font("Helvetica").fontSize(10);
+    doc.font("Helvetica-Bold").text("Certificate No: ", left, y, { continued: true });
+    doc.font("Helvetica").text(data.certNo);
+    doc.font("Helvetica-Bold").text("Date: ", left + width - 160, y, { continued: true });
+    doc.font("Helvetica").text(data.date, { width: 160 });
+
+    y += 40;
+    doc.font("Helvetica").fontSize(12).text(data.body, left, y, {
+      width,
+      align: "justify",
+      lineGap: 6,
+    });
+
+    // Signature placeholder (bottom-right).
+    const sigY = doc.page.height - 132;
+    doc.moveTo(left + width - 200, sigY).lineTo(left + width, sigY).stroke();
+    doc.font("Helvetica").fontSize(10).text("Principal / Authorized Signatory", left + width - 200, sigY + 4, {
+      width: 200,
+      align: "center",
+    });
+  });
+}
+
 export interface TcData {
   institutionName: string;
   logo: PdfImage | null;

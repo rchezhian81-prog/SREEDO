@@ -6,6 +6,7 @@ import { accessibleStudentIds, assertStudentAccess } from "../../utils/scope";
 import type { PdfImage } from "../../utils/pdf";
 import {
   bulkIdCardsPdf,
+  certificatePdf,
   idCardPdf,
   receiptPdf,
   type IdCardData,
@@ -219,5 +220,97 @@ export async function staffIdCardBuffer(
     bloodGroup: "—",
     contact: u.phone ?? u.email,
     validity: String(new Date().getFullYear()),
+  });
+}
+
+// --- Student certificates (bonafide / conduct / character) ---
+
+const CERTIFICATE_TITLES: Record<string, string> = {
+  bonafide: "BONAFIDE CERTIFICATE",
+  conduct: "CONDUCT CERTIFICATE",
+  character: "CHARACTER CERTIFICATE",
+};
+
+export const CERTIFICATE_TYPES = Object.keys(CERTIFICATE_TITLES);
+
+interface CertStudentRow {
+  first_name: string;
+  last_name: string;
+  admission_no: string;
+  gender: string | null;
+  guardian_name: string | null;
+  section_name: string | null;
+  class_name: string | null;
+  institution_name: string;
+}
+
+/**
+ * Generate a prose certificate PDF for a student. Staff-issued (the route
+ * restricts to admin/teacher); the student must belong to the tenant.
+ */
+export async function certificateBuffer(
+  certType: string,
+  studentId: string,
+  institutionId: string,
+  opts: { purpose?: string } = {}
+): Promise<Buffer> {
+  const title = CERTIFICATE_TITLES[certType];
+  if (!title) throw ApiError.badRequest("Unknown certificate type");
+
+  const { rows } = await query<CertStudentRow>(
+    `SELECT s.first_name, s.last_name, s.admission_no, s.gender, s.guardian_name,
+            sec.name AS section_name, c.name AS class_name,
+            inst.name AS institution_name
+     FROM students s
+     LEFT JOIN sections sec ON sec.id = s.section_id
+     LEFT JOIN classes c ON c.id = sec.class_id
+     JOIN institutions inst ON inst.id = s.institution_id
+     WHERE s.id = $1 AND s.institution_id = $2`,
+    [studentId, institutionId]
+  );
+  const s = rows[0];
+  if (!s) throw ApiError.notFound("Student not found");
+
+  const { rows: yearRows } = await query<{ name: string }>(
+    "SELECT name FROM academic_years WHERE institution_id = $1 AND is_current = true LIMIT 1",
+    [institutionId]
+  );
+  const academicYear = yearRows[0]?.name ?? null;
+
+  const name = `${s.first_name} ${s.last_name}`;
+  const child =
+    s.gender === "male" ? "son" : s.gender === "female" ? "daughter" : "child";
+  const possessive =
+    s.gender === "male" ? "his" : s.gender === "female" ? "her" : "their";
+  const guardian = s.guardian_name ?? "—";
+  const classLine = [s.class_name, s.section_name].filter(Boolean).join(" ");
+  const inClass = classLine ? ` studying in Class ${classLine}` : "";
+  const inYear = academicYear ? ` during the academic year ${academicYear}` : "";
+  const purpose = opts.purpose
+    ? ` This certificate is issued for the purpose of ${opts.purpose}.`
+    : "";
+
+  let body: string;
+  if (certType === "bonafide") {
+    body =
+      `This is to certify that ${name}, ${child} of ${guardian}, bearing ` +
+      `Admission No. ${s.admission_no}, is a bonafide student of this ` +
+      `institution${inClass}${inYear}.${purpose}`;
+  } else {
+    const trait = certType === "character" ? "character" : "conduct and character";
+    body =
+      `This is to certify that ${name}, ${child} of ${guardian}, bearing ` +
+      `Admission No. ${s.admission_no}, has been a student of this ` +
+      `institution${inClass}${inYear}. To the best of our knowledge, ` +
+      `${possessive} ${trait} during this period has been found to be good.${purpose}`;
+  }
+
+  return certificatePdf({
+    institutionName: s.institution_name,
+    logo: await logoFor(institutionId),
+    title,
+    certNo: `${certType.toUpperCase().slice(0, 3)}-${shortId(studentId)}`,
+    date: new Date().toISOString().slice(0, 10),
+    body,
   });
 }
