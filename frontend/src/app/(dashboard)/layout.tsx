@@ -71,6 +71,7 @@ const SUPER_ADMIN_NAV: NavItem[] = [
   { href: "/super-admin/observability", label: "Observability", icon: "barChart" },
   { href: "/super-admin/backups", label: "Backups", icon: "shield" },
   { href: "/super-admin/jobs", label: "Jobs", icon: "gear" },
+  { href: "/security", label: "Security", icon: "shield" },
 ];
 
 const SIDEBAR_BG =
