@@ -17,6 +17,7 @@ import {
 } from "../reservations/reservations.schema";
 import * as pollsService from "../polls/polls.service";
 import { voteSchema } from "../polls/polls.schema";
+import * as galleryService from "../gallery/gallery.service";
 
 export const portalRouter = Router();
 
@@ -302,6 +303,37 @@ portalRouter.post("/students/:studentId/polls/:pollId/vote", async (req, res) =>
   res
     .status(201)
     .json(await pollsService.vote(uuidParam(req, "pollId"), studentId, tenantId(req), optionId));
+});
+
+/**
+ * @openapi
+ * /portal/gallery:
+ *   get:
+ *     tags: [Portal]
+ *     summary: Published photo albums for the caller's institution
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Album list }
+ */
+portalRouter.get("/gallery", async (req, res) => {
+  res.json(await galleryService.listPublishedAlbums(tenantId(req)));
+});
+
+/**
+ * @openapi
+ * /portal/gallery/{albumId}:
+ *   get:
+ *     tags: [Portal]
+ *     summary: A published album with its photos
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: albumId, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: Album with photos }
+ *       404: { description: Not found / not published }
+ */
+portalRouter.get("/gallery/:albumId", async (req, res) => {
+  res.json(await galleryService.getPublishedAlbum(uuidParam(req, "albumId"), tenantId(req)));
 });
 
 /**
