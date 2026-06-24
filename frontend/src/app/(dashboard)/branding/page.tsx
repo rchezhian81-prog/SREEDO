@@ -132,8 +132,8 @@ export default function BrandingPage() {
             </div>
           </div>
           <p className="mt-2 text-xs text-muted">
-            Branding is stored per institution and available via the API. Applying it across the full app
-            shell ships next.
+            Your logo &amp; name now appear in the dashboard and parent/student portal. Tinting the full
+            app with your primary colour is rolling out next.
           </p>
         </div>
       </div>

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { portalApi } from "@/lib/portal-api";
 import { usePortalStore } from "@/stores/portal-store";
+import { useBrandingStore, type Branding } from "@/stores/branding-store";
 import { cx, Select, Spinner, SkipLink } from "@/components/ui";
 import { useI18n } from "@/i18n/I18nProvider";
 import type { TranslationKey } from "@/i18n";
@@ -52,6 +53,7 @@ export default function PortalLayout({
     setSelected,
     reset,
   } = usePortalStore();
+  const { branding, setBranding } = useBrandingStore();
 
   const [hydrated, setHydrated] = useState(false);
   const [ready, setReady] = useState(false);
@@ -73,6 +75,12 @@ export default function PortalLayout({
         const list = await portalApi.get<PortalChild[]>("/portal/children");
         if (cancelled) return;
         setChildren(list);
+        portalApi
+          .get<Branding>("/branding")
+          .then((b) => {
+            if (!cancelled) setBranding(b);
+          })
+          .catch(() => undefined);
         const selected = usePortalStore.getState().selectedStudentId;
         if ((!selected || !list.some((c) => c.id === selected)) && list[0]) {
           setSelected(list[0].id);
@@ -106,12 +114,16 @@ export default function PortalLayout({
       <SkipLink label={t("a11y.skipToContent")} />
       <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-200 bg-white md:flex">
         <div className="flex items-center gap-2 border-b border-slate-200 px-5 py-4">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 font-bold text-white">
-            S
-          </div>
-          <span className="font-semibold text-slate-900">
-            {t("app.name")}
-            {t("app.portalSuffix")}
+          {branding?.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={branding.logoUrl} alt="" className="h-8 w-8 rounded-lg object-cover" />
+          ) : (
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 font-bold text-white">
+              {(branding?.displayName ?? "S").trim().charAt(0).toUpperCase()}
+            </div>
+          )}
+          <span className="truncate font-semibold text-slate-900">
+            {branding?.displayName ? branding.displayName : `${t("app.name")}${t("app.portalSuffix")}`}
           </span>
         </div>
 

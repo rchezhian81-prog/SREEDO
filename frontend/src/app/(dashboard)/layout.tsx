@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth-store";
+import { useBrandingStore, type Branding } from "@/stores/branding-store";
 import { cx, Spinner, SkipLink } from "@/components/ui";
 import { Icon, type IconName } from "@/components/icons";
 import { useThemeStore } from "@/stores/theme-store";
@@ -112,21 +113,37 @@ function SidebarContent({
   subtitle: string;
   onNavigate?: () => void;
 }) {
+  const branding = useBrandingStore((s) => s.branding);
   return (
     <div
       className="flex h-full flex-col px-3 pb-4 text-[#a8b6dc]"
       style={{ background: SIDEBAR_BG }}
     >
       <div className="mb-2 flex h-[72px] items-center gap-3 border-b border-white/10 px-1.5">
-        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-[#4f8cff] to-[#1e40af] text-white shadow-[0_6px_16px_rgb(37_99_235_/_0.45)]">
-          <Icon name="cap" className="h-6 w-6" />
-        </div>
+        {branding?.logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={branding.logoUrl}
+            alt=""
+            className="h-11 w-11 shrink-0 rounded-xl object-cover"
+          />
+        ) : (
+          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-[#4f8cff] to-[#1e40af] text-white shadow-[0_6px_16px_rgb(37_99_235_/_0.45)]">
+            <Icon name="cap" className="h-6 w-6" />
+          </div>
+        )}
         <div className="min-w-0">
-          <div className="text-[18px] font-extrabold leading-tight tracking-tight text-white">
-            Go<span className="text-[#9ec1ff]">Campus</span>
+          <div className="truncate text-[18px] font-extrabold leading-tight tracking-tight text-white">
+            {branding?.displayName ? (
+              branding.displayName
+            ) : (
+              <>
+                Go<span className="text-[#9ec1ff]">Campus</span>
+              </>
+            )}
           </div>
           <div className="truncate text-[10px] font-bold tracking-wide text-[#6e7fb0]">
-            {subtitle}
+            {branding?.tagline || subtitle}
           </div>
         </div>
       </div>
@@ -334,6 +351,14 @@ export default function DashboardLayout({
 
   // Close the mobile drawer whenever the route changes.
   useEffect(() => setSidebarOpen(false), [pathname]);
+
+  // Load this institution's white-label branding (skipped for super admins,
+  // who have no tenant).
+  const setBranding = useBrandingStore((s) => s.setBranding);
+  useEffect(() => {
+    if (!hydrated || !accessToken || user?.role === "super_admin") return;
+    api.get<Branding>("/branding").then(setBranding).catch(() => undefined);
+  }, [hydrated, accessToken, user, setBranding]);
 
   const isSuper = user?.role === "super_admin";
   const inSuperArea = pathname.startsWith("/super-admin");
