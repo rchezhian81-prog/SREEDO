@@ -1,9 +1,10 @@
 import type { Response } from "express";
 import { Router } from "express";
-import { uuidParam } from "../../utils/params";
-import { authenticate } from "../../middleware/auth";
+import { param, uuidParam } from "../../utils/params";
+import { authenticate, authorize } from "../../middleware/auth";
 import { requireTenant, tenantId } from "../../middleware/tenant";
 import { requirePermission } from "../../middleware/permissions";
+import { ApiError } from "../../utils/api-error";
 import * as service from "./pdfs.service";
 
 function sendPdf(res: Response, buffer: Buffer, filename: string): void {
@@ -107,5 +108,47 @@ idCardsRouter.get(
   async (req, res) => {
     const buf = await service.bulkStudentIdCardsBuffer(uuidParam(req, "sectionId"), tenantId(req));
     sendPdf(res, buf, "section-id-cards.pdf");
+  }
+);
+
+export const certificatesRouter = Router();
+certificatesRouter.use(authenticate, requireTenant);
+
+/**
+ * @openapi
+ * /certificates/student/{studentId}/{type}/download:
+ *   get:
+ *     tags: [PDFs]
+ *     summary: Download a student certificate PDF (bonafide / conduct / character) — staff
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: studentId, required: true, schema: { type: string, format: uuid } }
+ *       - { in: path, name: type, required: true, schema: { type: string, enum: [bonafide, conduct, character] } }
+ *       - { in: query, name: purpose, schema: { type: string }, description: "Optional purpose line (e.g. bank account opening)" }
+ *     responses:
+ *       200: { description: PDF, content: { application/pdf: {} } }
+ *       400: { description: Unknown certificate type }
+ *       403: { description: Staff only }
+ *       404: { description: Student not found }
+ */
+certificatesRouter.get(
+  "/student/:studentId/:type/download",
+  authorize("admin", "teacher"),
+  async (req, res) => {
+    const type = param(req, "type");
+    if (!service.CERTIFICATE_TYPES.includes(type)) {
+      throw ApiError.badRequest("Unknown certificate type");
+    }
+    const purpose =
+      typeof req.query.purpose === "string" && req.query.purpose.trim()
+        ? req.query.purpose.trim().slice(0, 200)
+        : undefined;
+    const buf = await service.certificateBuffer(
+      type,
+      uuidParam(req, "studentId"),
+      tenantId(req),
+      { purpose }
+    );
+    sendPdf(res, buf, `${type}-certificate.pdf`);
   }
 );

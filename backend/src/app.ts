@@ -36,7 +36,11 @@ import { jobsRouter } from "./modules/jobs/jobs.routes";
 import { libraryRouter } from "./modules/library/library.routes";
 import { onlinePaymentsRouter } from "./modules/onlinepayments/onlinepayments.routes";
 import { transportRouter } from "./modules/transport/transport.routes";
-import { feeReceiptsRouter, idCardsRouter } from "./modules/pdfs/pdfs.routes";
+import {
+  certificatesRouter,
+  feeReceiptsRouter,
+  idCardsRouter,
+} from "./modules/pdfs/pdfs.routes";
 import { payrollRouter } from "./modules/payroll/payroll.routes";
 import { platformRouter } from "./modules/platform/platform.routes";
 import { portalRouter } from "./modules/portal/portal.routes";
@@ -145,6 +149,7 @@ export function createApp(): express.Express {
   api.use("/homework", homeworkRouter);
   api.use("/fee-receipts", feeReceiptsRouter);
   api.use("/id-cards", idCardsRouter);
+  api.use("/certificates", certificatesRouter);
   api.use("/ai", aiRouter);
   api.use("/ai-insights", aiInsightsRouter);
   api.use("/observability", observabilityRouter); // super-admin platform observability
