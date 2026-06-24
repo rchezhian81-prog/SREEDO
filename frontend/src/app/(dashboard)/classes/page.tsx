@@ -16,7 +16,8 @@ import {
   PageHeader,
   Spinner,
 } from "@/components/ui";
-import type { SchoolClass } from "@/types";
+import { SectionSubjectsModal } from "@/components/SectionSubjectsModal";
+import type { SchoolClass, Section } from "@/types";
 
 const classSchema = z.object({
   name: z.string().min(1, "Required"),
@@ -30,6 +31,10 @@ export default function ClassesPage() {
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [subjectsFor, setSubjectsFor] = useState<{
+    section: Section;
+    className: string;
+  } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -121,14 +126,27 @@ export default function ClassesPage() {
                   schoolClass.sections.map((section) => (
                     <div
                       key={section.id}
-                      className="flex items-center justify-between rounded-lg bg-surface-2 px-3 py-2 text-sm"
+                      className="flex items-center justify-between gap-2 rounded-lg bg-surface-2 px-3 py-2 text-sm"
                     >
                       <span className="font-medium">
                         Section {section.name}
                       </span>
-                      <span className="text-muted">
-                        {section.studentCount}/{section.capacity} students
-                      </span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-muted">
+                          {section.studentCount}/{section.capacity}
+                        </span>
+                        <button
+                          onClick={() =>
+                            setSubjectsFor({
+                              section,
+                              className: schoolClass.name,
+                            })
+                          }
+                          className="text-xs font-medium text-brand-600 hover:text-brand-600 dark:text-brand-300"
+                        >
+                          Subjects
+                        </button>
+                      </div>
                     </div>
                   ))
                 )}
@@ -172,6 +190,12 @@ export default function ClassesPage() {
           </div>
         </form>
       </Modal>
+
+      <SectionSubjectsModal
+        section={subjectsFor?.section ?? null}
+        classLabel={subjectsFor?.className ?? null}
+        onClose={() => setSubjectsFor(null)}
+      />
     </>
   );
 }
