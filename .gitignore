@@ -35,3 +35,12 @@ mobile/windows/
 .idea/
 .vscode/
 *.log
+
+# Production TLS material, secrets & backup artifacts (NEVER commit)
+infra/certbot/
+.env.backup
+*.env.backup
+.envecho
+db-backup-*.sql
+*.sql.gz
+*.dump
