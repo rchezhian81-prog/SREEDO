@@ -15,6 +15,7 @@ import { observabilityRouter } from "./modules/observability/observability.route
 import { liveness, readiness } from "./modules/observability/observability.service";
 import { academicsRouter } from "./modules/academics/academics.routes";
 import { adminConsoleRouter } from "./modules/adminconsole/adminconsole.routes";
+import { activityRouter } from "./modules/activity/activity.routes";
 import { aiRouter } from "./modules/ai/ai.routes";
 import { aiInsightsRouter } from "./modules/aiinsights/aiinsights.routes";
 import { announcementsRouter } from "./modules/announcements/announcements.routes";
@@ -155,6 +156,7 @@ export function createApp(): express.Express {
   api.use("/observability", observabilityRouter); // super-admin platform observability
   api.use("/backups", backupsRouter); // super-admin backup / restore automation
   api.use("/admin", adminConsoleRouter); // super-admin platform console
+  api.use("/activity", activityRouter); // institution-admin activity log (own tenant)
   api.use("/platform", platformRouter); // super-admin platform hardening
   api.use("/", superAdminRouter); // /institutions, /branches, /packages
   app.use("/api/v1", api);
