@@ -39,3 +39,12 @@ mobile/windows/
 # Generated team-handoff packages — regenerate with scripts/create-handoff-zip.sh
 # (the script + docs/governance/HANDOFF_ZIP_MANIFEST.md are committed; ZIPs are not)
 handoff-packages/*.zip
+
+# Production TLS material, secrets & backup artifacts (NEVER commit)
+infra/certbot/
+.env.backup
+*.env.backup
+.envecho
+db-backup-*.sql
+*.sql.gz
+*.dump
