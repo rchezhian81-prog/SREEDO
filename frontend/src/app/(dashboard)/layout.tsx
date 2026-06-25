@@ -50,6 +50,7 @@ const SCHOOL_NAV: NavItem[] = [
   { href: "/documents", label: "Documents", icon: "file" },
   { href: "/homework", label: "Homework", icon: "board" },
   { href: "/study-materials", label: "Study Materials", icon: "bookOpen" },
+  { href: "/live-classes", label: "Live Classes", icon: "video" },
   { href: "/quizzes", label: "Quizzes", icon: "quiz" },
   { href: "/biometric", label: "Biometric", icon: "fingerprint", adminOnly: true },
   { href: "/polls", label: "Polls", icon: "barChart" },

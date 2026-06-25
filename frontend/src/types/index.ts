@@ -1819,3 +1819,24 @@ export interface BackupRestorePreview {
   totalRows: number;
   tables: { name: string; rowCount: number }[];
 }
+
+// --- Live Classes ---
+
+export type LiveClassProvider = "zoom" | "meet" | "teams" | "jitsi" | "other";
+
+export type LiveClassStatus = "scheduled" | "live" | "completed" | "cancelled";
+
+export interface LiveClass {
+  id: string;
+  title: string;
+  description: string | null;
+  subject: string | null;
+  target: string | null;
+  provider: LiveClassProvider;
+  joinUrl: string;
+  hostName: string | null;
+  scheduledAt: string;
+  durationMin: number;
+  status: LiveClassStatus;
+  createdAt: string;
+}
