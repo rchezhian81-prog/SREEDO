@@ -10,6 +10,26 @@ function required(name: string, fallback?: string): string {
   return value;
 }
 
+// Like `required`, but refuses the published dev default when NODE_ENV=production.
+// Otherwise a missing/weak JWT secret would sign tokens with a secret committed
+// to this repo — anyone could forge a valid session. This supersedes the older
+// `jwtAccessSecret.startsWith("dev-")` boot check: it covers BOTH the access and
+// refresh secrets, and the empty/unset cases, and fails fast at boot.
+export function requiredSecret(name: string, devFallback: string): string {
+  const raw = process.env[name];
+  const value = raw === undefined || raw === "" ? devFallback : raw;
+  if (
+    process.env.NODE_ENV === "production" &&
+    (value === devFallback || value.startsWith("dev-"))
+  ) {
+    throw new Error(
+      `${name} must be set to a strong, unique value in production ` +
+        `(the dev default is published in this repository).`
+    );
+  }
+  return value;
+}
+
 function optional(name: string): string | undefined {
   const value = process.env[name];
   return value === undefined || value === "" ? undefined : value;
@@ -30,8 +50,11 @@ export const env = {
   mongoUrl: optional("MONGO_URL"),
   mongoDb: process.env.MONGO_DB ?? "sreedo",
 
-  jwtAccessSecret: required("JWT_ACCESS_SECRET", "dev-access-secret-change-me"),
-  jwtRefreshSecret: required(
+  jwtAccessSecret: requiredSecret(
+    "JWT_ACCESS_SECRET",
+    "dev-access-secret-change-me"
+  ),
+  jwtRefreshSecret: requiredSecret(
     "JWT_REFRESH_SECRET",
     "dev-refresh-secret-change-me"
   ),
@@ -104,7 +127,3 @@ export const env = {
       ? process.env.ENABLE_API_DOCS === "true"
       : process.env.NODE_ENV !== "production",
 };
-
-if (env.isProduction && env.jwtAccessSecret.startsWith("dev-")) {
-  throw new Error("JWT secrets must be overridden in production");
-}
