@@ -27,6 +27,15 @@ interface Webhook {
   eventTypes: string;
   isActive: boolean;
 }
+interface Delivery {
+  id: string;
+  eventType: string;
+  statusCode: number | null;
+  success: boolean;
+  error: string | null;
+  attempt: number;
+  createdAt: string;
+}
 
 export default function IntegrationsPage() {
   const [keys, setKeys] = useState<ApiKey[]>([]);
@@ -43,6 +52,13 @@ export default function IntegrationsPage() {
   const [hookEvents, setHookEvents] = useState("*");
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const [newSecret, setNewSecret] = useState<string | null>(null);
+  const [testing, setTesting] = useState<string | null>(null);
+  const [actionNote, setActionNote] = useState<string | null>(null);
+  const [deliveriesFor, setDeliveriesFor] = useState<Webhook | null>(null);
+  const [deliveries, setDeliveries] = useState<Delivery[]>([]);
+  const [deliveriesLoading, setDeliveriesLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -106,15 +122,50 @@ export default function IntegrationsPage() {
     setSaving(true);
     setFormError(null);
     try {
-      await api.post("/integrations/webhooks", { url: hookUrl, eventTypes: hookEvents || "*" });
+      const res = await api.post<{ secret: string }>("/integrations/webhooks", {
+        url: hookUrl,
+        eventTypes: hookEvents || "*",
+      });
       setHookModal(false);
       setHookUrl("");
       setHookEvents("*");
+      setNewSecret(res.secret);
       await load();
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : "Failed to add webhook");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const testHook = async (h: Webhook) => {
+    setTesting(h.id);
+    setActionNote(null);
+    try {
+      const r = await api.post<{ success: boolean; statusCode: number | null; error: string | null }>(
+        `/integrations/webhooks/${h.id}/test`
+      );
+      setActionNote(
+        r.success
+          ? `Test delivered to ${h.url} — HTTP ${r.statusCode}.`
+          : `Test failed for ${h.url}: ${r.error ?? `HTTP ${r.statusCode}`}.`
+      );
+    } catch (err) {
+      setActionNote(err instanceof ApiError ? err.message : "Test request failed");
+    } finally {
+      setTesting(null);
+    }
+  };
+
+  const openDeliveries = async (h: Webhook) => {
+    setDeliveriesFor(h);
+    setDeliveriesLoading(true);
+    try {
+      setDeliveries(await api.get<Delivery[]>(`/integrations/webhooks/${h.id}/deliveries`));
+    } catch {
+      setDeliveries([]);
+    } finally {
+      setDeliveriesLoading(false);
     }
   };
 
@@ -152,6 +203,30 @@ export default function IntegrationsPage() {
             {newKey}
           </code>
           <button onClick={() => setNewKey(null)} className="mt-2 text-xs font-medium text-amber-800 hover:underline">
+            Dismiss
+          </button>
+        </div>
+      ) : null}
+
+      {newSecret ? (
+        <div className="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-4">
+          <p className="text-sm font-medium text-amber-900">
+            Copy this webhook signing secret now — it won&apos;t be shown again. Verify each
+            delivery&apos;s <code>X-Sreedo-Signature</code> (HMAC-SHA256 of the raw body) with it.
+          </p>
+          <code className="mt-2 block break-all rounded bg-white px-3 py-2 text-sm text-amber-900">
+            {newSecret}
+          </code>
+          <button onClick={() => setNewSecret(null)} className="mt-2 text-xs font-medium text-amber-800 hover:underline">
+            Dismiss
+          </button>
+        </div>
+      ) : null}
+
+      {actionNote ? (
+        <div className="mb-6 flex items-start justify-between gap-3 rounded-xl border border-line bg-surface-2 px-4 py-3 text-sm text-ink">
+          <span>{actionNote}</span>
+          <button onClick={() => setActionNote(null)} className="text-xs font-medium text-muted hover:underline">
             Dismiss
           </button>
         </div>
@@ -239,7 +314,13 @@ export default function IntegrationsPage() {
                         </td>
                         <td className="px-4 py-3 text-right">
                           <div className="flex justify-end gap-3">
-                            <button onClick={() => toggleHook(h)} className="text-xs font-medium text-brand-600 hover:underline">
+                            <button onClick={() => testHook(h)} disabled={testing === h.id} className="text-xs font-medium text-brand-600 hover:underline disabled:opacity-50">
+                              {testing === h.id ? "Testing…" : "Test"}
+                            </button>
+                            <button onClick={() => openDeliveries(h)} className="text-xs font-medium text-brand-600 hover:underline">
+                              Log
+                            </button>
+                            <button onClick={() => toggleHook(h)} className="text-xs font-medium text-amber-700 hover:underline">
                               {h.isActive ? "Pause" : "Resume"}
                             </button>
                             <button onClick={() => deleteHook(h)} className="text-xs font-medium text-red-600 hover:text-red-700">
@@ -284,6 +365,45 @@ export default function IntegrationsPage() {
             <Button onClick={createHook} disabled={saving}>{saving ? "Saving…" : "Add"}</Button>
           </div>
         </div>
+      </Modal>
+
+      <Modal
+        title={deliveriesFor ? `Deliveries — ${deliveriesFor.url}` : "Deliveries"}
+        open={!!deliveriesFor}
+        onClose={() => setDeliveriesFor(null)}
+      >
+        {deliveriesLoading ? (
+          <Spinner />
+        ) : deliveries.length === 0 ? (
+          <EmptyState message="No delivery attempts yet" />
+        ) : (
+          <div className="max-h-96 overflow-y-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-line text-xs uppercase text-muted">
+                <tr>
+                  <th className="py-2 pr-3">Event</th>
+                  <th className="py-2 pr-3">Result</th>
+                  <th className="py-2 pr-3">When</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {deliveries.map((d) => (
+                  <tr key={d.id}>
+                    <td className="py-2 pr-3 text-ink">{d.eventType}</td>
+                    <td className="py-2 pr-3">
+                      <span className={d.success ? "text-green-700" : "text-red-600"}>
+                        {d.success
+                          ? `OK ${d.statusCode ?? ""}`
+                          : `Failed ${d.statusCode ?? ""} ${d.error ?? ""}`.trim()}
+                      </span>
+                    </td>
+                    <td className="py-2 pr-3 text-muted">{new Date(d.createdAt).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Modal>
     </>
   );
