@@ -1,6 +1,7 @@
 import type { PoolClient } from "pg";
 import { query, withTransaction } from "../../db/postgres";
 import { ApiError } from "../../utils/api-error";
+import { toPaise, toRupees } from "../../utils/money";
 import type { z } from "zod";
 import type {
   createAdjustmentSchema,
@@ -402,12 +403,13 @@ export async function createPurchase(
   for (const line of input.items)
     await assertRef("inventory_items", line.itemId, institutionId, "item");
 
-  const lines = input.items.map((l) => ({
-    ...l,
-    rate: l.rate ?? 0,
-    amount: Math.round(l.quantity * (l.rate ?? 0) * 100) / 100,
-  }));
-  const total = Math.round(lines.reduce((s, l) => s + l.amount, 0) * 100) / 100;
+  const lines = input.items.map((l) => {
+    const rate = l.rate ?? 0;
+    // rate is money, quantity a (possibly fractional) count: amount = rate × qty.
+    const amountPaise = Math.round(toPaise(rate) * l.quantity);
+    return { ...l, rate, amountPaise, amount: toRupees(amountPaise) };
+  });
+  const total = toRupees(lines.reduce((s, l) => s + l.amountPaise, 0));
 
   return withTransaction(async (client) => {
     const { rows } = await client.query<{ id: string }>(

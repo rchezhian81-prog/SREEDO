@@ -1,6 +1,7 @@
 import type { z } from "zod";
 import { query, withTransaction } from "../../db/postgres";
 import { ApiError } from "../../utils/api-error";
+import { percentOf, toPaise, toRupees } from "../../utils/money";
 import type {
   applyDiscountSchema,
   applyFineSchema,
@@ -11,8 +12,6 @@ import type {
   updateCategorySchema,
   updateScheduleSchema,
 } from "./feedepth.schema";
-
-const money = (n: number): number => Math.round(n * 100) / 100;
 
 /** Recompute an invoice's lifecycle status after its amount_due changes. */
 function statusFor(amountDue: number, amountPaid: number, current: string): string {
@@ -321,10 +320,11 @@ export async function applyFine(
 ) {
   return withTransaction(async (client) => {
     const inv = await lockInvoice(client, invoiceId, institutionId);
-    const amountDue = Number(inv.amount_due);
-    const base = money(amountDue + Number(inv.discount_total) - Number(inv.fine_total));
+    const amountDuePaise = toPaise(inv.amount_due);
+    const basePaise =
+      amountDuePaise + toPaise(inv.discount_total) - toPaise(inv.fine_total);
 
-    let fineAmount = input.amount ?? 0;
+    let fineAmountPaise = input.amount != null ? toPaise(input.amount) : 0;
     let days: number | null = null;
     let ruleId: string | null = null;
 
@@ -346,9 +346,9 @@ export async function applyFine(
       const daysOverdue = Math.floor((today.getTime() - due.getTime()) / 86400000);
       const eff = Math.max(0, daysOverdue - rule.grace_days);
       const overdue = daysOverdue > rule.grace_days;
-      if (rule.fine_type === "fixed") fineAmount = overdue ? Number(rule.amount) : 0;
-      else if (rule.fine_type === "per_day") fineAmount = money(Number(rule.amount) * eff);
-      else fineAmount = overdue ? money((base * Number(rule.amount)) / 100) : 0;
+      if (rule.fine_type === "fixed") fineAmountPaise = overdue ? toPaise(rule.amount) : 0;
+      else if (rule.fine_type === "per_day") fineAmountPaise = toPaise(rule.amount) * eff;
+      else fineAmountPaise = overdue ? percentOf(basePaise, Number(rule.amount)) : 0;
       days = eff;
 
       const dup = await client.query(
@@ -358,8 +358,8 @@ export async function applyFine(
       if (dup.rows[0]) throw ApiError.badRequest("This fine rule is already applied to the invoice");
     }
 
-    fineAmount = money(fineAmount);
-    if (fineAmount <= 0) throw ApiError.badRequest("No fine is applicable for this invoice");
+    if (fineAmountPaise <= 0) throw ApiError.badRequest("No fine is applicable for this invoice");
+    const fineAmount = toRupees(fineAmountPaise);
 
     const { rows: fineRows } = await client.query(
       `INSERT INTO invoice_fines
@@ -369,7 +369,7 @@ export async function applyFine(
       [institutionId, invoiceId, ruleId, fineAmount, days, input.reason ?? null, userId]
     );
 
-    const newDue = money(amountDue + fineAmount);
+    const newDue = toRupees(amountDuePaise + fineAmountPaise);
     await client.query(
       "UPDATE invoices SET amount_due = $1, fine_total = fine_total + $2, status = $3 WHERE id = $4",
       [newDue, fineAmount, statusFor(newDue, Number(inv.amount_paid), inv.status), invoiceId]
@@ -423,7 +423,7 @@ export async function waiveFine(
     if (fine.status !== "applied") throw ApiError.badRequest("Fine is not in an applied state");
 
     const inv = await lockInvoice(client, fine.invoice_id, institutionId);
-    const newDue = money(Number(inv.amount_due) - Number(fine.amount));
+    const newDue = toRupees(toPaise(inv.amount_due) - toPaise(fine.amount));
     await client.query(
       "UPDATE invoices SET amount_due = $1, fine_total = fine_total - $2, status = $3 WHERE id = $4",
       [newDue, Number(fine.amount), statusFor(newDue, Number(inv.amount_paid), inv.status), fine.invoice_id]
@@ -470,8 +470,9 @@ export async function applyDiscount(
 ) {
   return withTransaction(async (client) => {
     const inv = await lockInvoice(client, invoiceId, institutionId);
-    const amountDue = Number(inv.amount_due);
-    const base = money(amountDue + Number(inv.discount_total) - Number(inv.fine_total));
+    const amountDuePaise = toPaise(inv.amount_due);
+    const basePaise =
+      amountDuePaise + toPaise(inv.discount_total) - toPaise(inv.fine_total);
 
     let type = input.discountType;
     let value = input.value;
@@ -489,9 +490,11 @@ export async function applyDiscount(
     }
     if (type == null || value == null) throw ApiError.badRequest("Discount type and value are required");
 
-    const amount = type === "percent" ? money((base * value) / 100) : money(value);
-    if (amount <= 0) throw ApiError.badRequest("Discount amount must be positive");
-    if (amount > amountDue) throw ApiError.badRequest("Discount exceeds the invoice's payable amount");
+    const amountPaise = type === "percent" ? percentOf(basePaise, value) : toPaise(value);
+    if (amountPaise <= 0) throw ApiError.badRequest("Discount amount must be positive");
+    if (amountPaise > amountDuePaise)
+      throw ApiError.badRequest("Discount exceeds the invoice's payable amount");
+    const amount = toRupees(amountPaise);
 
     const { rows } = await client.query(
       `INSERT INTO invoice_discounts
@@ -524,10 +527,10 @@ export async function approveDiscount(
 
     const inv = await lockInvoice(client, disc.invoice_id, institutionId);
     const amount = Number(disc.amount);
-    if (amount > Number(inv.amount_due)) {
+    if (toPaise(disc.amount) > toPaise(inv.amount_due)) {
       throw ApiError.badRequest("Discount exceeds the invoice's current payable amount");
     }
-    const newDue = money(Number(inv.amount_due) - amount);
+    const newDue = toRupees(toPaise(inv.amount_due) - toPaise(disc.amount));
     await client.query(
       "UPDATE invoices SET amount_due = $1, discount_total = discount_total + $2, status = $3 WHERE id = $4",
       [newDue, amount, statusFor(newDue, Number(inv.amount_paid), inv.status), disc.invoice_id]
@@ -575,8 +578,8 @@ export async function invoiceBreakdown(invoiceId: string, institutionId: string)
      FROM invoice_discounts WHERE invoice_id = $1 ORDER BY created_at`,
     [invoiceId]
   );
-  const base = money(
-    Number(inv.amountDue) + Number(inv.discountTotal) - Number(inv.fineTotal)
+  const base = toRupees(
+    toPaise(inv.amountDue) + toPaise(inv.discountTotal) - toPaise(inv.fineTotal)
   );
   return {
     invoice: inv,
@@ -584,7 +587,7 @@ export async function invoiceBreakdown(invoiceId: string, institutionId: string)
     base,
     discountTotal: Number(inv.discountTotal),
     fineTotal: Number(inv.fineTotal),
-    outstanding: money(Number(inv.amountDue) - Number(inv.amountPaid)),
+    outstanding: toRupees(toPaise(inv.amountDue) - toPaise(inv.amountPaid)),
     fines: fines.rows,
     discounts: discounts.rows,
   };

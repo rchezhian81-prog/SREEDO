@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { query, withTransaction } from "../../db/postgres";
 import { ApiError } from "../../utils/api-error";
 import { sendMail } from "../../utils/mailer";
+import { toPaise, toRupees } from "../../utils/money";
 import { paginatedResponse, type Pagination } from "../../utils/pagination";
 import type { z } from "zod";
 import type {
@@ -160,23 +161,26 @@ export async function recordPayment(
       throw ApiError.badRequest("Cannot pay a cancelled invoice");
     }
 
-    const outstanding =
-      Number(invoice.amount_due) - Number(invoice.amount_paid);
-    if (input.amount > outstanding) {
+    const amountDuePaise = toPaise(invoice.amount_due);
+    const outstandingPaise = amountDuePaise - toPaise(invoice.amount_paid);
+    const amountPaise = toPaise(input.amount);
+    if (amountPaise > outstandingPaise) {
       throw ApiError.badRequest(
-        `Payment exceeds outstanding balance of ${outstanding.toFixed(2)}`
+        `Payment exceeds outstanding balance of ${toRupees(outstandingPaise).toFixed(2)}`
       );
     }
+    const amount = toRupees(amountPaise);
 
     await client.query(
       `INSERT INTO payments (institution_id, invoice_id, amount, method, reference, received_by)
        VALUES ($1, $2, $3, $4, $5, $6)`,
-      [institutionId, invoiceId, input.amount, input.method ?? "cash", input.reference ?? null, receivedBy]
+      [institutionId, invoiceId, amount, input.method ?? "cash", input.reference ?? null, receivedBy]
     );
 
-    const newPaid = Number(invoice.amount_paid) + input.amount;
+    const newPaidPaise = toPaise(invoice.amount_paid) + amountPaise;
+    const newPaid = toRupees(newPaidPaise);
     const newStatus =
-      newPaid >= Number(invoice.amount_due) ? "paid" : "partially_paid";
+      newPaidPaise >= amountDuePaise ? "paid" : "partially_paid";
     await client.query(
       "UPDATE invoices SET amount_paid = $1, status = $2 WHERE id = $3",
       [newPaid, newStatus, invoiceId]
