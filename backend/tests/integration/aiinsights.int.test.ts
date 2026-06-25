@@ -165,6 +165,35 @@ describe("ai advanced (insights)", () => {
     expect((await get("/api/v1/ai-insights/summary/attendance", tok.student)).status).toBe(403);
   });
 
+  it("analyzes a student's performance with deterministic flags", async () => {
+    const res = await get(`/api/v1/ai-insights/students/${st1}/performance`, tok.admin);
+    expect(res.status).toBe(200);
+    expect(res.body.student.admissionNo).toBe("AIX-1");
+    expect(res.body.attendance).toMatchObject({ present: 2, total: 10, rate: 20 });
+    expect(res.body.fees.outstanding).toBe(1000);
+    // No OpenAI key in tests → metrics/flags still computed, narrative null.
+    expect(res.body.aiAvailable).toBe(false);
+    expect(res.body.narrative).toBeNull();
+    const flagKeys = res.body.flags.map((f: { key: string }) => f.key);
+    expect(flagKeys).toContain("attendance");
+    expect(flagKeys).toContain("fees");
+    const att = res.body.flags.find((f: { key: string }) => f.key === "attendance");
+    expect(att.severity).toBe("high"); // 20% is below the 60% high-risk cutoff
+  });
+
+  it("allows teachers (ai:summarize), blocks students, and 404s an unknown student", async () => {
+    expect(
+      (await get(`/api/v1/ai-insights/students/${st1}/performance`, tok.teacher)).status
+    ).toBe(200);
+    expect(
+      (await get(`/api/v1/ai-insights/students/${st1}/performance`, tok.student)).status
+    ).toBe(403);
+    const missing = "00000000-0000-0000-0000-000000000000";
+    expect(
+      (await get(`/api/v1/ai-insights/students/${missing}/performance`, tok.admin)).status
+    ).toBe(404);
+  });
+
   it("is tenant-scoped (no cross-institution access)", async () => {
     const instB = await createInstitution("AIX2");
     await createUser({ email: "admin@aix2.dev", password: PW, role: "admin", institutionId: instB });
@@ -176,5 +205,9 @@ describe("ai advanced (insights)", () => {
     expect((await get("/api/v1/ai-insights/risk/fees", badmin)).body.pendingCount).toBe(0);
     expect((await get("/api/v1/ai-insights/search?q=report", badmin)).body.results).toHaveLength(0);
     expect((await get("/api/v1/ai-insights/suggestions", badmin)).body.suggestions).toHaveLength(0);
+    // B cannot reach A's student performance.
+    expect(
+      (await get(`/api/v1/ai-insights/students/${st1}/performance`, badmin)).status
+    ).toBe(404);
   });
 });

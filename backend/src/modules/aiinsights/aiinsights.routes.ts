@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { param } from "../../utils/params";
+import { param, uuidParam } from "../../utils/params";
 import { authenticate } from "../../middleware/auth";
 import { requireTenant, tenantId } from "../../middleware/tenant";
 import { requirePermission } from "../../middleware/permissions";
@@ -107,4 +107,28 @@ aiInsightsRouter.get("/search", canSearch, async (req, res) => {
  */
 aiInsightsRouter.get("/suggestions", canSuggest, async (req, res) => {
   res.json(await service.workflowSuggestions(tenantId(req)));
+});
+
+/**
+ * @openapi
+ * /ai-insights/students/{id}/performance:
+ *   get:
+ *     tags: [AI Insights]
+ *     summary: Per-student performance analysis (attendance/exams/homework/fees/discipline) with risk flags + intervention hints
+ *     description: Flags and hints are computed deterministically; an OpenAI narrative is added when configured.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *       - { in: query, name: windowDays, schema: { type: integer, example: 90 } }
+ *     responses:
+ *       200: { description: "{ student, windowDays, attendance, exams, homework, fees, discipline, flags, narrative, aiAvailable }" }
+ *       404: { description: Student not found }
+ */
+aiInsightsRouter.get("/students/:id/performance", canSummarize, async (req, res) => {
+  const q = z
+    .object({ windowDays: z.coerce.number().int().min(1).max(365).optional() })
+    .parse(req.query);
+  res.json(
+    await service.studentPerformance(uuidParam(req), tenantId(req), req.user!.id, q)
+  );
 });
