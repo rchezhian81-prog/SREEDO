@@ -7,6 +7,7 @@ import { dispatchEvent } from "../integrations/webhooks.delivery";
 import type { z } from "zod";
 import type {
   createStudentSchema,
+  linkGuardianSchema,
   listStudentsQuerySchema,
   updateStudentSchema,
 } from "./students.schema";
@@ -285,4 +286,67 @@ export async function childStudentIdsForUser(
     [userId, institutionId]
   );
   return rows.map((r) => r.student_id);
+}
+
+const GUARDIAN_SELECT = `
+  g.id, g.user_id AS "userId", u.full_name AS "fullName", u.email,
+  g.relationship, g.created_at AS "createdAt"
+FROM guardians g JOIN users u ON u.id = g.user_id`;
+
+/** Parent accounts linked to a student (admin view of who can see the child). */
+export async function listGuardians(studentId: string, institutionId: string) {
+  await getStudent(studentId, institutionId); // 404s if the student isn't in this tenant
+  const { rows } = await query(
+    `SELECT ${GUARDIAN_SELECT}
+     WHERE g.student_id = $1 AND g.institution_id = $2
+     ORDER BY u.full_name`,
+    [studentId, institutionId]
+  );
+  return rows;
+}
+
+/** Link a parent account to a student so they can view it in the portal. */
+export async function linkGuardian(
+  studentId: string,
+  input: z.infer<typeof linkGuardianSchema>,
+  institutionId: string
+) {
+  await getStudent(studentId, institutionId); // 404s if the student isn't in this tenant
+  // The linked account must be a parent in the same institution.
+  const { rows: users } = await query<{ role: string }>(
+    "SELECT role FROM users WHERE id = $1 AND institution_id = $2",
+    [input.userId, institutionId]
+  );
+  if (!users[0]) throw ApiError.notFound("User not found");
+  if (users[0].role !== "parent") {
+    throw ApiError.badRequest("Only a parent account can be linked as a guardian");
+  }
+  const inserted = await query<{ id: string }>(
+    `INSERT INTO guardians (institution_id, user_id, student_id, relationship)
+     VALUES ($1, $2, $3, COALESCE($4, 'guardian'))
+     ON CONFLICT (user_id, student_id) DO NOTHING
+     RETURNING id`,
+    [institutionId, input.userId, studentId, input.relationship ?? null]
+  );
+  if (!inserted.rows[0]) {
+    throw ApiError.conflict("This parent is already linked to the student");
+  }
+  const { rows } = await query(
+    `SELECT ${GUARDIAN_SELECT} WHERE g.id = $1`,
+    [inserted.rows[0].id]
+  );
+  return rows[0];
+}
+
+/** Remove a guardian link (by its id) from a student. */
+export async function unlinkGuardian(
+  studentId: string,
+  guardianId: string,
+  institutionId: string
+): Promise<void> {
+  const { rowCount } = await query(
+    "DELETE FROM guardians WHERE id = $1 AND student_id = $2 AND institution_id = $3",
+    [guardianId, studentId, institutionId]
+  );
+  if (!rowCount) throw ApiError.notFound("Guardian link not found");
 }

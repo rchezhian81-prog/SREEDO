@@ -41,3 +41,8 @@ export const importStudentsSchema = z.object({
     .min(1, "At least one row is required")
     .max(1000, "Import is limited to 1000 rows at a time"),
 });
+
+export const linkGuardianSchema = z.object({
+  userId: z.string().uuid(),
+  relationship: z.string().min(1).max(50).optional(),
+});
