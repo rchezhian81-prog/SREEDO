@@ -8,6 +8,7 @@ import {
   createStudentSchema,
   deleteStudentQuerySchema,
   importStudentsSchema,
+  linkGuardianSchema,
   listStudentsQuerySchema,
   updateStudentSchema,
 } from "./students.schema";
@@ -156,5 +157,72 @@ studentsRouter.delete("/:id", authorize("admin"), async (req, res) => {
   } else {
     await studentsService.archiveStudent(id, tenantId(req));
   }
+  res.status(204).end();
+});
+
+/**
+ * @openapi
+ * /students/{id}/guardians:
+ *   get:
+ *     tags: [Students]
+ *     summary: List the parent accounts linked to a student (admin)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: Linked guardians }
+ *       404: { description: Student not found }
+ *   post:
+ *     tags: [Students]
+ *     summary: Link a parent account to a student so they can view it in the portal (admin)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [userId]
+ *             properties:
+ *               userId: { type: string, format: uuid, description: A user account with the parent role }
+ *               relationship: { type: string, description: "e.g. father, mother, guardian" }
+ *     responses:
+ *       201: { description: Created guardian link }
+ *       400: { description: The user is not a parent account }
+ *       404: { description: Student or user not found }
+ *       409: { description: This parent is already linked }
+ */
+studentsRouter.get("/:id/guardians", authorize("admin"), async (req, res) => {
+  res.json(await studentsService.listGuardians(uuidParam(req), tenantId(req)));
+});
+
+studentsRouter.post("/:id/guardians", authorize("admin"), async (req, res) => {
+  const input = linkGuardianSchema.parse(req.body);
+  const guardian = await studentsService.linkGuardian(uuidParam(req), input, tenantId(req));
+  res.status(201).json(guardian);
+});
+
+/**
+ * @openapi
+ * /students/{id}/guardians/{guardianId}:
+ *   delete:
+ *     tags: [Students]
+ *     summary: Unlink a parent account from a student (admin)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *       - { in: path, name: guardianId, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       204: { description: Unlinked }
+ *       404: { description: Guardian link not found }
+ */
+studentsRouter.delete("/:id/guardians/:guardianId", authorize("admin"), async (req, res) => {
+  await studentsService.unlinkGuardian(
+    uuidParam(req),
+    uuidParam(req, "guardianId"),
+    tenantId(req)
+  );
   res.status(204).end();
 });

@@ -21,6 +21,7 @@ import type { Paginated, SchoolClass, Student } from "@/types";
 import { useI18n } from "@/i18n/I18nProvider";
 import { ImportCsvModal, type ImportColumn } from "@/components/ImportCsvModal";
 import { CertificateModal } from "@/components/CertificateModal";
+import { GuardiansModal } from "@/components/GuardiansModal";
 
 const studentSchema = z.object({
   firstName: z.string().min(1, "Required"),
@@ -79,6 +80,7 @@ export default function StudentsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [certFor, setCertFor] = useState<Student | null>(null);
+  const [guardiansFor, setGuardiansFor] = useState<Student | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
 
   const limit = 10;
@@ -229,6 +231,12 @@ export default function StudentsPage() {
                   <td className="px-4 py-3 text-right">
                     <div className="flex justify-end gap-3">
                       <button
+                        onClick={() => setGuardiansFor(student)}
+                        className="text-xs font-medium text-brand-600 hover:text-brand-600 dark:text-brand-300"
+                      >
+                        Guardians
+                      </button>
+                      <button
                         onClick={() => setCertFor(student)}
                         className="text-xs font-medium text-brand-600 hover:text-brand-600 dark:text-brand-300"
                       >
@@ -347,6 +355,11 @@ export default function StudentsPage() {
       />
 
       <CertificateModal student={certFor} onClose={() => setCertFor(null)} />
+
+      <GuardiansModal
+        student={guardiansFor}
+        onClose={() => setGuardiansFor(null)}
+      />
     </>
   );
 }
