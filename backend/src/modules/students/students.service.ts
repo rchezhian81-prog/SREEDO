@@ -3,6 +3,7 @@ import { ApiError } from "../../utils/api-error";
 import { activePlan, assertWithinPlanLimit } from "../../utils/plan-limits";
 import { paginatedResponse, type Pagination } from "../../utils/pagination";
 import { invalidateDashboard } from "../dashboard/dashboard.routes";
+import { dispatchEvent } from "../integrations/webhooks.delivery";
 import type { z } from "zod";
 import type {
   createStudentSchema,
@@ -121,7 +122,16 @@ export async function createStudent(
     ]
   );
   invalidateDashboard(institutionId); // student count changed
-  return getStudent(rows[0].id, institutionId);
+  const student = await getStudent(rows[0].id, institutionId);
+  // Fire-and-forget domain event for any registered webhooks. dispatchEvent
+  // swallows its own errors, so this can never affect the create or its response.
+  void dispatchEvent(institutionId, "student.created", {
+    id: student.id,
+    admissionNo,
+    firstName: input.firstName,
+    lastName: input.lastName,
+  });
+  return student;
 }
 
 /**

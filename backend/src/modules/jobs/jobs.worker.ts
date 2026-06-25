@@ -7,6 +7,7 @@ import {
   generateFeeReminders,
 } from "../communication/communication.service";
 import { enqueueDueScheduledBackups, runScheduledBackup } from "../backups/backups.service";
+import { runWebhookDeliveryJob } from "../integrations/webhooks.delivery";
 import { runSchedulerTick } from "./jobs.service";
 
 interface ClaimedJob {
@@ -54,6 +55,12 @@ const HANDLERS: Record<string, Handler> = {
   // Automated platform-wide database backup (enqueued by the schedule tick).
   scheduled_backup: async () => {
     await runScheduledBackup();
+  },
+
+  // Deliver one queued webhook event (HMAC-signed); throws on non-2xx so the
+  // queue retries it with backoff.
+  webhook_deliver: async (job) => {
+    await runWebhookDeliveryJob(job.payload, job.institutionId, job.attempts);
   },
 };
 

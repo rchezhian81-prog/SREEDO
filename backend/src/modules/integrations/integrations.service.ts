@@ -99,12 +99,30 @@ export async function createWebhook(
   institutionId: string,
   userId: string
 ) {
+  // The signing secret is generated here and returned ONCE (like an API key);
+  // the masked SELECT never exposes it again. Receivers use it to verify the
+  // X-Sreedo-Signature HMAC on each delivery.
+  const secret = `whsec_${randomBytes(24).toString("hex")}`;
   const { rows } = await query<{ id: string }>(
-    `INSERT INTO webhook_endpoints (institution_id, url, description, event_types, created_by)
-     VALUES ($1,$2,$3,$4,$5) RETURNING id`,
-    [institutionId, input.url, input.description ?? null, input.eventTypes ?? "*", userId]
+    `INSERT INTO webhook_endpoints (institution_id, url, description, event_types, secret, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+    [institutionId, input.url, input.description ?? null, input.eventTypes ?? "*", secret, userId]
   );
-  return getWebhook(rows[0].id, institutionId);
+  const created = await getWebhook(rows[0].id, institutionId);
+  return { ...created, secret };
+}
+
+export async function listDeliveries(webhookId: string, institutionId: string) {
+  await getWebhook(webhookId, institutionId); // 404s if it isn't this tenant's
+  const { rows } = await query(
+    `SELECT id, event_type AS "eventType", status_code AS "statusCode", success,
+            error, attempt, created_at AS "createdAt"
+     FROM webhook_deliveries
+     WHERE webhook_id = $1 AND institution_id = $2
+     ORDER BY created_at DESC LIMIT 50`,
+    [webhookId, institutionId]
+  );
+  return rows;
 }
 
 const WEBHOOK_UPDATE_MAP: Record<string, string> = {

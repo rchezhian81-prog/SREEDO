@@ -8,6 +8,7 @@ import {
   updateWebhookSchema,
 } from "./integrations.schema";
 import * as service from "./integrations.service";
+import { sendTestEvent } from "./webhooks.delivery";
 
 // Integrations (API keys + webhooks) — institution-admin only, tenant-scoped.
 export const integrationsRouter = Router();
@@ -144,4 +145,38 @@ integrationsRouter.patch("/webhooks/:id", async (req, res) => {
 integrationsRouter.delete("/webhooks/:id", async (req, res) => {
   await service.deleteWebhook(uuidParam(req), tenantId(req));
   res.status(204).end();
+});
+
+/**
+ * @openapi
+ * /integrations/webhooks/{id}/test:
+ *   post:
+ *     tags: [Integrations]
+ *     summary: Send a signed test ("ping") event to the endpoint now and return the result
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: "{ success, statusCode, error }" }
+ *       404: { description: Not found }
+ */
+integrationsRouter.post("/webhooks/:id/test", async (req, res) => {
+  res.json(await sendTestEvent(uuidParam(req), tenantId(req)));
+});
+
+/**
+ * @openapi
+ * /integrations/webhooks/{id}/deliveries:
+ *   get:
+ *     tags: [Integrations]
+ *     summary: Recent delivery attempts for a webhook (most recent first, max 50)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: Delivery log }
+ *       404: { description: Not found }
+ */
+integrationsRouter.get("/webhooks/:id/deliveries", async (req, res) => {
+  res.json(await service.listDeliveries(uuidParam(req), tenantId(req)));
 });
