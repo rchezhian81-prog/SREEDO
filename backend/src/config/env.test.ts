@@ -30,6 +30,12 @@ describe("requiredSecret — production secret guard", () => {
     expect(() => requiredSecret(NAME, FALLBACK)).toThrow();
   });
 
+  it("throws in production for any dev-prefixed value (supersedes the old guard)", () => {
+    process.env.NODE_ENV = "production";
+    process.env[NAME] = "dev-some-other-value";
+    expect(() => requiredSecret(NAME, FALLBACK)).toThrow();
+  });
+
   it("returns a real value in production", () => {
     process.env.NODE_ENV = "production";
     process.env[NAME] = "a-genuinely-unique-strong-secret";
