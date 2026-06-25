@@ -56,6 +56,7 @@ import {
   Layers,
   Network,
   ClipboardList,
+  Rocket,
 } from "lucide-react";
 
 /*
@@ -122,6 +123,7 @@ const MAP = {
   layers: Layers,
   network: Network,
   clipboard: ClipboardList,
+  rocket: Rocket,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof MAP;

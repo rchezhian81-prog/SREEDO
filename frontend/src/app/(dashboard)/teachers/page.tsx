@@ -18,6 +18,7 @@ import {
 } from "@/components/ui";
 import type { Paginated, Teacher } from "@/types";
 import { ImportCsvModal, type ImportColumn } from "@/components/ImportCsvModal";
+import { useTerms } from "@/lib/terms";
 
 const teacherSchema = z.object({
   firstName: z.string().min(1, "Required"),
@@ -53,6 +54,7 @@ const IMPORT_SAMPLE: Record<string, string> = {
 };
 
 export default function TeachersPage() {
+  const term = useTerms();
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -94,7 +96,9 @@ export default function TeachersPage() {
       await load();
     } catch (err) {
       setServerError(
-        err instanceof ApiError ? err.message : "Failed to save teacher"
+        err instanceof ApiError
+          ? err.message
+          : `Failed to save ${term.teacher.toLowerCase()}`
       );
     }
   };
@@ -108,14 +112,16 @@ export default function TeachersPage() {
   return (
     <>
       <PageHeader
-        title="Teachers"
-        subtitle={`${total} on staff`}
+        title={term.teachers}
+        subtitle={`${total} ${term.teachers.toLowerCase()}`}
         action={
           <div className="flex gap-2">
             <Button variant="secondary" onClick={() => setImportOpen(true)}>
               Import CSV
             </Button>
-            <Button onClick={() => setModalOpen(true)}>+ Add teacher</Button>
+            <Button onClick={() => setModalOpen(true)}>
+              + Add {term.teacher.toLowerCase()}
+            </Button>
           </div>
         }
       />
@@ -123,7 +129,7 @@ export default function TeachersPage() {
       {loading ? (
         <Spinner />
       ) : teachers.length === 0 ? (
-        <EmptyState message="No teachers yet" />
+        <EmptyState message={`No ${term.teachers.toLowerCase()} yet`} />
       ) : (
         <div className="overflow-x-auto rounded-xl border border-line bg-surface">
           <table className="w-full text-left text-sm">
@@ -176,7 +182,7 @@ export default function TeachersPage() {
       )}
 
       <Modal
-        title="Add teacher"
+        title={`Add ${term.teacher.toLowerCase()}`}
         open={modalOpen}
         onClose={() => setModalOpen(false)}
       >
@@ -215,7 +221,7 @@ export default function TeachersPage() {
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Saving…" : "Save teacher"}
+              {isSubmitting ? "Saving…" : `Save ${term.teacher.toLowerCase()}`}
             </Button>
           </div>
         </form>
@@ -224,7 +230,7 @@ export default function TeachersPage() {
       <ImportCsvModal
         open={importOpen}
         onClose={() => setImportOpen(false)}
-        title="Import teachers from CSV"
+        title={`Import ${term.teachers.toLowerCase()} from CSV`}
         endpoint="/teachers/import"
         columns={IMPORT_COLUMNS}
         sample={IMPORT_SAMPLE}

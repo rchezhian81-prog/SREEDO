@@ -22,6 +22,7 @@ type NavItem = {
 
 const SCHOOL_NAV: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: "grid" },
+  { href: "/get-started", label: "Get Started", icon: "rocket", adminOnly: true },
   { href: "/analytics", label: "Analytics", icon: "trendUp" },
   { href: "/students", label: "Students", icon: "cap" },
   { href: "/admissions", label: "Admissions", icon: "card", adminOnly: true },
@@ -93,6 +94,9 @@ const COLLEGE_ACADEMICS: NavItem[] = [
 
 const COLLEGE_NAV: NavItem[] = SCHOOL_NAV.flatMap((item) =>
   item.href === "/classes" ? COLLEGE_ACADEMICS : [item]
+).map((item) =>
+  // College speaks of "Faculty", not "Teachers".
+  item.href === "/teachers" ? { ...item, label: "Faculty" } : item
 );
 
 const SUPER_ADMIN_NAV: NavItem[] = [
