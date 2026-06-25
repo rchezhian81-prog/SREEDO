@@ -4,6 +4,7 @@ import { uuidParam } from "../../utils/params";
 import { authenticate } from "../../middleware/auth";
 import { requireTenant, tenantId } from "../../middleware/tenant";
 import { requirePermission } from "../../middleware/permissions";
+import { requireInstitutionType } from "../../middleware/institution-type";
 import {
   accessibleStudentIds,
   assertStudentAccess,
@@ -73,6 +74,12 @@ collegeRouter.patch("/settings", canUpdate, async (req, res) => {
   const { type } = updateSettingsSchema.parse(req.body);
   res.json(await service.setInstitutionType(tenantId(req), type));
 });
+
+// College structures below (departments, programs, semesters, batches,
+// program-subjects, enrollments, results, staff allocations) only exist for
+// college institutions. /overview and /settings above stay open to any tenant,
+// so a school can read its mode and switch in.
+collegeRouter.use(requireInstitutionType("college"));
 
 // --- Departments ---
 

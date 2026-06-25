@@ -350,6 +350,7 @@ export default function DashboardLayout({
   const { t } = useI18n();
   const { user, accessToken, refreshToken, logout } = useAuthStore();
   const mode = useModeStore((s) => s.mode);
+  const setMode = useModeStore((s) => s.setMode);
   const [hydrated, setHydrated] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -386,6 +387,18 @@ export default function DashboardLayout({
     if (!hydrated || !accessToken || user?.role === "super_admin") return;
     api.get<Branding>("/branding").then(setBranding).catch(() => undefined);
   }, [hydrated, accessToken, user, setBranding]);
+
+  // The institution's type on the backend is the source of truth for School vs
+  // College — reconcile the (pre-login, user-guessed) mode to it on load.
+  useEffect(() => {
+    if (!hydrated || !accessToken || user?.role === "super_admin") return;
+    api
+      .get<{ institutionType: "school" | "college" | null }>("/auth/me")
+      .then((me) => {
+        if (me.institutionType) setMode(me.institutionType);
+      })
+      .catch(() => undefined);
+  }, [hydrated, accessToken, user, setMode]);
 
   const isSuper = user?.role === "super_admin";
   const inSuperArea = pathname.startsWith("/super-admin");

@@ -257,8 +257,14 @@ export async function revokeSession(
 }
 
 export async function getProfile(userId: string) {
-  const { rows } = await query<UserRow>(
-    "SELECT id, email, full_name, role, phone, is_active, institution_id, totp_enabled FROM users WHERE id = $1",
+  const { rows } = await query<
+    UserRow & { institution_type: "school" | "college" | null }
+  >(
+    `SELECT u.id, u.email, u.full_name, u.role, u.phone, u.is_active,
+            u.institution_id, u.totp_enabled, i.type AS institution_type
+     FROM users u
+     LEFT JOIN institutions i ON i.id = u.institution_id
+     WHERE u.id = $1`,
     [userId]
   );
   const user = rows[0];
@@ -272,6 +278,7 @@ export async function getProfile(userId: string) {
     role: user.role,
     phone: user.phone,
     institutionId: user.institution_id ?? null,
+    institutionType: user.institution_type ?? null,
     twoFactorEnabled: user.totp_enabled,
   };
 }
