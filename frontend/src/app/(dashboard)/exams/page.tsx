@@ -28,6 +28,7 @@ import type {
   Student,
   Subject,
 } from "@/types";
+import { useTerms } from "@/lib/terms";
 
 const examSchema = z.object({
   name: z.string().min(1, "Required"),
@@ -44,6 +45,7 @@ interface SectionOption {
 }
 
 export default function ExamsPage() {
+  const term = useTerms();
   const role = useAuthStore((state) => state.user?.role);
   const canCreate = role === "admin";
   const canEnter = role === "admin" || role === "teacher";
@@ -368,7 +370,7 @@ export default function ExamsPage() {
                     <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
                       <tr>
                         <th className="px-4 py-3">Student</th>
-                        <th className="px-4 py-3">Admission No</th>
+                        <th className="px-4 py-3">{term.admissionNo}</th>
                         <th className="px-4 py-3 w-40">
                           Marks ({selectedSubject?.name ?? "subject"})
                         </th>
@@ -416,7 +418,7 @@ export default function ExamsPage() {
                       <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
                         <tr>
                           <th className="px-4 py-3">Student</th>
-                          <th className="px-4 py-3">Subject</th>
+                          <th className="px-4 py-3">{term.subject}</th>
                           <th className="px-4 py-3">Marks</th>
                           <th className="px-4 py-3">Grade</th>
                         </tr>

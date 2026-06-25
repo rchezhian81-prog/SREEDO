@@ -16,6 +16,7 @@ import {
   Textarea,
 } from "@/components/ui";
 import type { Paginated, SchoolClass } from "@/types";
+import { useTerms } from "@/lib/terms";
 
 interface Poll {
   id: string;
@@ -26,6 +27,7 @@ interface Poll {
 }
 
 export default function PollsPage() {
+  const term = useTerms();
   const [rows, setRows] = useState<Poll[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -189,7 +191,7 @@ export default function PollsPage() {
           <Field label="Question">
             <Input value={question} onChange={(e) => setQuestion(e.target.value)} />
           </Field>
-          <Field label="Class">
+          <Field label={term.klass}>
             <Select value={classId} onChange={(e) => setClassId(e.target.value)}>
               <option value="">School-wide</option>
               {classes.map((c) => (

@@ -20,6 +20,7 @@ import {
   Textarea,
 } from "@/components/ui";
 import type { StudentDues, TransferCertificate } from "@/types";
+import { useTerms } from "@/lib/terms";
 
 const STATUS_TONES: Record<
   TransferCertificate["status"],
@@ -78,6 +79,7 @@ function DetailRow({
 }
 
 export default function TransferCertificateDetailPage() {
+  const term = useTerms();
   const params = useParams<{ id: string }>();
   const id = params.id;
 
@@ -363,7 +365,7 @@ export default function TransferCertificateDetailPage() {
           <div className="grid gap-4 sm:grid-cols-2">
             <DetailRow label="TC No" value={tc.tcNo} />
             <DetailRow label="Student" value={tc.studentName} />
-            <DetailRow label="Admission No" value={tc.admissionNo} />
+            <DetailRow label={term.admissionNo} value={tc.admissionNo} />
             <DetailRow
               label="Class / Section"
               value={

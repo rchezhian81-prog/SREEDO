@@ -26,6 +26,7 @@ import type {
   Subject,
 } from "@/types";
 import { useI18n } from "@/i18n/I18nProvider";
+import { useTerms } from "@/lib/terms";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
 
@@ -131,6 +132,7 @@ const emptyForm: HomeworkForm = {
 };
 
 export default function HomeworkPage() {
+  const term = useTerms();
   const { t } = useI18n();
   const role = useAuthStore((state) => state.user?.role);
   const canManage = role === "admin" || role === "teacher";
@@ -342,7 +344,7 @@ export default function HomeworkPage() {
                     <tr>
                       <th className="px-4 py-3">Title</th>
                       <th className="px-4 py-3">Class / Section</th>
-                      <th className="px-4 py-3">Subject</th>
+                      <th className="px-4 py-3">{term.subject}</th>
                       <th className="px-4 py-3">Due</th>
                       <th className="px-4 py-3">Submissions</th>
                       <th className="px-4 py-3" />
@@ -411,7 +413,7 @@ export default function HomeworkPage() {
       >
         <div className="space-y-4">
           {!editing && (
-            <Field label="Section">
+            <Field label={term.section}>
               <Select
                 value={form.sectionId}
                 onChange={(event) =>
@@ -427,7 +429,7 @@ export default function HomeworkPage() {
               </Select>
             </Field>
           )}
-          <Field label="Subject">
+          <Field label={term.subject}>
             <Select
               value={form.subjectId}
               onChange={(event) =>

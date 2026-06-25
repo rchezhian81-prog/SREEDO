@@ -25,6 +25,7 @@ import type {
   SchoolClass,
   Student,
 } from "@/types";
+import { useTerms } from "@/lib/terms";
 
 const bandSchema = z.object({
   grade: z.string().min(1, "Required"),
@@ -68,6 +69,7 @@ async function downloadPdf(path: string, filename: string) {
 }
 
 export default function ReportsPage() {
+  const term = useTerms();
   const role = useAuthStore((state) => state.user?.role);
   const canManage = role === "admin" || role === "teacher";
 
@@ -237,7 +239,7 @@ export default function ReportsPage() {
   return (
     <>
       <PageHeader
-        title="Report Cards"
+        title={`${term.reportCard}s`}
         subtitle="Grade scale, report cards & mark sheets"
       />
 

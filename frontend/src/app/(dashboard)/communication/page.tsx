@@ -24,6 +24,7 @@ import type {
   Student,
 } from "@/types";
 import { useI18n } from "@/i18n/I18nProvider";
+import { useTerms } from "@/lib/terms";
 
 type Tab = "compose" | "sent" | "inbox";
 
@@ -117,6 +118,7 @@ function ComposeTab({
 }: {
   canSendNotifications: boolean;
 }) {
+  const term = useTerms();
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [category, setCategory] = useState("message");
@@ -259,7 +261,7 @@ function ComposeTab({
           </div>
 
           {audienceType === "section" && (
-            <Field label="Section">
+            <Field label={term.section}>
               <Select
                 value={audienceRef}
                 onChange={(event) => setAudienceRef(event.target.value)}
@@ -275,7 +277,7 @@ function ComposeTab({
           )}
 
           {audienceType === "class" && (
-            <Field label="Class">
+            <Field label={term.klass}>
               <Select
                 value={audienceRef}
                 onChange={(event) => setAudienceRef(event.target.value)}

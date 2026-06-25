@@ -16,8 +16,10 @@ import {
   Spinner,
 } from "@/components/ui";
 import type { AiAttendanceRisk } from "@/types";
+import { useTerms } from "@/lib/terms";
 
 export default function AttendanceRiskPage() {
+  const term = useTerms();
   const { can, loading: permsLoading } = usePermissions();
   const allowed = can("ai:risk_alerts");
 
@@ -149,7 +151,7 @@ export default function AttendanceRiskPage() {
                   <table className="w-full text-left text-sm">
                     <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
                       <tr>
-                        <th className="px-4 py-3">Admission No</th>
+                        <th className="px-4 py-3">{term.admissionNo}</th>
                         <th className="px-4 py-3">Name</th>
                         <th className="px-4 py-3">Present / Total</th>
                         <th className="px-4 py-3">Rate</th>

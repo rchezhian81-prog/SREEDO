@@ -18,6 +18,7 @@ import {
   Textarea,
 } from "@/components/ui";
 import type { Paginated, SchoolClass, Subject } from "@/types";
+import { useTerms } from "@/lib/terms";
 
 interface Material {
   id: string;
@@ -41,6 +42,7 @@ const materialSchema = z.object({
 type MaterialForm = z.infer<typeof materialSchema>;
 
 export default function StudyMaterialsPage() {
+  const term = useTerms();
   const [rows, setRows] = useState<Material[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -191,7 +193,7 @@ export default function StudyMaterialsPage() {
               <tr>
                 <th className="px-4 py-3">Title</th>
                 <th className="px-4 py-3">Class</th>
-                <th className="px-4 py-3">Subject</th>
+                <th className="px-4 py-3">{term.subject}</th>
                 <th className="px-4 py-3">Link</th>
                 <th className="px-4 py-3" />
               </tr>
@@ -248,7 +250,7 @@ export default function StudyMaterialsPage() {
             <Input placeholder="https://…" {...register("fileUrl")} />
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Class">
+            <Field label={term.klass}>
               <Select {...register("classId")}>
                 <option value="">School-wide</option>
                 {classes.map((c) => (
@@ -258,7 +260,7 @@ export default function StudyMaterialsPage() {
                 ))}
               </Select>
             </Field>
-            <Field label="Subject">
+            <Field label={term.subject}>
               <Select {...register("subjectId")}>
                 <option value="">None</option>
                 {subjects.map((s) => (

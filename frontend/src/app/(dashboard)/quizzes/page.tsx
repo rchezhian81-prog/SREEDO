@@ -19,6 +19,7 @@ import {
   Textarea,
 } from "@/components/ui";
 import type { Paginated, SchoolClass, Subject } from "@/types";
+import { useTerms } from "@/lib/terms";
 
 interface Quiz {
   id: string;
@@ -39,6 +40,7 @@ const quizSchema = z.object({
 type QuizForm = z.infer<typeof quizSchema>;
 
 export default function QuizzesPage() {
+  const term = useTerms();
   const [rows, setRows] = useState<Quiz[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -137,7 +139,7 @@ export default function QuizzesPage() {
               <tr>
                 <th className="px-4 py-3">Title</th>
                 <th className="px-4 py-3">Class</th>
-                <th className="px-4 py-3">Subject</th>
+                <th className="px-4 py-3">{term.subject}</th>
                 <th className="px-4 py-3">Questions</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3" />
@@ -204,7 +206,7 @@ export default function QuizzesPage() {
             <Input {...register("title")} />
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Class">
+            <Field label={term.klass}>
               <Select {...register("classId")}>
                 <option value="">School-wide</option>
                 {classes.map((c) => (
@@ -214,7 +216,7 @@ export default function QuizzesPage() {
                 ))}
               </Select>
             </Field>
-            <Field label="Subject">
+            <Field label={term.subject}>
               <Select {...register("subjectId")}>
                 <option value="">None</option>
                 {subjects.map((s) => (
