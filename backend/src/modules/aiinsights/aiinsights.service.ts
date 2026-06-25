@@ -307,3 +307,158 @@ export async function insightsDashboard(institutionId: string) {
     suggestions,
   };
 }
+
+// --- Per-student performance analysis ---
+
+interface PerfFlag {
+  key: string;
+  severity: "low" | "medium" | "high";
+  detail: string;
+  hint: string;
+}
+
+/**
+ * Combines one student's attendance, exam, homework, fee and disciplinary signals
+ * into a performance snapshot with deterministic risk flags + intervention hints.
+ * The flags/hints are always computed locally; OpenAI only adds an optional
+ * narrative. Tenant-scoped (404 if the student isn't in this institution).
+ */
+export async function studentPerformance(
+  studentId: string,
+  institutionId: string,
+  userId: string,
+  opts: { windowDays?: number } = {}
+) {
+  const windowDays = opts.windowDays ?? 90;
+
+  const { rows: srows } = await query<{
+    id: string;
+    admissionNo: string;
+    name: string;
+    className: string | null;
+    sectionName: string | null;
+    sectionId: string | null;
+  }>(
+    `SELECT s.id, s.admission_no AS "admissionNo",
+            s.first_name || ' ' || s.last_name AS name,
+            c.name AS "className", sec.name AS "sectionName", s.section_id AS "sectionId"
+     FROM students s
+     LEFT JOIN sections sec ON sec.id = s.section_id
+     LEFT JOIN classes c ON c.id = sec.class_id
+     WHERE s.id = $1 AND s.institution_id = $2`,
+    [studentId, institutionId]
+  );
+  const student = srows[0];
+  if (!student) throw ApiError.notFound("Student not found");
+
+  const { rows: mrows } = await query<{
+    attPresent: number;
+    attTotal: number;
+    examAvg: number | null;
+    examCount: number;
+    hwSubmitted: number;
+    hwAssigned: number;
+    feeOutstanding: number;
+    disciplineOpen: number;
+    disciplineTotal: number;
+  }>(
+    `SELECT
+       (SELECT count(*) FILTER (WHERE status IN ('present','late'))::int FROM attendance_records
+          WHERE student_id = $1 AND institution_id = $2 AND date >= CURRENT_DATE - $3::int) AS "attPresent",
+       (SELECT count(*)::int FROM attendance_records
+          WHERE student_id = $1 AND institution_id = $2 AND date >= CURRENT_DATE - $3::int) AS "attTotal",
+       (SELECT round(avg(marks_obtained / NULLIF(max_marks,0) * 100), 1)::float FROM exam_results
+          WHERE student_id = $1 AND institution_id = $2) AS "examAvg",
+       (SELECT count(*)::int FROM exam_results WHERE student_id = $1 AND institution_id = $2) AS "examCount",
+       (SELECT count(*)::int FROM homework_submissions WHERE student_id = $1 AND institution_id = $2) AS "hwSubmitted",
+       (SELECT count(*)::int FROM homework WHERE institution_id = $2 AND section_id = $4) AS "hwAssigned",
+       (SELECT COALESCE(sum(amount_due - amount_paid),0)::float FROM invoices
+          WHERE student_id = $1 AND institution_id = $2 AND status IN ('pending','partially_paid')) AS "feeOutstanding",
+       (SELECT count(*)::int FROM disciplinary_records
+          WHERE student_id = $1 AND institution_id = $2 AND status NOT IN ('closed','cancelled')) AS "disciplineOpen",
+       (SELECT count(*)::int FROM disciplinary_records WHERE student_id = $1 AND institution_id = $2) AS "disciplineTotal"`,
+    [studentId, institutionId, windowDays, student.sectionId]
+  );
+  const m = mrows[0];
+
+  const attendanceRate = m.attTotal > 0 ? Math.round((m.attPresent / m.attTotal) * 100) : null;
+  const homeworkRate =
+    m.hwAssigned > 0 ? Math.min(100, Math.round((m.hwSubmitted / m.hwAssigned) * 100)) : null;
+  const examAvg = m.examAvg;
+  const feeOutstanding = Math.round(m.feeOutstanding * 100) / 100;
+
+  const flags: PerfFlag[] = [];
+  if (attendanceRate !== null && attendanceRate < 75) {
+    flags.push({
+      key: "attendance",
+      severity: attendanceRate < 60 ? "high" : "medium",
+      detail: `Attendance ${attendanceRate}% over the last ${windowDays} days`,
+      hint: "Contact the guardian and check for a pattern of absences.",
+    });
+  }
+  if (examAvg !== null && m.examCount > 0 && examAvg < 40) {
+    flags.push({
+      key: "academics",
+      severity: examAvg < 33 ? "high" : "medium",
+      detail: `Average exam score ${examAvg}% across ${m.examCount} result(s)`,
+      hint: "Consider remedial support or a parent-teacher discussion.",
+    });
+  }
+  if (homeworkRate !== null && homeworkRate < 60) {
+    flags.push({
+      key: "homework",
+      severity: "medium",
+      detail: `Homework submission rate ${homeworkRate}% (${m.hwSubmitted}/${m.hwAssigned})`,
+      hint: "Follow up on missing submissions and the study routine.",
+    });
+  }
+  if (feeOutstanding > 0) {
+    flags.push({
+      key: "fees",
+      severity: "low",
+      detail: `Outstanding fees of ${feeOutstanding}`,
+      hint: "Coordinate a fee reminder via Communication (manual trigger).",
+    });
+  }
+  if (m.disciplineOpen > 0) {
+    flags.push({
+      key: "discipline",
+      severity: m.disciplineOpen > 1 ? "high" : "medium",
+      detail: `${m.disciplineOpen} open disciplinary record(s)`,
+      hint: "Review the disciplinary timeline and plan a counselling step.",
+    });
+  }
+
+  logUsage("student_performance", userId, institutionId);
+  const narrative = await narrate(
+    "You are a supportive student-support analyst. Given one student's metrics and risk flags, write 2-4 short bullet points: overall standing, the most important concern, and concrete intervention hints. Use only the data given; never invent numbers or names.",
+    `Metrics: ${JSON.stringify({
+      attendanceRate,
+      examAvg,
+      examCount: m.examCount,
+      homeworkRate,
+      feeOutstanding,
+      disciplineOpen: m.disciplineOpen,
+      windowDays,
+    })}\nFlags: ${JSON.stringify(flags)}`
+  );
+
+  return {
+    student: {
+      id: student.id,
+      admissionNo: student.admissionNo,
+      name: student.name,
+      className: student.className,
+      sectionName: student.sectionName,
+    },
+    windowDays,
+    attendance: { present: m.attPresent, total: m.attTotal, rate: attendanceRate },
+    exams: { average: examAvg, count: m.examCount },
+    homework: { submitted: m.hwSubmitted, assigned: m.hwAssigned, rate: homeworkRate },
+    fees: { outstanding: feeOutstanding },
+    discipline: { open: m.disciplineOpen, total: m.disciplineTotal },
+    flags,
+    narrative,
+    aiAvailable: aiAvailable(),
+  };
+}
