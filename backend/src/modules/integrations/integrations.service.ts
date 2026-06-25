@@ -57,17 +57,21 @@ export async function deleteApiKey(id: string, institutionId: string): Promise<v
 }
 
 /**
- * Resolve an API key to its tenant (for future API-key authenticated access).
- * Returns the institution id, or null if the key is unknown/inactive.
+ * Resolve an API key to the tenant + owner it acts as (used by the /ext API-key
+ * auth). Returns null if the key is unknown or inactive; bumps last_used_at on a
+ * hit. `userId` is the admin who created the key (its audit principal), or null
+ * if that user was since removed.
  */
-export async function resolveApiKey(fullKey: string): Promise<string | null> {
-  const { rows } = await query<{ institution_id: string }>(
-    "SELECT institution_id FROM api_keys WHERE key_hash = $1 AND is_active = true",
+export async function resolveApiKey(
+  fullKey: string
+): Promise<{ institutionId: string; userId: string | null } | null> {
+  const { rows } = await query<{ institution_id: string; created_by: string | null }>(
+    "SELECT institution_id, created_by FROM api_keys WHERE key_hash = $1 AND is_active = true",
     [sha256(fullKey)]
   );
   if (!rows[0]) return null;
   await query("UPDATE api_keys SET last_used_at = now() WHERE key_hash = $1", [sha256(fullKey)]);
-  return rows[0].institution_id;
+  return { institutionId: rows[0].institution_id, userId: rows[0].created_by };
 }
 
 // -------------------------------------------------------------------- webhooks

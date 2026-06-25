@@ -19,6 +19,13 @@ export const swaggerSpec = swaggerJsdoc({
           scheme: "bearer",
           bearerFormat: "JWT",
         },
+        apiKeyAuth: {
+          type: "apiKey",
+          in: "header",
+          name: "x-api-key",
+          description:
+            "Per-institution API key (Integrations → API keys). Authenticates the read-only /ext endpoints.",
+        },
       },
     },
     tags: [
@@ -33,6 +40,7 @@ export const swaggerSpec = swaggerJsdoc({
       { name: "Announcements" },
       { name: "Dashboard" },
       { name: "AI" },
+      { name: "External API" },
     ],
   },
   // Glob covers both tsx (src/*.ts) and compiled (dist/*.js) execution.

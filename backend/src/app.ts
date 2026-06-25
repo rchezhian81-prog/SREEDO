@@ -33,6 +33,7 @@ import { pollsRouter } from "./modules/polls/polls.routes";
 import { lostFoundRouter } from "./modules/lostfound/lostfound.routes";
 import { galleryRouter } from "./modules/gallery/gallery.routes";
 import { integrationsRouter } from "./modules/integrations/integrations.routes";
+import { extRouter } from "./modules/ext/ext.routes";
 import { brandingRouter } from "./modules/branding/branding.routes";
 import { periodAttendanceRouter } from "./modules/periodattendance/periodattendance.routes";
 import { timetableGenRouter } from "./modules/timetablegen/timetablegen.routes";
@@ -194,6 +195,7 @@ export function createApp(): express.Express {
   api.use("/lost-found", lostFoundRouter); // lost & found register (admin)
   api.use("/gallery", galleryRouter); // photo gallery (admin)
   api.use("/integrations", integrationsRouter); // API keys + webhooks (admin)
+  api.use("/ext", extRouter); // external read-only API, authenticated by x-api-key
   api.use("/branding", brandingRouter); // white-labeling / branding
   api.use("/period-attendance", periodAttendanceRouter); // per-period attendance (admin/teacher)
   api.use("/timetable-gen", timetableGenRouter); // timetable auto-generation (admin)
