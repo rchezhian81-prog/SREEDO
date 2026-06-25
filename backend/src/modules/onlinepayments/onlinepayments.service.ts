@@ -5,6 +5,7 @@ import { query, withTransaction } from "../../db/postgres";
 import { getMongoDb } from "../../db/mongo";
 import { env } from "../../config/env";
 import { ApiError } from "../../utils/api-error";
+import { toPaise, toRupees } from "../../utils/money";
 import { accessibleStudentIds, assertStudentAccess } from "../../utils/scope";
 import { feeReceiptBuffer } from "../pdfs/pdfs.service";
 import { gatewayConfigured, gatewayProvider, getGateway } from "./gateway";
@@ -181,9 +182,8 @@ export async function createOrder(
   assertStudentAccess(await accessibleStudentIds(req), inv.student_id);
 
   if (inv.status === "cancelled") throw ApiError.badRequest("Cannot pay a cancelled invoice");
-  const outstanding =
-    Math.round((Number(inv.amount_due) - Number(inv.amount_paid)) * 100) / 100;
-  if (outstanding <= 0) throw ApiError.badRequest("Invoice is already fully paid");
+  const outstandingPaise = toPaise(inv.amount_due) - toPaise(inv.amount_paid);
+  if (outstandingPaise <= 0) throw ApiError.badRequest("Invoice is already fully paid");
 
   // Prevent duplicate successful payment for the same invoice.
   const dup = await query(
@@ -195,13 +195,10 @@ export async function createOrder(
   }
 
   // Anti-tampering: the charge is always the server-computed outstanding balance.
-  if (
-    input.amount != null &&
-    Math.round(input.amount * 100) !== Math.round(outstanding * 100)
-  ) {
+  if (input.amount != null && toPaise(input.amount) !== outstandingPaise) {
     throw ApiError.badRequest("Payment amount does not match the outstanding balance");
   }
-  const amount = outstanding;
+  const amount = toRupees(outstandingPaise);
 
   const no = orderNo();
   const created = await gateway.createOrder({
@@ -296,10 +293,7 @@ export async function processWebhook(
         return { ok: true, alreadyProcessed: true, orderId: order.id };
       }
       // Defense-in-depth amount check against the server-set order amount.
-      if (
-        event.amount != null &&
-        Math.round(Number(event.amount) * 100) !== Math.round(Number(order.amount) * 100)
-      ) {
+      if (event.amount != null && toPaise(event.amount) !== toPaise(order.amount)) {
         throw ApiError.badRequest("Webhook amount does not match the order amount");
       }
 
@@ -314,11 +308,12 @@ export async function processWebhook(
       );
       const inv = invRows[0];
       if (!inv) throw ApiError.notFound("Invoice not found");
-      const outstanding = Number(inv.amount_due) - Number(inv.amount_paid);
-      const credit = Math.min(Number(order.amount), Math.max(outstanding, 0));
+      const outstandingPaise = toPaise(inv.amount_due) - toPaise(inv.amount_paid);
+      const creditPaise = Math.min(toPaise(order.amount), Math.max(outstandingPaise, 0));
+      const credit = toRupees(creditPaise);
 
       let paymentId: string | null = null;
-      if (credit > 0) {
+      if (creditPaise > 0) {
         const pay = await client.query<{ id: string }>(
           `INSERT INTO payments
              (institution_id, invoice_id, amount, method, reference, received_by)
@@ -332,11 +327,12 @@ export async function processWebhook(
           ]
         );
         paymentId = pay.rows[0].id;
-        const newPaid = Number(inv.amount_paid) + credit;
-        const newStatus = newPaid >= Number(inv.amount_due) ? "paid" : "partially_paid";
+        const newPaidPaise = toPaise(inv.amount_paid) + creditPaise;
+        const newStatus =
+          newPaidPaise >= toPaise(inv.amount_due) ? "paid" : "partially_paid";
         await client.query(
           "UPDATE invoices SET amount_paid = $1, status = $2 WHERE id = $3",
-          [newPaid, newStatus, order.invoice_id]
+          [toRupees(newPaidPaise), newStatus, order.invoice_id]
         );
       }
       await client.query(

@@ -1,6 +1,7 @@
 import type { Request } from "express";
 import { query, withTransaction } from "../../db/postgres";
 import { ApiError } from "../../utils/api-error";
+import { percentOf, prorate, toPaise, toRupees } from "../../utils/money";
 import { storage } from "../../utils/storage";
 import type { PdfImage } from "../../utils/pdf";
 import { payrollSummary, teacherIdForUser } from "../staffleave/staffleave.service";
@@ -20,8 +21,6 @@ function isUnique(err: unknown): boolean {
     (err as { code?: string }).code === "23505"
   );
 }
-const round2 = (n: number) => Math.round(n * 100) / 100;
-
 function buildSets(
   map: Record<string, string>,
   input: Record<string, unknown>
@@ -245,31 +244,53 @@ interface ComputedLine { componentId: string | null; name: string; type: "earnin
 
 function computePayslip(lines: StructLine[], att: Attendance, month: string) {
   // Percentage components are computed on the fixed-earnings total ("basic").
-  const percentBase = lines
+  const percentBasePaise = lines
     .filter((l) => l.type === "earning" && l.calc_type === "fixed")
-    .reduce((s, l) => s + Number(l.value), 0);
+    .reduce((s, l) => s + toPaise(l.value), 0);
 
-  const computed: ComputedLine[] = lines.map((l) => ({
-    componentId: l.component_id,
+  // Each line is rounded to the paisa; gross/deductions/net are then summed from
+  // those exact integers, so the lines always reconcile to the totals (no drift).
+  const computed = lines.map((l) => ({
+    componentId: l.component_id as string | null,
     name: l.name,
     type: l.type as "earning" | "deduction",
-    amount: l.calc_type === "fixed" ? round2(Number(l.value)) : round2((Number(l.value) / 100) * percentBase),
+    amountPaise:
+      l.calc_type === "fixed" ? toPaise(l.value) : percentOf(percentBasePaise, Number(l.value)),
   }));
 
-  const gross = round2(computed.filter((l) => l.type === "earning").reduce((s, l) => s + l.amount, 0));
-  let deductions = round2(computed.filter((l) => l.type === "deduction").reduce((s, l) => s + l.amount, 0));
+  const grossPaise = computed
+    .filter((l) => l.type === "earning")
+    .reduce((s, l) => s + l.amountPaise, 0);
+  let deductionsPaise = computed
+    .filter((l) => l.type === "deduction")
+    .reduce((s, l) => s + l.amountPaise, 0);
 
   // Auto unpaid-leave deduction (per-day of gross × unpaid days).
-  if (att.unpaidLeave > 0 && gross > 0) {
-    const perDay = gross / daysInMonth(month);
-    const unpaidDeduction = round2(perDay * att.unpaidLeave);
-    if (unpaidDeduction > 0) {
-      computed.push({ componentId: null, name: "Unpaid Leave", type: "deduction", amount: unpaidDeduction });
-      deductions = round2(deductions + unpaidDeduction);
+  if (att.unpaidLeave > 0 && grossPaise > 0) {
+    const unpaidDeductionPaise = prorate(grossPaise, att.unpaidLeave, daysInMonth(month));
+    if (unpaidDeductionPaise > 0) {
+      computed.push({
+        componentId: null,
+        name: "Unpaid Leave",
+        type: "deduction",
+        amountPaise: unpaidDeductionPaise,
+      });
+      deductionsPaise += unpaidDeductionPaise;
     }
   }
-  const net = round2(gross - deductions);
-  return { gross, deductions, net, lines: computed };
+  const netPaise = grossPaise - deductionsPaise;
+  const computedLines: ComputedLine[] = computed.map((l) => ({
+    componentId: l.componentId,
+    name: l.name,
+    type: l.type,
+    amount: toRupees(l.amountPaise),
+  }));
+  return {
+    gross: toRupees(grossPaise),
+    deductions: toRupees(deductionsPaise),
+    net: toRupees(netPaise),
+    lines: computedLines,
+  };
 }
 
 // --- Payroll runs ---

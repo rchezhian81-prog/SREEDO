@@ -1,5 +1,6 @@
 import { query, withTransaction } from "../../db/postgres";
 import { ApiError } from "../../utils/api-error";
+import { toPaise, toRupees } from "../../utils/money";
 import { paginatedResponse, type Pagination } from "../../utils/pagination";
 import type { z } from "zod";
 import type { createRefundSchema, listRefundsQuerySchema } from "./feerefunds.schema";
@@ -100,12 +101,12 @@ export async function createRefund(
       "SELECT sum(amount) AS sum FROM payment_refunds WHERE payment_id = $1",
       [input.paymentId]
     );
-    const paymentAmount = Number(payment.rows[0].amount);
-    const alreadyRefunded = Number(refunded.rows[0].sum ?? 0);
-    const remaining = paymentAmount - alreadyRefunded;
-    if (input.amount > remaining + 1e-9) {
+    // Refundable balance computed in integer paise — exact, no epsilon needed.
+    const remainingPaise =
+      toPaise(payment.rows[0].amount) - toPaise(refunded.rows[0].sum ?? 0);
+    if (toPaise(input.amount) > remainingPaise) {
       throw ApiError.badRequest(
-        `Refund exceeds the refundable balance (${remaining.toFixed(2)})`
+        `Refund exceeds the refundable balance (${toRupees(remainingPaise).toFixed(2)})`
       );
     }
 
