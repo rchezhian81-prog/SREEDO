@@ -10,7 +10,9 @@ export default function Home() {
   const accessToken = useAuthStore((state) => state.accessToken);
 
   useEffect(() => {
-    router.replace(accessToken ? "/dashboard" : "/login");
+    // Unauthenticated visitors land on the campus selector (School / College)
+    // before reaching the themed sign-in screen.
+    router.replace(accessToken ? "/dashboard" : "/select");
   }, [accessToken, router]);
 
   return <Spinner />;
