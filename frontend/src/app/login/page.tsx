@@ -165,7 +165,9 @@ export default function LoginPage() {
             <h1 className="text-2xl font-extrabold tracking-tight text-ink">
               Go<span className={accentText}>Campus</span>
             </h1>
-            <p className="mt-1 text-sm text-muted">{t("login.subtitle")}</p>
+            <p className="mt-1 text-sm text-muted">
+              Sign in to your {modeLabel.toLowerCase()} workspace
+            </p>
           </div>
 
           <div className="rounded-2xl border border-line bg-surface p-6 shadow-card">
@@ -230,7 +232,7 @@ export default function LoginPage() {
           </div>
 
           <p className="mt-6 text-center text-xs text-faint lg:text-left">
-            © 2026 GoCampus · School Management ERP
+            © 2026 GoCampus · {modeLabel} Management ERP
           </p>
         </div>
       </div>
