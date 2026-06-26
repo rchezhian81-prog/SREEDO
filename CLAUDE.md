@@ -68,6 +68,18 @@ is indexed in `docs/PLANNING_INDEX.md`.
 - **Icons**: `lucide-react` behind the `<Icon name="…">` facade in
   `frontend/src/components/icons.tsx` — don't hand-draw SVGs; add a Lucide
   mapping.
+- **UI/UX system** (match the existing look — don't invent ad-hoc styles):
+  design tokens are CSS vars in `frontend/src/app/globals.css`
+  (`--c-app/-surface/-surface-2/-ink/-muted/-faint/-line/-hover`; dark mode via
+  the `.dark` class, no-flash boot script) surfaced as Tailwind **semantic
+  classes** (`bg-app`, `bg-surface`, `text-ink/-muted/-faint`, `border-line`,
+  `shadow-card/-pop`) plus the `brand` blue palette; **College accents use
+  violet, School uses brand-blue**. Compose pages from `ui.tsx` primitives
+  (`PageHeader`, `Card`, `Modal`, `Field`, `Input`, `Select`, `Textarea`,
+  `Button` variants, `Badge`, `Spinner`, `EmptyState`, `ErrorNote`) on rounded-2xl
+  surfaces; the students page is the canonical form/table + Add/Edit-modal
+  reference. The actual code in the repo is the source of truth — read it rather
+  than assume.
 - **Students**: one shared write-column list in `students.service` drives
   create/import/update; Add+Edit via `PATCH /students/:id`. College students are
   placed via enrollments (program/semester), not sections. Bulk promotion /
