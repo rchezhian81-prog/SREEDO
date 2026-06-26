@@ -49,6 +49,16 @@ const studentSchema = z.object({
     .email("Enter a valid email")
     .optional()
     .or(z.literal("")),
+  bloodGroup: z.string().optional(),
+  nationality: z.string().optional(),
+  religion: z.string().optional(),
+  category: z.string().optional(),
+  nationalId: z.string().optional(),
+  admissionDate: z.string().optional(),
+  rollNumber: z.string().optional(),
+  previousSchool: z.string().optional(),
+  emergencyContactName: z.string().optional(),
+  emergencyContactPhone: z.string().optional(),
 });
 
 type StudentForm = z.infer<typeof studentSchema>;
@@ -105,6 +115,7 @@ export default function StudentsPage() {
   const [certFor, setCertFor] = useState<Student | null>(null);
   const [guardiansFor, setGuardiansFor] = useState<Student | null>(null);
   const [perfFor, setPerfFor] = useState<Student | null>(null);
+  const [editing, setEditing] = useState<Student | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
 
   const limit = 10;
@@ -185,28 +196,76 @@ export default function StudentsPage() {
     ? semesters.filter((s) => s.programId === selectedProgramId)
     : semesters;
 
+  const closeModal = () => {
+    setModalOpen(false);
+    setEditing(null);
+  };
+
+  const studentToForm = (s: Student): StudentForm => ({
+    firstName: s.firstName,
+    lastName: s.lastName,
+    gender: (s.gender || undefined) as StudentForm["gender"],
+    dateOfBirth: s.dateOfBirth ?? "",
+    sectionId: s.sectionId ?? "",
+    programId: "",
+    semesterId: "",
+    guardianName: s.guardianName ?? "",
+    guardianRelation: s.guardianRelation ?? "",
+    guardianPhone: s.guardianPhone ?? "",
+    guardianEmail: s.guardianEmail ?? "",
+    bloodGroup: s.bloodGroup ?? "",
+    nationality: s.nationality ?? "",
+    religion: s.religion ?? "",
+    category: s.category ?? "",
+    nationalId: s.nationalId ?? "",
+    admissionDate: s.admissionDate ?? "",
+    rollNumber: s.rollNumber ?? "",
+    previousSchool: s.previousSchool ?? "",
+    emergencyContactName: s.emergencyContactName ?? "",
+    emergencyContactPhone: s.emergencyContactPhone ?? "",
+  });
+
+  const openAdd = () => {
+    setEditing(null);
+    reset();
+    setServerError(null);
+    setModalOpen(true);
+  };
+
+  const openEdit = (student: Student) => {
+    setEditing(student);
+    reset(studentToForm(student));
+    setServerError(null);
+    setModalOpen(true);
+  };
+
   const onSubmit = async (values: StudentForm) => {
     setServerError(null);
     try {
-      const { programId, semesterId, ...studentValues } = values;
-      const created = await api.post<Student>("/students", {
-        ...studentValues,
+      const { programId, semesterId, sectionId, ...rest } = values;
+      const payload = {
+        ...rest,
         gender: values.gender || undefined,
         dateOfBirth: values.dateOfBirth || undefined,
-        sectionId: isCollege ? undefined : values.sectionId || undefined,
         guardianEmail: values.guardianEmail || undefined,
         guardianRelation: values.guardianRelation || undefined,
-      });
-      // College: place the new student into a program/semester via enrollment.
-      if (isCollege && programId) {
-        await api.post("/college/enrollments", {
-          studentId: created.id,
-          programId,
-          semesterId: semesterId || undefined,
-        });
-        await loadEnrollments();
+        sectionId: isCollege ? undefined : sectionId || undefined,
+      };
+      if (editing) {
+        await api.patch(`/students/${editing.id}`, payload);
+      } else {
+        const created = await api.post<Student>("/students", payload);
+        // College: place the new student into a program/semester via enrollment.
+        if (isCollege && programId) {
+          await api.post("/college/enrollments", {
+            studentId: created.id,
+            programId,
+            semesterId: semesterId || undefined,
+          });
+          await loadEnrollments();
+        }
       }
-      setModalOpen(false);
+      closeModal();
       reset();
       await load();
     } catch (err) {
@@ -234,7 +293,7 @@ export default function StudentsPage() {
             <Button variant="secondary" onClick={() => setImportOpen(true)}>
               Import CSV
             </Button>
-            <Button onClick={() => setModalOpen(true)}>+ Add student</Button>
+            <Button onClick={openAdd}>+ Add student</Button>
           </div>
         }
       />
@@ -327,6 +386,12 @@ export default function StudentsPage() {
                         Certificate
                       </button>
                       <button
+                        onClick={() => openEdit(student)}
+                        className="text-xs font-medium text-brand-600 hover:text-brand-600 dark:text-brand-300"
+                      >
+                        Edit
+                      </button>
+                      <button
                         onClick={() => removeStudent(student)}
                         className="text-xs font-medium text-red-600 hover:text-red-700"
                       >
@@ -364,9 +429,9 @@ export default function StudentsPage() {
       )}
 
       <Modal
-        title="Add student"
+        title={editing ? "Edit student" : "Add student"}
         open={modalOpen}
-        onClose={() => setModalOpen(false)}
+        onClose={closeModal}
       >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
@@ -391,28 +456,30 @@ export default function StudentsPage() {
             </Field>
           </div>
           {isCollege ? (
-            <div className="grid grid-cols-2 gap-3">
-              <Field label={term.klass}>
-                <Select {...register("programId")}>
-                  <option value="">Unassigned</option>
-                  {programs.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label={term.term}>
-                <Select {...register("semesterId")} disabled={!selectedProgramId}>
-                  <option value="">—</option>
-                  {semesterOptions.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-            </div>
+            !editing && (
+              <div className="grid grid-cols-2 gap-3">
+                <Field label={term.klass}>
+                  <Select {...register("programId")}>
+                    <option value="">Unassigned</option>
+                    {programs.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label={term.term}>
+                  <Select {...register("semesterId")} disabled={!selectedProgramId}>
+                    <option value="">—</option>
+                    {semesterOptions.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              </div>
+            )
           ) : (
             <Field label={term.section}>
               <Select {...register("sectionId")}>
@@ -447,6 +514,46 @@ export default function StudentsPage() {
               <Input type="email" {...register("guardianEmail")} />
             </Field>
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Emergency contact">
+              <Input {...register("emergencyContactName")} />
+            </Field>
+            <Field label="Emergency phone">
+              <Input {...register("emergencyContactPhone")} />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Admission date">
+              <Input type="date" {...register("admissionDate")} />
+            </Field>
+            <Field label="Roll number">
+              <Input {...register("rollNumber")} />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Blood group">
+              <Input placeholder="O+" {...register("bloodGroup")} />
+            </Field>
+            <Field label="Category">
+              <Input placeholder="General / OBC / SC / ST" {...register("category")} />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Religion">
+              <Input {...register("religion")} />
+            </Field>
+            <Field label="Nationality">
+              <Input placeholder="Indian" {...register("nationality")} />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="National ID">
+              <Input placeholder="Aadhaar / ID no." {...register("nationalId")} />
+            </Field>
+            <Field label="Previous school">
+              <Input {...register("previousSchool")} />
+            </Field>
+          </div>
           <ErrorNote message={serverError} />
           <div className="flex justify-end gap-2">
             <Button
@@ -457,7 +564,11 @@ export default function StudentsPage() {
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Saving…" : "Save student"}
+              {isSubmitting
+                ? "Saving…"
+                : editing
+                  ? "Save changes"
+                  : "Save student"}
             </Button>
           </div>
         </form>

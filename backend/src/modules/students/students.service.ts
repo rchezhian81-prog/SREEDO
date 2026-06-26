@@ -27,12 +27,71 @@ const STUDENT_SELECT = `
   s.guardian_email AS "guardianEmail",
   s.guardian_relation AS "guardianRelation",
   s.address,
+  s.blood_group AS "bloodGroup",
+  s.nationality,
+  s.religion,
+  s.category,
+  s.national_id AS "nationalId",
+  s.admission_date AS "admissionDate",
+  s.roll_number AS "rollNumber",
+  s.previous_school AS "previousSchool",
+  s.emergency_contact_name AS "emergencyContactName",
+  s.emergency_contact_phone AS "emergencyContactPhone",
   s.status,
   s.enrolled_at AS "enrolledAt",
   s.created_at AS "createdAt"
 FROM students s
 LEFT JOIN sections sec ON sec.id = s.section_id
 LEFT JOIN classes c ON c.id = sec.class_id`;
+
+// Writable student columns (formKey -> db column), shared by create / import /
+// update so the three paths can never drift. institution_id and admission_no are
+// handled separately; status is update-only.
+const STUDENT_WRITE_COLUMNS: ReadonlyArray<readonly [string, string]> = [
+  ["firstName", "first_name"],
+  ["lastName", "last_name"],
+  ["dateOfBirth", "date_of_birth"],
+  ["gender", "gender"],
+  ["sectionId", "section_id"],
+  ["guardianName", "guardian_name"],
+  ["guardianPhone", "guardian_phone"],
+  ["guardianEmail", "guardian_email"],
+  ["guardianRelation", "guardian_relation"],
+  ["address", "address"],
+  ["bloodGroup", "blood_group"],
+  ["nationality", "nationality"],
+  ["religion", "religion"],
+  ["category", "category"],
+  ["nationalId", "national_id"],
+  ["admissionDate", "admission_date"],
+  ["rollNumber", "roll_number"],
+  ["previousSchool", "previous_school"],
+  ["emergencyContactName", "emergency_contact_name"],
+  ["emergencyContactPhone", "emergency_contact_phone"],
+];
+
+/** Builds a parameterised INSERT for students from the shared column list. */
+function buildStudentInsert(
+  institutionId: string,
+  admissionNo: string,
+  input: Record<string, unknown>
+): { text: string; values: unknown[] } {
+  const columns = [
+    "institution_id",
+    "admission_no",
+    ...STUDENT_WRITE_COLUMNS.map(([, col]) => col),
+  ];
+  const values = [
+    institutionId,
+    admissionNo,
+    ...STUDENT_WRITE_COLUMNS.map(([key]) => input[key] ?? null),
+  ];
+  const placeholders = values.map((_, i) => `$${i + 1}`).join(", ");
+  return {
+    text: `INSERT INTO students (${columns.join(", ")}) VALUES (${placeholders})`,
+    values,
+  };
+}
 
 async function nextAdmissionNo(): Promise<string> {
   const year = new Date().getFullYear();
@@ -103,27 +162,14 @@ export async function createStudent(
 ) {
   await assertWithinPlanLimit(institutionId, "students");
   const admissionNo = input.admissionNo ?? (await nextAdmissionNo());
+  const ins = buildStudentInsert(
+    institutionId,
+    admissionNo,
+    input as Record<string, unknown>
+  );
   const { rows } = await query<{ id: string }>(
-    `INSERT INTO students (
-       institution_id, admission_no, first_name, last_name, date_of_birth,
-       gender, section_id, guardian_name, guardian_phone, guardian_email,
-       guardian_relation, address
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-     RETURNING id`,
-    [
-      institutionId,
-      admissionNo,
-      input.firstName,
-      input.lastName,
-      input.dateOfBirth ?? null,
-      input.gender ?? null,
-      input.sectionId ?? null,
-      input.guardianName ?? null,
-      input.guardianPhone ?? null,
-      input.guardianEmail ?? null,
-      input.guardianRelation ?? null,
-      input.address ?? null,
-    ]
+    `${ins.text} RETURNING id`,
+    ins.values
   );
   invalidateDashboard(institutionId); // student count changed
   const student = await getStudent(rows[0].id, institutionId);
@@ -166,27 +212,12 @@ export async function importStudents(
       let count = 0;
       for (const input of inputs) {
         const admissionNo = input.admissionNo ?? (await nextAdmissionNo());
-        await client.query(
-          `INSERT INTO students (
-             institution_id, admission_no, first_name, last_name, date_of_birth,
-             gender, section_id, guardian_name, guardian_phone, guardian_email,
-             guardian_relation, address
-           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-          [
-            institutionId,
-            admissionNo,
-            input.firstName,
-            input.lastName,
-            input.dateOfBirth ?? null,
-            input.gender ?? null,
-            input.sectionId ?? null,
-            input.guardianName ?? null,
-            input.guardianPhone ?? null,
-            input.guardianEmail ?? null,
-            input.guardianRelation ?? null,
-            input.address ?? null,
-          ]
+        const ins = buildStudentInsert(
+          institutionId,
+          admissionNo,
+          input as Record<string, unknown>
         );
+        await client.query(ins.text, ins.values);
         count++;
       }
       return count;
@@ -205,16 +236,7 @@ export async function importStudents(
 
 const UPDATE_COLUMN_MAP: Record<string, string> = {
   admissionNo: "admission_no",
-  firstName: "first_name",
-  lastName: "last_name",
-  dateOfBirth: "date_of_birth",
-  gender: "gender",
-  sectionId: "section_id",
-  guardianName: "guardian_name",
-  guardianPhone: "guardian_phone",
-  guardianEmail: "guardian_email",
-  guardianRelation: "guardian_relation",
-  address: "address",
+  ...Object.fromEntries(STUDENT_WRITE_COLUMNS.map(([key, col]) => [key, col])),
   status: "status",
 };
 

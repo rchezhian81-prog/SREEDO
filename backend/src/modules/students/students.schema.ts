@@ -12,6 +12,16 @@ export const createStudentSchema = z.object({
   guardianEmail: z.string().email().optional(),
   guardianRelation: z.enum(["father", "mother", "guardian", "other"]).optional(),
   address: z.string().max(500).optional(),
+  bloodGroup: z.string().max(10).optional(),
+  nationality: z.string().max(60).optional(),
+  religion: z.string().max(60).optional(),
+  category: z.string().max(60).optional(),
+  nationalId: z.string().max(40).optional(),
+  admissionDate: z.string().date().optional(),
+  rollNumber: z.string().max(40).optional(),
+  previousSchool: z.string().max(200).optional(),
+  emergencyContactName: z.string().max(120).optional(),
+  emergencyContactPhone: z.string().max(30).optional(),
 });
 
 export const updateStudentSchema = createStudentSchema
