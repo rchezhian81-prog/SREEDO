@@ -9,6 +9,7 @@ import type {
   createStudentSchema,
   linkGuardianSchema,
   listStudentsQuerySchema,
+  promoteStudentsSchema,
   updateStudentSchema,
 } from "./students.schema";
 
@@ -232,6 +233,70 @@ export async function importStudents(
     }
     throw err;
   }
+}
+
+/**
+ * Bulk promotion / academic-year rollover. School students move to a target
+ * section; college students' enrollments advance to a target semester. With
+ * `graduate`, the selected students are marked graduated (and any active college
+ * enrollments closed) instead of moved. Targets are validated against the tenant.
+ */
+export async function promoteStudents(
+  input: z.infer<typeof promoteStudentsSchema>,
+  institutionId: string
+): Promise<{ promoted: number; graduated: number }> {
+  return withTransaction(async (client) => {
+    if (input.toSectionId) {
+      const { rows } = await client.query(
+        `SELECT 1 FROM sections sec JOIN classes c ON c.id = sec.class_id
+         WHERE sec.id = $1 AND c.institution_id = $2`,
+        [input.toSectionId, institutionId]
+      );
+      if (!rows[0]) throw ApiError.badRequest("Target section not found");
+    }
+    if (input.toSemesterId) {
+      const { rows } = await client.query(
+        "SELECT 1 FROM semesters WHERE id = $1 AND institution_id = $2",
+        [input.toSemesterId, institutionId]
+      );
+      if (!rows[0]) throw ApiError.badRequest("Target semester not found");
+    }
+
+    let promoted = 0;
+    let graduated = 0;
+
+    if (input.graduate) {
+      const r = await client.query(
+        `UPDATE students SET status = 'graduated'
+         WHERE institution_id = $1 AND id = ANY($2::uuid[])`,
+        [institutionId, input.studentIds]
+      );
+      graduated = r.rowCount ?? 0;
+      // Close any active college enrollments for these students (no-op for schools).
+      await client.query(
+        `UPDATE enrollments SET status = 'graduated'
+         WHERE institution_id = $1 AND student_id = ANY($2::uuid[])`,
+        [institutionId, input.studentIds]
+      );
+    } else if (input.toSemesterId) {
+      const r = await client.query(
+        `UPDATE enrollments SET semester_id = $3
+         WHERE institution_id = $1 AND student_id = ANY($2::uuid[])`,
+        [institutionId, input.studentIds, input.toSemesterId]
+      );
+      promoted = r.rowCount ?? 0;
+    } else if (input.toSectionId) {
+      const r = await client.query(
+        `UPDATE students SET section_id = $3
+         WHERE institution_id = $1 AND id = ANY($2::uuid[])`,
+        [institutionId, input.studentIds, input.toSectionId]
+      );
+      promoted = r.rowCount ?? 0;
+    }
+
+    invalidateDashboard(institutionId);
+    return { promoted, graduated };
+  });
 }
 
 const UPDATE_COLUMN_MAP: Record<string, string> = {

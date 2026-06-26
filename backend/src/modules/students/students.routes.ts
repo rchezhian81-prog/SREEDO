@@ -10,6 +10,7 @@ import {
   importStudentsSchema,
   linkGuardianSchema,
   listStudentsQuerySchema,
+  promoteStudentsSchema,
   updateStudentSchema,
 } from "./students.schema";
 import * as studentsService from "./students.service";
@@ -105,6 +106,35 @@ studentsRouter.post("/import", authorize("admin"), async (req, res) => {
   const { rows } = importStudentsSchema.parse(req.body);
   const result = await studentsService.importStudents(rows, tenantId(req));
   res.status(201).json(result);
+});
+
+/**
+ * @openapi
+ * /students/promote:
+ *   post:
+ *     tags: [Students]
+ *     summary: Bulk-promote students to a section/semester, or graduate them (admin)
+ *     description: School students move to toSectionId; college students' enrollments advance to toSemesterId. With graduate=true the selected students are marked graduated instead.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [studentIds]
+ *             properties:
+ *               studentIds: { type: array, items: { type: string, format: uuid } }
+ *               toSectionId: { type: string, format: uuid }
+ *               toSemesterId: { type: string, format: uuid }
+ *               graduate: { type: boolean }
+ *     responses:
+ *       200: { description: "{ promoted, graduated }" }
+ *       400: { description: No target provided, or target not found }
+ */
+studentsRouter.post("/promote", authorize("admin"), async (req, res) => {
+  const input = promoteStudentsSchema.parse(req.body);
+  res.json(await studentsService.promoteStudents(input, tenantId(req)));
 });
 
 /**

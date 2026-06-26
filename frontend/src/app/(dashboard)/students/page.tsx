@@ -30,6 +30,7 @@ import { ImportCsvModal, type ImportColumn } from "@/components/ImportCsvModal";
 import { CertificateModal } from "@/components/CertificateModal";
 import { GuardiansModal } from "@/components/GuardiansModal";
 import { StudentPerformanceModal } from "@/components/StudentPerformanceModal";
+import { PromoteStudentsModal } from "@/components/PromoteStudentsModal";
 import { useTerms } from "@/lib/terms";
 import { useModeStore } from "@/stores/mode-store";
 
@@ -116,6 +117,7 @@ export default function StudentsPage() {
   const [guardiansFor, setGuardiansFor] = useState<Student | null>(null);
   const [perfFor, setPerfFor] = useState<Student | null>(null);
   const [editing, setEditing] = useState<Student | null>(null);
+  const [promoteOpen, setPromoteOpen] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
 
   const limit = 10;
@@ -292,6 +294,9 @@ export default function StudentsPage() {
           <div className="flex gap-2">
             <Button variant="secondary" onClick={() => setImportOpen(true)}>
               Import CSV
+            </Button>
+            <Button variant="secondary" onClick={() => setPromoteOpen(true)}>
+              Promote
             </Button>
             <Button onClick={openAdd}>+ Add student</Button>
           </div>
@@ -595,6 +600,15 @@ export default function StudentsPage() {
       <StudentPerformanceModal
         student={perfFor}
         onClose={() => setPerfFor(null)}
+      />
+
+      <PromoteStudentsModal
+        open={promoteOpen}
+        onClose={() => setPromoteOpen(false)}
+        onDone={() => {
+          load();
+          loadEnrollments();
+        }}
       />
     </>
   );

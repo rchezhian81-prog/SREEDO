@@ -57,3 +57,14 @@ export const linkGuardianSchema = z.object({
   userId: z.string().uuid(),
   relationship: z.string().min(1).max(50).optional(),
 });
+
+export const promoteStudentsSchema = z
+  .object({
+    studentIds: z.array(z.string().uuid()).min(1).max(2000),
+    toSectionId: z.string().uuid().optional(), // school: target section
+    toSemesterId: z.string().uuid().optional(), // college: target semester
+    graduate: z.boolean().optional(),
+  })
+  .refine((d) => d.graduate || d.toSectionId || d.toSemesterId, {
+    message: "Provide a target section, a target semester, or set graduate",
+  });
