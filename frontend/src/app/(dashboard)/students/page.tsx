@@ -17,13 +17,21 @@ import {
   Select,
   Spinner,
 } from "@/components/ui";
-import type { Paginated, SchoolClass, Student } from "@/types";
+import type {
+  CollegeEnrollment,
+  CollegeProgram,
+  CollegeSemester,
+  Paginated,
+  SchoolClass,
+  Student,
+} from "@/types";
 import { useI18n } from "@/i18n/I18nProvider";
 import { ImportCsvModal, type ImportColumn } from "@/components/ImportCsvModal";
 import { CertificateModal } from "@/components/CertificateModal";
 import { GuardiansModal } from "@/components/GuardiansModal";
 import { StudentPerformanceModal } from "@/components/StudentPerformanceModal";
 import { useTerms } from "@/lib/terms";
+import { useModeStore } from "@/stores/mode-store";
 
 const studentSchema = z.object({
   firstName: z.string().min(1, "Required"),
@@ -31,6 +39,8 @@ const studentSchema = z.object({
   gender: z.enum(["male", "female", "other"]).optional(),
   dateOfBirth: z.string().optional(),
   sectionId: z.string().optional(),
+  programId: z.string().optional(),
+  semesterId: z.string().optional(),
   guardianName: z.string().optional(),
   guardianPhone: z.string().optional(),
   guardianEmail: z
@@ -74,11 +84,18 @@ interface SectionOption {
 export default function StudentsPage() {
   const { t } = useI18n();
   const term = useTerms();
+  const mode = useModeStore((s) => s.mode);
+  const isCollege = mode === "college";
   const [students, setStudents] = useState<Student[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [sections, setSections] = useState<SectionOption[]>([]);
+  const [programs, setPrograms] = useState<CollegeProgram[]>([]);
+  const [semesters, setSemesters] = useState<CollegeSemester[]>([]);
+  const [enrollMap, setEnrollMap] = useState<Record<string, CollegeEnrollment>>(
+    {}
+  );
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -107,11 +124,36 @@ export default function StudentsPage() {
     }
   }, [page, search]);
 
+  // College placement (program/semester) for the table column, refreshed after
+  // a new enrollment is created.
+  const loadEnrollments = useCallback(async () => {
+    if (!isCollege) return;
+    try {
+      const rows = await api.get<CollegeEnrollment[]>("/college/enrollments");
+      const map: Record<string, CollegeEnrollment> = {};
+      for (const e of rows) if (!map[e.studentId]) map[e.studentId] = e;
+      setEnrollMap(map);
+    } catch {
+      /* ignore */
+    }
+  }, [isCollege]);
+
   useEffect(() => {
     load().catch(() => setLoading(false));
   }, [load]);
 
   useEffect(() => {
+    loadEnrollments();
+  }, [loadEnrollments]);
+
+  // Placement options for the Add form: a school assigns a class/section, a
+  // college assigns a program/semester (sections don't exist for colleges).
+  useEffect(() => {
+    if (isCollege) {
+      api.get<CollegeProgram[]>("/college/programs").then(setPrograms).catch(() => undefined);
+      api.get<CollegeSemester[]>("/college/semesters").then(setSemesters).catch(() => undefined);
+      return;
+    }
     api
       .get<SchoolClass[]>("/classes")
       .then((classes) =>
@@ -125,25 +167,41 @@ export default function StudentsPage() {
         )
       )
       .catch(() => undefined);
-  }, []);
+  }, [isCollege]);
 
   const {
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<StudentForm>({ resolver: zodResolver(studentSchema) });
+
+  const selectedProgramId = watch("programId");
+  const semesterOptions = selectedProgramId
+    ? semesters.filter((s) => s.programId === selectedProgramId)
+    : semesters;
 
   const onSubmit = async (values: StudentForm) => {
     setServerError(null);
     try {
-      await api.post("/students", {
-        ...values,
+      const { programId, semesterId, ...studentValues } = values;
+      const created = await api.post<Student>("/students", {
+        ...studentValues,
         gender: values.gender || undefined,
         dateOfBirth: values.dateOfBirth || undefined,
-        sectionId: values.sectionId || undefined,
+        sectionId: isCollege ? undefined : values.sectionId || undefined,
         guardianEmail: values.guardianEmail || undefined,
       });
+      // College: place the new student into a program/semester via enrollment.
+      if (isCollege && programId) {
+        await api.post("/college/enrollments", {
+          studentId: created.id,
+          programId,
+          semesterId: semesterId || undefined,
+        });
+        await loadEnrollments();
+      }
       setModalOpen(false);
       reset();
       await load();
@@ -215,9 +273,16 @@ export default function StudentsPage() {
                     {student.firstName} {student.lastName}
                   </td>
                   <td className="px-4 py-3">
-                    {student.className
-                      ? `${student.className} — ${student.sectionName}`
-                      : "Unassigned"}
+                    {isCollege
+                      ? [
+                          enrollMap[student.id]?.programName,
+                          enrollMap[student.id]?.semesterName,
+                        ]
+                          .filter(Boolean)
+                          .join(" — ") || "Unassigned"
+                      : student.className
+                        ? `${student.className} — ${student.sectionName}`
+                        : "Unassigned"}
                   </td>
                   <td className="px-4 py-3">
                     {student.guardianName ?? "—"}
@@ -316,16 +381,41 @@ export default function StudentsPage() {
               <Input type="date" {...register("dateOfBirth")} />
             </Field>
           </div>
-          <Field label={term.section}>
-            <Select {...register("sectionId")}>
-              <option value="">Unassigned</option>
-              {sections.map((section) => (
-                <option key={section.id} value={section.id}>
-                  {section.label}
-                </option>
-              ))}
-            </Select>
-          </Field>
+          {isCollege ? (
+            <div className="grid grid-cols-2 gap-3">
+              <Field label={term.klass}>
+                <Select {...register("programId")}>
+                  <option value="">Unassigned</option>
+                  {programs.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label={term.term}>
+                <Select {...register("semesterId")} disabled={!selectedProgramId}>
+                  <option value="">—</option>
+                  {semesterOptions.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
+          ) : (
+            <Field label={term.section}>
+              <Select {...register("sectionId")}>
+                <option value="">Unassigned</option>
+                {sections.map((section) => (
+                  <option key={section.id} value={section.id}>
+                    {section.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
           <Field label="Guardian name">
             <Input {...register("guardianName")} />
           </Field>
