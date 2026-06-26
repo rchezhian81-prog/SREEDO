@@ -52,6 +52,7 @@ import { documentsRouter } from "./modules/documents/documents.routes";
 import { examsRouter } from "./modules/exams/exams.routes";
 import { feesRouter } from "./modules/fees/fees.routes";
 import { homeworkRouter } from "./modules/homework/homework.routes";
+import { liveClassesRouter } from "./modules/liveclasses/liveclasses.routes";
 import { hostelRouter } from "./modules/hostel/hostel.routes";
 import { inventoryRouter } from "./modules/inventory/inventory.routes";
 import { jobsRouter } from "./modules/jobs/jobs.routes";
@@ -169,6 +170,7 @@ export function createApp(): express.Express {
   api.use("/communication", communicationRouter);
   api.use("/documents", documentsRouter);
   api.use("/homework", homeworkRouter);
+  api.use("/live-classes", liveClassesRouter);
   api.use("/fee-receipts", feeReceiptsRouter);
   api.use("/id-cards", idCardsRouter);
   api.use("/certificates", certificatesRouter);

@@ -20,6 +20,7 @@ import type {
   ReportSource,
   SchoolClass,
 } from "@/types";
+import { useTerms } from "@/lib/terms";
 
 function renderCell(value: unknown): string {
   if (value === null || value === undefined) return "—";
@@ -61,6 +62,7 @@ export default function ReportBuilderForm({
 }: {
   existing?: CustomReport;
 }) {
+  const term = useTerms();
   const router = useRouter();
   const { can, loading: permsLoading } = usePermissions();
   const canShare = can("custom_reports:share");
@@ -310,7 +312,7 @@ export default function ReportBuilderForm({
                   onChange={(event) => setFilter({ dateTo: event.target.value })}
                 />
               </Field>
-              <Field label="Class">
+              <Field label={term.klass}>
                 <Select
                   value={filters.classId}
                   onChange={(event) =>
@@ -325,7 +327,7 @@ export default function ReportBuilderForm({
                   ))}
                 </Select>
               </Field>
-              <Field label="Section">
+              <Field label={term.section}>
                 <Select
                   value={filters.sectionId}
                   onChange={(event) =>

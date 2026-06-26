@@ -14,6 +14,7 @@ import {
 } from "@/components/ui";
 import type { AttendanceRow, SchoolClass } from "@/types";
 import { useI18n } from "@/i18n/I18nProvider";
+import { useTerms } from "@/lib/terms";
 
 const STATUSES = ["present", "absent", "late", "excused"] as const;
 type Status = (typeof STATUSES)[number];
@@ -31,6 +32,7 @@ interface SectionOption {
 }
 
 export default function AttendancePage() {
+  const term = useTerms();
   const { t } = useI18n();
   const [sections, setSections] = useState<SectionOption[]>([]);
   const [sectionId, setSectionId] = useState("");
@@ -170,7 +172,7 @@ export default function AttendancePage() {
             <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
               <tr>
                 <th className="px-4 py-3">Student</th>
-                <th className="px-4 py-3">Admission No</th>
+                <th className="px-4 py-3">{term.admissionNo}</th>
                 <th className="px-4 py-3">Status</th>
               </tr>
             </thead>

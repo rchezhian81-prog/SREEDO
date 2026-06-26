@@ -23,6 +23,7 @@ import { ImportCsvModal, type ImportColumn } from "@/components/ImportCsvModal";
 import { CertificateModal } from "@/components/CertificateModal";
 import { GuardiansModal } from "@/components/GuardiansModal";
 import { StudentPerformanceModal } from "@/components/StudentPerformanceModal";
+import { useTerms } from "@/lib/terms";
 
 const studentSchema = z.object({
   firstName: z.string().min(1, "Required"),
@@ -72,6 +73,7 @@ interface SectionOption {
 
 export default function StudentsPage() {
   const { t } = useI18n();
+  const term = useTerms();
   const [students, setStudents] = useState<Student[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -177,7 +179,7 @@ export default function StudentsPage() {
 
       <div className="mb-4 max-w-xs">
         <Input
-          placeholder="Search by name or admission no…"
+          placeholder={`Search by name or ${term.admissionNo.toLowerCase()}…`}
           value={search}
           onChange={(event) => {
             setSearch(event.target.value);
@@ -195,9 +197,9 @@ export default function StudentsPage() {
           <table className="w-full text-left text-sm">
             <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
               <tr>
-                <th className="px-4 py-3">Admission No</th>
+                <th className="px-4 py-3">{term.admissionNo}</th>
                 <th className="px-4 py-3">Name</th>
-                <th className="px-4 py-3">Class</th>
+                <th className="px-4 py-3">{term.klass}</th>
                 <th className="px-4 py-3">Guardian</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3" />
@@ -314,7 +316,7 @@ export default function StudentsPage() {
               <Input type="date" {...register("dateOfBirth")} />
             </Field>
           </div>
-          <Field label="Section">
+          <Field label={term.section}>
             <Select {...register("sectionId")}>
               <option value="">Unassigned</option>
               {sections.map((section) => (

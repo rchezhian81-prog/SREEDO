@@ -1,5 +1,6 @@
 import { query } from "../../db/postgres";
 import { ApiError } from "../../utils/api-error";
+import { invalidateInstitutionTypeCache } from "../../middleware/institution-type";
 import type { z } from "zod";
 import type {
   createBatchSchema,
@@ -69,6 +70,9 @@ export async function setInstitutionType(
     [institutionId, type]
   );
   if (!rows[0]) throw ApiError.notFound("Institution not found");
+  // The type guard caches institution type briefly; bust it so the switch
+  // takes effect immediately for subsequent requests.
+  invalidateInstitutionTypeCache(institutionId);
   return rows[0];
 }
 

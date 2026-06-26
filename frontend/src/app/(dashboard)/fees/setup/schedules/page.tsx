@@ -26,6 +26,7 @@ import type {
   SchoolClass,
   Section,
 } from "@/types";
+import { useTerms } from "@/lib/terms";
 
 const TERM_TYPES: { value: string; label: string }[] = [
   { value: "one_time", label: "One time" },
@@ -54,6 +55,7 @@ function termTypeLabel(value: string): string {
 }
 
 export default function FeeSchedulesPage() {
+  const term = useTerms();
   const { can, loading: permsLoading } = usePermissions();
   const canCreate = can("fee_schedules:create");
   const canGenerate = can("fee_schedules:generate");
@@ -433,7 +435,7 @@ export default function FeeSchedulesPage() {
               Target (optional)
             </p>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Class" error={errors.classId?.message}>
+              <Field label={term.klass} error={errors.classId?.message}>
                 <Select {...register("classId")}>
                   <option value="">All classes</option>
                   {classes.map((cls) => (
@@ -443,7 +445,7 @@ export default function FeeSchedulesPage() {
                   ))}
                 </Select>
               </Field>
-              <Field label="Section" error={errors.sectionId?.message}>
+              <Field label={term.section} error={errors.sectionId?.message}>
                 <Select {...register("sectionId")} disabled={!selectedClassId}>
                   <option value="">All sections</option>
                   {sections.map((section) => (

@@ -23,6 +23,7 @@ import type {
   Teacher,
   TimetableEntry,
 } from "@/types";
+import { useTerms } from "@/lib/terms";
 
 const DAYS = [
   { value: 1, label: "Monday" },
@@ -57,6 +58,7 @@ async function downloadCsv(qs: string, filename: string) {
 }
 
 export default function ClassTimetablePage() {
+  const term = useTerms();
   const role = useAuthStore((state) => state.user?.role);
   const isAdmin = role === "admin";
   const canExport = role === "admin" || role === "teacher";
@@ -251,7 +253,7 @@ export default function ClassTimetablePage() {
       ) : (
         <>
           <div className="mb-4 max-w-xs">
-            <Field label="Section">
+            <Field label={term.section}>
               <Select
                 value={sectionId}
                 onChange={(event) => setSectionId(event.target.value)}
@@ -371,7 +373,7 @@ export default function ClassTimetablePage() {
             </p>
 
             <div className="space-y-4">
-              <Field label="Subject">
+              <Field label={term.subject}>
                 <Select
                   value={formSubjectId}
                   onChange={(event) => setFormSubjectId(event.target.value)}
@@ -384,7 +386,7 @@ export default function ClassTimetablePage() {
                   ))}
                 </Select>
               </Field>
-              <Field label="Teacher">
+              <Field label={term.teacher}>
                 <Select
                   value={formTeacherId}
                   onChange={(event) => setFormTeacherId(event.target.value)}

@@ -20,6 +20,7 @@ import {
   Textarea,
 } from "@/components/ui";
 import type { Announcement, Paginated } from "@/types";
+import { useTerms } from "@/lib/terms";
 
 const announcementSchema = z.object({
   title: z.string().min(1, "Required"),
@@ -33,6 +34,7 @@ const announcementSchema = z.object({
 type AnnouncementForm = z.infer<typeof announcementSchema>;
 
 export default function AnnouncementsPage() {
+  const term = useTerms();
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -157,7 +159,7 @@ export default function AnnouncementsPage() {
             <Field label="Audience">
               <Select {...register("audience")}>
                 <option value="all">Everyone</option>
-                <option value="teachers">Teachers</option>
+                <option value="teachers">{term.teachers}</option>
                 <option value="students">Students</option>
                 <option value="parents">Parents</option>
                 <option value="staff">Staff</option>

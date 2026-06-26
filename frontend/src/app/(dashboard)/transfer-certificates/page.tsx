@@ -23,6 +23,7 @@ import type {
   StudentDues,
   TransferCertificate,
 } from "@/types";
+import { useTerms } from "@/lib/terms";
 
 const STATUS_TONES: Record<
   TransferCertificate["status"],
@@ -55,6 +56,7 @@ function duesSummary(dues: StudentDues): string {
 }
 
 export default function TransferCertificatesPage() {
+  const term = useTerms();
   const router = useRouter();
   const { can, loading: permsLoading } = usePermissions();
   const canRead = can("transfer_certificates:read");
@@ -252,7 +254,7 @@ export default function TransferCertificatesPage() {
               <tr>
                 <th className="px-4 py-3">TC No</th>
                 <th className="px-4 py-3">Student</th>
-                <th className="px-4 py-3">Admission No</th>
+                <th className="px-4 py-3">{term.admissionNo}</th>
                 <th className="px-4 py-3">Class/Section</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Issue Date</th>

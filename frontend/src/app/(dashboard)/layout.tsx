@@ -9,6 +9,7 @@ import { useBrandingStore, type Branding } from "@/stores/branding-store";
 import { cx, Spinner, SkipLink } from "@/components/ui";
 import { Icon, type IconName } from "@/components/icons";
 import { useThemeStore } from "@/stores/theme-store";
+import { useModeStore } from "@/stores/mode-store";
 import { useI18n } from "@/i18n/I18nProvider";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 
@@ -21,6 +22,7 @@ type NavItem = {
 
 const SCHOOL_NAV: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: "grid" },
+  { href: "/get-started", label: "Get Started", icon: "rocket", adminOnly: true },
   { href: "/analytics", label: "Analytics", icon: "trendUp" },
   { href: "/students", label: "Students", icon: "cap" },
   { href: "/admissions", label: "Admissions", icon: "card", adminOnly: true },
@@ -29,7 +31,6 @@ const SCHOOL_NAV: NavItem[] = [
   { href: "/timetable", label: "Timetable", icon: "calendar" },
   { href: "/timetable/generate", label: "Auto Timetable", icon: "sparkles", adminOnly: true },
   { href: "/calendar", label: "Calendar", icon: "calendar" },
-  { href: "/college", label: "College", icon: "building" },
   { href: "/library", label: "Library", icon: "file" },
   { href: "/transport", label: "Transport", icon: "bus" },
   { href: "/hostel", label: "Hostel", icon: "building" },
@@ -49,6 +50,7 @@ const SCHOOL_NAV: NavItem[] = [
   { href: "/documents", label: "Documents", icon: "file" },
   { href: "/homework", label: "Homework", icon: "board" },
   { href: "/study-materials", label: "Study Materials", icon: "bookOpen" },
+  { href: "/live-classes", label: "Live Classes", icon: "video" },
   { href: "/quizzes", label: "Quizzes", icon: "quiz" },
   { href: "/biometric", label: "Biometric", icon: "fingerprint", adminOnly: true },
   { href: "/polls", label: "Polls", icon: "barChart" },
@@ -78,6 +80,26 @@ const SCHOOL_NAV: NavItem[] = [
   { href: "/security", label: "Security", icon: "shield" },
 ];
 
+// College edition — swap the school's class-centric academic block for the
+// higher-ed structure (departments → programs → semesters → results).
+// Everything else (operations, finance, comms, admin) is shared with school.
+const COLLEGE_ACADEMICS: NavItem[] = [
+  { href: "/college", label: "College Home", icon: "building" },
+  { href: "/college/departments", label: "Departments", icon: "network" },
+  { href: "/college/programs", label: "Programs", icon: "layers" },
+  { href: "/college/semesters", label: "Semesters", icon: "calendar" },
+  { href: "/college/subjects", label: "Subjects", icon: "bookOpen" },
+  { href: "/college/enrollments", label: "Enrollments", icon: "userPlus" },
+  { href: "/college/results", label: "Results", icon: "clipboard" },
+];
+
+const COLLEGE_NAV: NavItem[] = SCHOOL_NAV.flatMap((item) =>
+  item.href === "/classes" ? COLLEGE_ACADEMICS : [item]
+).map((item) =>
+  // College speaks of "Faculty", not "Teachers".
+  item.href === "/teachers" ? { ...item, label: "Faculty" } : item
+);
+
 const SUPER_ADMIN_NAV: NavItem[] = [
   { href: "/super-admin", label: "Institutions", icon: "building" },
   { href: "/super-admin/platform", label: "Platform Overview", icon: "grid" },
@@ -100,7 +122,9 @@ const SIDEBAR_BG =
   "linear-gradient(193deg,#1c3380 0%,#122257 55%,#0b1840 100%)";
 
 function isActive(href: string, pathname: string) {
-  return href === "/super-admin"
+  // Overview routes that are prefixes of their own sub-pages match exactly so
+  // they don't stay highlighted while you're on a child route.
+  return href === "/super-admin" || href === "/college"
     ? pathname === href
     : pathname.startsWith(href);
 }
@@ -326,6 +350,8 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const { t } = useI18n();
   const { user, accessToken, refreshToken, logout } = useAuthStore();
+  const mode = useModeStore((s) => s.mode);
+  const setMode = useModeStore((s) => s.setMode);
   const [hydrated, setHydrated] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -363,11 +389,25 @@ export default function DashboardLayout({
     api.get<Branding>("/branding").then(setBranding).catch(() => undefined);
   }, [hydrated, accessToken, user, setBranding]);
 
+  // The institution's type on the backend is the source of truth for School vs
+  // College — reconcile the (pre-login, user-guessed) mode to it on load.
+  useEffect(() => {
+    if (!hydrated || !accessToken || user?.role === "super_admin") return;
+    api
+      .get<{ institutionType: "school" | "college" | null }>("/auth/me")
+      .then((me) => {
+        if (me.institutionType) setMode(me.institutionType);
+      })
+      .catch(() => undefined);
+  }, [hydrated, accessToken, user, setMode]);
+
   const isSuper = user?.role === "super_admin";
   const inSuperArea = pathname.startsWith("/super-admin");
   const navItems = isSuper
     ? SUPER_ADMIN_NAV
-    : SCHOOL_NAV.filter((item) => !item.adminOnly || user?.role === "admin");
+    : (mode === "college" ? COLLEGE_NAV : SCHOOL_NAV).filter(
+        (item) => !item.adminOnly || user?.role === "admin"
+      );
 
   // While unauthenticated or mid-redirect to the correct area, show a spinner.
   if (!hydrated || !accessToken) return <Spinner />;
@@ -381,7 +421,11 @@ export default function DashboardLayout({
     router.replace("/login");
   };
 
-  const subtitle = isSuper ? "PLATFORM CONSOLE" : "SCHOOL MANAGEMENT ERP";
+  const subtitle = isSuper
+    ? "PLATFORM CONSOLE"
+    : mode === "college"
+      ? "COLLEGE MANAGEMENT ERP"
+      : "SCHOOL MANAGEMENT ERP";
 
   return (
     <div className="flex min-h-screen bg-app">

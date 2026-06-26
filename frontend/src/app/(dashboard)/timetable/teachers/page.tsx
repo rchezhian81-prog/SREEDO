@@ -13,6 +13,7 @@ import {
   Spinner,
 } from "@/components/ui";
 import type { Paginated, Period, Teacher, TimetableEntry } from "@/types";
+import { useTerms } from "@/lib/terms";
 
 const DAYS = [
   { value: 1, label: "Monday" },
@@ -42,6 +43,7 @@ async function downloadCsv(qs: string, filename: string) {
 }
 
 export default function TeacherTimetablePage() {
+  const term = useTerms();
   const role = useAuthStore((state) => state.user?.role);
   const canExport = role === "admin" || role === "teacher";
 
@@ -142,7 +144,7 @@ export default function TeacherTimetablePage() {
       ) : (
         <>
           <div className="mb-4 max-w-xs">
-            <Field label="Teacher">
+            <Field label={term.teacher}>
               <Select
                 value={teacherId}
                 onChange={(event) => setTeacherId(event.target.value)}

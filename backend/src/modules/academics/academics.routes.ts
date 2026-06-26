@@ -2,6 +2,7 @@ import { Router } from "express";
 import { uuidParam } from "../../utils/params";
 import { authenticate, authorize } from "../../middleware/auth";
 import { requireTenant, tenantId } from "../../middleware/tenant";
+import { requireInstitutionType } from "../../middleware/institution-type";
 import {
   assignSectionSubjectSchema,
   createAcademicYearSchema,
@@ -93,10 +94,18 @@ academicsRouter.get("/classes", ...guard, async (req, res) => {
   res.json(await academicsService.listClasses(tenantId(req)));
 });
 
-academicsRouter.post("/classes", ...guard, authorize("admin"), async (req, res) => {
-  const input = createClassSchema.parse(req.body);
-  res.status(201).json(await academicsService.createClass(input, tenantId(req)));
-});
+academicsRouter.post(
+  "/classes",
+  ...guard,
+  authorize("admin"),
+  requireInstitutionType("school"),
+  async (req, res) => {
+    const input = createClassSchema.parse(req.body);
+    res
+      .status(201)
+      .json(await academicsService.createClass(input, tenantId(req)));
+  }
+);
 
 /**
  * @openapi
@@ -142,6 +151,7 @@ academicsRouter.post(
   "/classes/:classId/sections",
   ...guard,
   authorize("admin"),
+  requireInstitutionType("school"),
   async (req, res) => {
     const input = createSectionSchema.parse(req.body);
     res
