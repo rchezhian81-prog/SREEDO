@@ -75,7 +75,18 @@ export interface Student {
   guardianName: string | null;
   guardianPhone: string | null;
   guardianEmail: string | null;
+  guardianRelation: string | null;
   address: string | null;
+  bloodGroup: string | null;
+  nationality: string | null;
+  religion: string | null;
+  category: string | null;
+  nationalId: string | null;
+  admissionDate: string | null;
+  rollNumber: string | null;
+  previousSchool: string | null;
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
   status: string;
 }
 
