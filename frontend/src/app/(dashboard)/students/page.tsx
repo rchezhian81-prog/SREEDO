@@ -42,6 +42,7 @@ const studentSchema = z.object({
   programId: z.string().optional(),
   semesterId: z.string().optional(),
   guardianName: z.string().optional(),
+  guardianRelation: z.string().optional(),
   guardianPhone: z.string().optional(),
   guardianEmail: z
     .string()
@@ -60,6 +61,7 @@ const IMPORT_COLUMNS: ImportColumn[] = [
   { key: "guardianName", label: "Guardian name" },
   { key: "guardianPhone", label: "Guardian phone" },
   { key: "guardianEmail", label: "Guardian email" },
+  { key: "guardianRelation", label: "Relationship (father/mother/guardian/other)" },
   { key: "address", label: "Address" },
   { key: "admissionNo", label: "Admission no (auto if blank)" },
 ];
@@ -72,6 +74,7 @@ const IMPORT_SAMPLE: Record<string, string> = {
   guardianName: "Ramesh Rao",
   guardianPhone: "9000000000",
   guardianEmail: "ramesh@example.com",
+  guardianRelation: "father",
   address: "12 Main Street",
   admissionNo: "",
 };
@@ -192,6 +195,7 @@ export default function StudentsPage() {
         dateOfBirth: values.dateOfBirth || undefined,
         sectionId: isCollege ? undefined : values.sectionId || undefined,
         guardianEmail: values.guardianEmail || undefined,
+        guardianRelation: values.guardianRelation || undefined,
       });
       // College: place the new student into a program/semester via enrollment.
       if (isCollege && programId) {
@@ -286,6 +290,11 @@ export default function StudentsPage() {
                   </td>
                   <td className="px-4 py-3">
                     {student.guardianName ?? "—"}
+                    {student.guardianRelation && (
+                      <span className="ml-1 text-xs capitalize text-faint">
+                        ({student.guardianRelation})
+                      </span>
+                    )}
                     {student.guardianPhone && (
                       <span className="block text-xs text-faint">
                         {student.guardianPhone}
@@ -416,9 +425,20 @@ export default function StudentsPage() {
               </Select>
             </Field>
           )}
-          <Field label="Guardian name">
-            <Input {...register("guardianName")} />
-          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Guardian name">
+              <Input {...register("guardianName")} />
+            </Field>
+            <Field label="Relationship">
+              <Select {...register("guardianRelation")}>
+                <option value="">—</option>
+                <option value="father">Father</option>
+                <option value="mother">Mother</option>
+                <option value="guardian">Guardian</option>
+                <option value="other">Other</option>
+              </Select>
+            </Field>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Guardian phone">
               <Input {...register("guardianPhone")} />

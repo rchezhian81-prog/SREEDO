@@ -25,6 +25,7 @@ const STUDENT_SELECT = `
   s.guardian_name AS "guardianName",
   s.guardian_phone AS "guardianPhone",
   s.guardian_email AS "guardianEmail",
+  s.guardian_relation AS "guardianRelation",
   s.address,
   s.status,
   s.enrolled_at AS "enrolledAt",
@@ -105,8 +106,9 @@ export async function createStudent(
   const { rows } = await query<{ id: string }>(
     `INSERT INTO students (
        institution_id, admission_no, first_name, last_name, date_of_birth,
-       gender, section_id, guardian_name, guardian_phone, guardian_email, address
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       gender, section_id, guardian_name, guardian_phone, guardian_email,
+       guardian_relation, address
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      RETURNING id`,
     [
       institutionId,
@@ -119,6 +121,7 @@ export async function createStudent(
       input.guardianName ?? null,
       input.guardianPhone ?? null,
       input.guardianEmail ?? null,
+      input.guardianRelation ?? null,
       input.address ?? null,
     ]
   );
@@ -166,8 +169,9 @@ export async function importStudents(
         await client.query(
           `INSERT INTO students (
              institution_id, admission_no, first_name, last_name, date_of_birth,
-             gender, section_id, guardian_name, guardian_phone, guardian_email, address
-           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+             gender, section_id, guardian_name, guardian_phone, guardian_email,
+             guardian_relation, address
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
           [
             institutionId,
             admissionNo,
@@ -179,6 +183,7 @@ export async function importStudents(
             input.guardianName ?? null,
             input.guardianPhone ?? null,
             input.guardianEmail ?? null,
+            input.guardianRelation ?? null,
             input.address ?? null,
           ]
         );
@@ -208,6 +213,7 @@ const UPDATE_COLUMN_MAP: Record<string, string> = {
   guardianName: "guardian_name",
   guardianPhone: "guardian_phone",
   guardianEmail: "guardian_email",
+  guardianRelation: "guardian_relation",
   address: "address",
   status: "status",
 };

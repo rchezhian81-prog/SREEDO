@@ -75,6 +75,7 @@ export interface Student {
   guardianName: string | null;
   guardianPhone: string | null;
   guardianEmail: string | null;
+  guardianRelation: string | null;
   address: string | null;
   status: string;
 }

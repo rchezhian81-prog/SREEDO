@@ -10,6 +10,7 @@ export const createStudentSchema = z.object({
   guardianName: z.string().max(200).optional(),
   guardianPhone: z.string().max(30).optional(),
   guardianEmail: z.string().email().optional(),
+  guardianRelation: z.enum(["father", "mother", "guardian", "other"]).optional(),
   address: z.string().max(500).optional(),
 });
 
