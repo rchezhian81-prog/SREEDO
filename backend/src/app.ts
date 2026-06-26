@@ -7,6 +7,7 @@ import { swaggerSpec } from "./config/swagger";
 import { getMongoDb } from "./db/mongo";
 import { pool } from "./db/postgres";
 import { auditLog } from "./middleware/audit";
+import { csrfOriginGuard } from "./middleware/csrf";
 import { errorHandler, notFoundHandler } from "./middleware/error";
 import { apiRateLimiter } from "./middleware/rate-limit";
 import { requestContext } from "./middleware/request-context";
@@ -86,7 +87,25 @@ export function createApp(): express.Express {
 
   // Correlation id first, so every log line + response carries it.
   app.use(requestContext);
-  app.use(helmet());
+  // Helmet with an explicit Content-Security-Policy. The API serves JSON plus
+  // the (dev-only) Swagger UI, which needs inline script/style and data: images;
+  // object-src 'none', base-uri 'self' and frame-ancestors 'none' are real wins
+  // regardless. The web app sets its own, stricter CSP in next.config.mjs.
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'", "'unsafe-inline'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", "data:"],
+          objectSrc: ["'none'"],
+          baseUri: ["'self'"],
+          frameAncestors: ["'none'"],
+        },
+      },
+    })
+  );
   app.use(cors({ origin: env.corsOrigin, credentials: true }));
   app.use(
     express.json({
@@ -138,6 +157,9 @@ export function createApp(): express.Express {
 
   const api = express.Router();
   api.use(apiRateLimiter);
+  // CSRF defense-in-depth for cookie-authenticated (portal) state changes.
+  // Bearer-token and server-to-server callers pass through untouched.
+  api.use(csrfOriginGuard);
   api.use(auditLog);
   api.use("/auth", authRouter);
   api.use("/users", usersRouter);

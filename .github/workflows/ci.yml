@@ -91,6 +91,36 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze --no-fatal-infos
 
+  security:
+    name: Security scan (npm audit, secrets)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Dependency vulnerability scan — reported, non-blocking (a freshly
+      # disclosed transitive CVE must not wedge the pipeline). Review findings in
+      # the job log; escalate to a fix when a direct/high-severity issue lands.
+      - name: npm audit (backend)
+        working-directory: backend
+        run: npm audit --audit-level=high
+        continue-on-error: true
+      - name: npm audit (frontend)
+        working-directory: frontend
+        run: npm audit --audit-level=high
+        continue-on-error: true
+      # Secret scan across the full history. Non-blocking until the baseline is
+      # confirmed clean, then promote it to a required check.
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   docker:
     name: Docker images build
     runs-on: ubuntu-latest

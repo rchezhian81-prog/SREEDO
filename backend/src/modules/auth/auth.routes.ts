@@ -5,6 +5,7 @@ import { permissionsForRole } from "../../middleware/permissions";
 import { authRateLimiter } from "../../middleware/rate-limit";
 import { ApiError } from "../../utils/api-error";
 import { uuidParam } from "../../utils/params";
+import { clientIp, recordSecurityEvent } from "../../utils/security-audit";
 import {
   REFRESH_COOKIE,
   clearAuthCookies,
@@ -55,13 +56,33 @@ function sessionMeta(req: Request): { userAgent: string | null } {
  */
 authRouter.post("/login", authRateLimiter, async (req, res) => {
   const { email, password, totpCode } = loginSchema.parse(req.body);
-  const result = await authService.login(
-    email,
-    password,
-    totpCode,
-    sessionMeta(req)
-  );
-  res.json(result);
+  try {
+    const result = await authService.login(
+      email,
+      password,
+      totpCode,
+      sessionMeta(req)
+    );
+    if (!("twoFactorRequired" in result)) {
+      await recordSecurityEvent({
+        action: "auth.login.success",
+        actorId: result.user.id,
+        actorEmail: result.user.email,
+        actorRole: result.user.role,
+        targetId: result.user.id,
+        ip: clientIp(req),
+      });
+    }
+    res.json(result);
+  } catch (err) {
+    await recordSecurityEvent({
+      action: "auth.login.failed",
+      actorEmail: email,
+      detail: { reason: err instanceof ApiError ? err.message : "error" },
+      ip: clientIp(req),
+    });
+    throw err;
+  }
 });
 
 /**
@@ -135,6 +156,11 @@ authRouter.post("/logout", async (req, res) => {
 authRouter.post("/forgot-password", authRateLimiter, async (req, res) => {
   const { email } = forgotPasswordSchema.parse(req.body);
   await authService.requestPasswordReset(email);
+  await recordSecurityEvent({
+    action: "auth.password.reset_requested",
+    actorEmail: email,
+    ip: clientIp(req),
+  });
   res.json({
     message:
       "If an account exists for that email, a password-reset link has been sent.",
@@ -165,6 +191,10 @@ authRouter.post("/forgot-password", authRateLimiter, async (req, res) => {
 authRouter.post("/reset-password", authRateLimiter, async (req, res) => {
   const { token, newPassword } = resetPasswordSchema.parse(req.body);
   await authService.resetPassword(token, newPassword);
+  await recordSecurityEvent({
+    action: "auth.password.reset_completed",
+    ip: clientIp(req),
+  });
   res.status(204).end();
 });
 
@@ -306,6 +336,15 @@ authRouter.get("/permissions", authenticate, async (req, res) => {
 authRouter.post("/change-password", authenticate, async (req, res) => {
   const { currentPassword, newPassword } = changePasswordSchema.parse(req.body);
   await authService.changePassword(req.user!.id, currentPassword, newPassword);
+  await recordSecurityEvent({
+    action: "auth.password.changed",
+    actorId: req.user!.id,
+    actorEmail: req.user!.email,
+    actorRole: req.user!.role,
+    institutionId: req.user!.institutionId ?? null,
+    targetId: req.user!.id,
+    ip: clientIp(req),
+  });
   res.status(204).end();
 });
 
@@ -396,6 +435,15 @@ authRouter.post("/2fa/setup", authenticate, async (req, res) => {
 authRouter.post("/2fa/enable", authenticate, async (req, res) => {
   const { code } = enableTwoFactorSchema.parse(req.body);
   await authService.enableTwoFactor(req.user!.id, code);
+  await recordSecurityEvent({
+    action: "auth.2fa.enabled",
+    actorId: req.user!.id,
+    actorEmail: req.user!.email,
+    actorRole: req.user!.role,
+    institutionId: req.user!.institutionId ?? null,
+    targetId: req.user!.id,
+    ip: clientIp(req),
+  });
   res.status(204).end();
 });
 
@@ -422,5 +470,14 @@ authRouter.post("/2fa/enable", authenticate, async (req, res) => {
 authRouter.post("/2fa/disable", authenticate, async (req, res) => {
   const { password } = disableTwoFactorSchema.parse(req.body);
   await authService.disableTwoFactor(req.user!.id, password);
+  await recordSecurityEvent({
+    action: "auth.2fa.disabled",
+    actorId: req.user!.id,
+    actorEmail: req.user!.email,
+    actorRole: req.user!.role,
+    institutionId: req.user!.institutionId ?? null,
+    targetId: req.user!.id,
+    ip: clientIp(req),
+  });
   res.status(204).end();
 });

@@ -3,6 +3,7 @@ import { uuidParam } from "../../utils/params";
 import { authenticate } from "../../middleware/auth";
 import { requireTenant, tenantId } from "../../middleware/tenant";
 import { requirePermission } from "../../middleware/permissions";
+import { clientIp, recordSecurityEvent } from "../../utils/security-audit";
 import { parsePagination } from "../../utils/pagination";
 import {
   createUserSchema,
@@ -66,6 +67,16 @@ usersRouter.get("/", async (req, res) => {
 usersRouter.post("/", async (req, res) => {
   const input = createUserSchema.parse(req.body);
   const user = await usersService.createUser(input, tenantId(req));
+  await recordSecurityEvent({
+    action: "user.created",
+    actorId: req.user!.id,
+    actorEmail: req.user!.email,
+    actorRole: req.user!.role,
+    institutionId: tenantId(req),
+    targetId: user.id,
+    detail: { email: user.email, role: user.role },
+    ip: clientIp(req),
+  });
   res.status(201).json(user);
 });
 
@@ -109,6 +120,15 @@ usersRouter.patch("/:id", async (req, res) => {
 
 usersRouter.delete("/:id", async (req, res) => {
   await usersService.deactivateUser(uuidParam(req), tenantId(req));
+  await recordSecurityEvent({
+    action: "user.deactivated",
+    actorId: req.user!.id,
+    actorEmail: req.user!.email,
+    actorRole: req.user!.role,
+    institutionId: tenantId(req),
+    targetId: uuidParam(req),
+    ip: clientIp(req),
+  });
   res.status(204).end();
 });
 
@@ -127,6 +147,15 @@ usersRouter.delete("/:id", async (req, res) => {
  */
 usersRouter.post("/:id/disable-2fa", async (req, res) => {
   await usersService.resetUserTwoFactor(uuidParam(req), tenantId(req));
+  await recordSecurityEvent({
+    action: "user.2fa_reset",
+    actorId: req.user!.id,
+    actorEmail: req.user!.email,
+    actorRole: req.user!.role,
+    institutionId: tenantId(req),
+    targetId: uuidParam(req),
+    ip: clientIp(req),
+  });
   res.status(204).end();
 });
 
@@ -145,5 +174,14 @@ usersRouter.post("/:id/disable-2fa", async (req, res) => {
  */
 usersRouter.post("/:id/unlock", async (req, res) => {
   await usersService.unlockUser(uuidParam(req), tenantId(req));
+  await recordSecurityEvent({
+    action: "user.unlock",
+    actorId: req.user!.id,
+    actorEmail: req.user!.email,
+    actorRole: req.user!.role,
+    institutionId: tenantId(req),
+    targetId: uuidParam(req),
+    ip: clientIp(req),
+  });
   res.status(204).end();
 });

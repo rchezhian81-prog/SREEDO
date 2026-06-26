@@ -18,18 +18,36 @@ interface ChatMessage {
 /**
  * Builds a live snapshot of school data so the assistant can answer
  * operational questions (counts, attendance, fees) with real numbers.
+ *
+ * Every figure is scoped to the caller's institution. `invoices`, `payments`
+ * and `attendance_records` carry no `institution_id` of their own, so they are
+ * scoped through `students.institution_id`. Without this scoping the assistant
+ * would leak cross-tenant aggregates (and send them to the model provider).
  */
-async function schoolContext(): Promise<string> {
+async function schoolContext(institutionId: string): Promise<string> {
   const { rows } = await query<Record<string, string | null>>(
     `SELECT
-       (SELECT count(*) FROM students WHERE status = 'active') AS active_students,
-       (SELECT count(*) FROM teachers WHERE is_active = true) AS active_teachers,
-       (SELECT count(*) FROM classes) AS classes,
-       (SELECT count(*) FROM attendance_records
-        WHERE date = CURRENT_DATE AND status IN ('present', 'late')) AS present_today,
-       (SELECT count(*) FROM attendance_records WHERE date = CURRENT_DATE) AS marked_today,
-       (SELECT count(*) FROM invoices WHERE status IN ('pending', 'partially_paid')) AS pending_invoices,
-       (SELECT coalesce(sum(amount), 0)::text FROM payments) AS total_collected`
+       (SELECT count(*) FROM students
+          WHERE status = 'active' AND institution_id = $1) AS active_students,
+       (SELECT count(*) FROM teachers
+          WHERE is_active = true AND institution_id = $1) AS active_teachers,
+       (SELECT count(*) FROM classes WHERE institution_id = $1) AS classes,
+       (SELECT count(*) FROM attendance_records ar
+          JOIN students s ON s.id = ar.student_id
+          WHERE ar.date = CURRENT_DATE AND ar.status IN ('present', 'late')
+            AND s.institution_id = $1) AS present_today,
+       (SELECT count(*) FROM attendance_records ar
+          JOIN students s ON s.id = ar.student_id
+          WHERE ar.date = CURRENT_DATE AND s.institution_id = $1) AS marked_today,
+       (SELECT count(*) FROM invoices i
+          JOIN students s ON s.id = i.student_id
+          WHERE i.status IN ('pending', 'partially_paid')
+            AND s.institution_id = $1) AS pending_invoices,
+       (SELECT coalesce(sum(p.amount), 0)::text FROM payments p
+          JOIN invoices i ON i.id = p.invoice_id
+          JOIN students s ON s.id = i.student_id
+          WHERE s.institution_id = $1) AS total_collected`,
+    [institutionId]
   );
   const stats = rows[0];
   return [
@@ -44,6 +62,7 @@ async function schoolContext(): Promise<string> {
 
 export async function chat(
   userId: string,
+  institutionId: string,
   message: string,
   conversationId?: string
 ) {
@@ -66,7 +85,7 @@ export async function chat(
     history = (existing.messages as ChatMessage[]).slice(-20);
   }
 
-  const context = await schoolContext();
+  const context = await schoolContext(institutionId);
   const completion = await openai.chat.completions.create({
     model: env.openaiModel,
     max_tokens: 1000,
@@ -101,6 +120,7 @@ export async function chat(
     } else {
       const inserted = await db.collection("ai_conversations").insertOne({
         userId,
+        institutionId,
         title: message.slice(0, 80),
         messages: newMessages,
         createdAt: now,
