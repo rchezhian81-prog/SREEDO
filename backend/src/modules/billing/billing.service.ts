@@ -322,3 +322,66 @@ export async function listSubscriptionEvents(
   );
   return rows;
 }
+
+export interface LifecycleConfig {
+  autoSuspend: boolean;
+  enforce: boolean;
+  graceDays: number;
+  reminderDays: number[];
+}
+
+/**
+ * Current lifecycle configuration — reflects the environment flags so the
+ * super-admin UI can show whether auto-suspend / enforcement are ON or OFF.
+ * Read-only; contains no secrets and changes no behaviour.
+ */
+export function lifecycleConfig(): LifecycleConfig {
+  return {
+    autoSuspend: env.billingAutoSuspend,
+    enforce: env.billingEnforceSubscription,
+    graceDays: env.billingGraceDays,
+    reminderDays: env.billingReminderDays,
+  };
+}
+
+export interface SubscriptionRow {
+  institutionId: string;
+  institutionName: string;
+  code: string;
+  institutionActive: boolean;
+  status: string | null;
+  packageName: string | null;
+  endsAt: string | null;
+  graceUntil: string | null;
+  trialEndsAt: string | null;
+  isActiveNow: boolean;
+}
+
+/** Every institution with its latest subscription status (read-only list). */
+export async function listAllSubscriptionStatuses(): Promise<SubscriptionRow[]> {
+  const { rows } = await query<SubscriptionRow>(
+    `SELECT i.id AS "institutionId", i.name AS "institutionName", i.code,
+            i.is_active AS "institutionActive",
+            s.status,
+            p.name AS "packageName",
+            to_char(s.ends_at, 'YYYY-MM-DD') AS "endsAt",
+            to_char(s.grace_until, 'YYYY-MM-DD') AS "graceUntil",
+            to_char(s.trial_ends_at, 'YYYY-MM-DD') AS "trialEndsAt",
+            COALESCE(
+              s.status IN ('active','trialing')
+                AND (s.ends_at IS NULL
+                     OR CURRENT_DATE <= COALESCE(s.grace_until, s.ends_at + $1::int)),
+              false
+            ) AS "isActiveNow"
+     FROM institutions i
+     LEFT JOIN LATERAL (
+       SELECT * FROM institution_subscriptions s2
+       WHERE s2.institution_id = i.id
+       ORDER BY s2.created_at DESC LIMIT 1
+     ) s ON true
+     LEFT JOIN subscription_packages p ON p.id = s.package_id
+     ORDER BY i.name`,
+    [env.billingGraceDays]
+  );
+  return rows;
+}

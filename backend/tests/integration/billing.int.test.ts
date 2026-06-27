@@ -131,4 +131,40 @@ describe("billing: subscription lifecycle sweep", () => {
     expect(again.body.graceStarted).toBe(0);
     expect(again.body.remindersSent).toBe(0);
   });
+
+  it("exposes the read-only subscription list + lifecycle config (super-admin only)", async () => {
+    const inst = await createInstitution("LST");
+    await makeSub(inst, pkgId, { status: "active", endsExpr: "CURRENT_DATE + 30" });
+
+    const list = await request(app)
+      .get("/api/v1/platform/subscriptions")
+      .set(auth(superToken));
+    expect(list.status).toBe(200);
+    const row = (
+      list.body as Array<{
+        institutionId: string;
+        status: string;
+        isActiveNow: boolean;
+        packageName: string;
+      }>
+    ).find((r) => r.institutionId === inst);
+    expect(row).toBeTruthy();
+    expect(row!.status).toBe("active");
+    expect(row!.isActiveNow).toBe(true);
+    expect(row!.packageName).toBe("Test Plan");
+
+    // Config reflects the safe defaults: auto-suspend + enforcement OFF.
+    const cfg = await request(app)
+      .get("/api/v1/platform/subscriptions/config")
+      .set(auth(superToken));
+    expect(cfg.status).toBe(200);
+    expect(cfg.body.autoSuspend).toBe(false);
+    expect(cfg.body.enforce).toBe(false);
+
+    // Non-super-admin is blocked from both.
+    const deniedList = await request(app)
+      .get("/api/v1/platform/subscriptions")
+      .set(auth(adminToken));
+    expect(deniedList.status).toBe(403);
+  });
 });
