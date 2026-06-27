@@ -224,6 +224,24 @@ platformRouter.post("/subscriptions/run-lifecycle", requirePermission("platform:
 
 /**
  * @openapi
+ * /platform/subscriptions:
+ *   get: { tags: [Platform], summary: All institutions with their latest subscription status (read-only), security: [{ bearerAuth: [] }], responses: { 200: { description: "Subscription status rows, one per institution" } } }
+ */
+platformRouter.get("/subscriptions", requirePermission("platform:read"), async (_req, res) => {
+  res.json(await billing.listAllSubscriptionStatuses());
+});
+
+/**
+ * @openapi
+ * /platform/subscriptions/config:
+ *   get: { tags: [Platform], summary: Subscription lifecycle configuration (auto-suspend / enforcement flags + grace/reminder settings; reflects env, read-only, no secrets), security: [{ bearerAuth: [] }], responses: { 200: { description: "{ autoSuspend, enforce, graceDays, reminderDays }" } } }
+ */
+platformRouter.get("/subscriptions/config", requirePermission("platform:read"), async (_req, res) => {
+  res.json(billing.lifecycleConfig());
+});
+
+/**
+ * @openapi
  * /platform/institutions/{id}/subscription/status:
  *   get: { tags: [Platform], summary: Current subscription status with computed isActiveNow (honours grace), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Subscription status or null } } }
  */
