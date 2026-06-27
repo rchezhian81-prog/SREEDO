@@ -89,6 +89,7 @@ const TABLES = [
   "timetable_entries",
   "periods",
   "rooms",
+  "subscription_events",
   "institution_subscriptions",
   "branches",
   "subscription_packages",

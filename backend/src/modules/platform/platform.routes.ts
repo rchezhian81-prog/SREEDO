@@ -18,6 +18,7 @@ import {
   updateInstitutionSchema,
 } from "./platform.schema";
 import * as service from "./platform.service";
+import * as billing from "../billing/billing.service";
 
 // The platform console sits ABOVE any tenant: super-admin-only (actor
 // institution_id = null). authorize("super_admin") is the hard role boundary;
@@ -207,4 +208,34 @@ platformRouter.post("/email/test", requirePermission("platform:health_read"), as
     ip: clientIp(req),
   });
   res.json(result);
+});
+
+// --- Subscription lifecycle (Billing Phase B1) ---
+
+/**
+ * @openapi
+ * /platform/subscriptions/run-lifecycle:
+ *   post: { tags: [Platform], summary: Run the subscription lifecycle sweep (expiry/grace/auto-suspend/reminders; audited), security: [{ bearerAuth: [] }], responses: { 200: { description: "Sweep summary { graceStarted, expired, trialExpired, autoSuspended, remindersSent }" } } }
+ */
+platformRouter.post("/subscriptions/run-lifecycle", requirePermission("platform:manage_subscriptions"), async (req, res) => {
+  const a = actor(req);
+  res.json(await billing.sweepSubscriptionLifecycle({ id: a.id, email: a.email }));
+});
+
+/**
+ * @openapi
+ * /platform/institutions/{id}/subscription/status:
+ *   get: { tags: [Platform], summary: Current subscription status with computed isActiveNow (honours grace), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Subscription status or null } } }
+ */
+platformRouter.get("/institutions/:id/subscription/status", requirePermission("platform:read"), async (req, res) => {
+  res.json(await billing.subscriptionStatus(uuidParam(req)));
+});
+
+/**
+ * @openapi
+ * /platform/institutions/{id}/subscription/events:
+ *   get: { tags: [Platform], summary: Recent subscription lifecycle audit events, security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Subscription events, newest first } } }
+ */
+platformRouter.get("/institutions/:id/subscription/events", requirePermission("platform:audit_read"), async (req, res) => {
+  res.json(await billing.listSubscriptionEvents(uuidParam(req), 50));
 });
