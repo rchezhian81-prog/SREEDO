@@ -15,6 +15,58 @@ if (env.smtpHost) {
   });
 }
 
+/** Whether an SMTP transport is configured (SMTP_HOST is set). */
+export function mailerConfigured(): boolean {
+  return transporter !== null;
+}
+
+/**
+ * Verify SMTP connectivity. Safe to call at boot — never throws. Returns a
+ * structured status so the server can log a clear warning instead of silently
+ * dropping every transactional email at send time.
+ */
+export async function verifyMailer(): Promise<{
+  configured: boolean;
+  ok: boolean;
+  error?: string;
+}> {
+  if (!transporter) return { configured: false, ok: false };
+  try {
+    await transporter.verify();
+    return { configured: true, ok: true };
+  } catch (err) {
+    return {
+      configured: true,
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+/**
+ * Send a one-off test email and REPORT the outcome (unlike fire-and-forget
+ * `sendMail`). Used by the admin "send test email" tool to validate config.
+ */
+export async function sendTestEmail(
+  to: string
+): Promise<{ ok: boolean; error?: string }> {
+  if (!transporter) return { ok: false, error: "SMTP is not configured" };
+  try {
+    await transporter.sendMail({
+      from: env.smtpFrom,
+      to,
+      subject: "SRE EDU OS — SMTP test email",
+      text:
+        "This is a test email from SRE EDU OS confirming that your SMTP " +
+        "configuration is working. If you received this, transactional email " +
+        "(password resets, notifications) is deliverable.",
+    });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 /**
  * Fire-and-forget transactional email. A missing SMTP configuration or a
  * delivery failure must never fail the originating request.

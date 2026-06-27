@@ -2,11 +2,14 @@ import { Router } from "express";
 import { param } from "../../utils/params";
 import { z } from "zod";
 import { authenticate, authorize } from "../../middleware/auth";
+import { requireTenant, tenantId } from "../../middleware/tenant";
 import * as aiService from "./ai.service";
 
 export const aiRouter = Router();
 
-aiRouter.use(authenticate, authorize("admin", "teacher", "accountant"));
+// requireTenant guarantees a non-null institutionId so the assistant's data
+// snapshot and conversation history stay scoped to the caller's tenant.
+aiRouter.use(authenticate, authorize("admin", "teacher", "accountant"), requireTenant);
 
 const chatSchema = z.object({
   message: z.string().min(1).max(4000),
@@ -40,7 +43,9 @@ const chatSchema = z.object({
  */
 aiRouter.post("/assistant", async (req, res) => {
   const { message, conversationId } = chatSchema.parse(req.body);
-  res.json(await aiService.chat(req.user!.id, message, conversationId));
+  res.json(
+    await aiService.chat(req.user!.id, tenantId(req), message, conversationId)
+  );
 });
 
 /**

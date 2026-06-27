@@ -4,6 +4,7 @@ import { closeMongo, connectMongo } from "./db/mongo";
 import { assertPostgresConnection, pool } from "./db/postgres";
 import { runMigrations } from "./db/migrate";
 import { seedIfEmpty } from "./db/seed";
+import { verifyMailer } from "./utils/mailer";
 import { startWorker, stopWorker } from "./modules/jobs/jobs.worker";
 
 async function main(): Promise<void> {
@@ -15,6 +16,19 @@ async function main(): Promise<void> {
     await seedIfEmpty();
   }
   await connectMongo();
+
+  // Validate SMTP up front so a misconfiguration surfaces in the boot logs
+  // rather than silently dropping every password-reset email. Non-fatal.
+  const mail = await verifyMailer();
+  if (!mail.configured) {
+    console.warn(
+      "SMTP not configured — transactional email (password reset, notifications) is disabled"
+    );
+  } else if (!mail.ok) {
+    console.warn(`SMTP configured but verification FAILED: ${mail.error}`);
+  } else {
+    console.log("SMTP verified — transactional email is deliverable");
+  }
 
   const app = createApp();
   const server = app.listen(env.port, () => {

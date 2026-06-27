@@ -1,8 +1,11 @@
 import type { Request } from "express";
 import { Router } from "express";
+import { z } from "zod";
 import { param, uuidParam } from "../../utils/params";
 import { authenticate, authorize } from "../../middleware/auth";
 import { requirePermission } from "../../middleware/permissions";
+import { mailerConfigured, sendTestEmail, verifyMailer } from "../../utils/mailer";
+import { clientIp, recordSecurityEvent } from "../../utils/security-audit";
 import {
   assignSubscriptionSchema,
   createInstitutionSchema,
@@ -167,4 +170,41 @@ platformRouter.post("/roles/:role/permissions/revoke", requirePermission("platfo
   const role = roleParamSchema.parse(param(req, "role"));
   const { permissionKey, reason } = grantPermissionSchema.parse(req.body);
   res.json(await service.revokeRolePermission(role, permissionKey, actor(req), reason));
+});
+
+// --- Email (SMTP) deliverability ---
+
+const testEmailSchema = z.object({ to: z.string().email() });
+
+/**
+ * @openapi
+ * /platform/email/status:
+ *   get: { tags: [Platform], summary: SMTP configuration + connectivity status (no secrets), security: [{ bearerAuth: [] }], responses: { 200: { description: "{ configured, ok, error? }" } } }
+ */
+platformRouter.get("/email/status", requirePermission("platform:health_read"), async (_req, res) => {
+  res.json(await verifyMailer());
+});
+
+/**
+ * @openapi
+ * /platform/email/test:
+ *   post: { tags: [Platform], summary: Send a test email to verify SMTP (audited), security: [{ bearerAuth: [] }], responses: { 200: { description: "{ ok, error? }" }, 503: { description: SMTP not configured } } }
+ */
+platformRouter.post("/email/test", requirePermission("platform:health_read"), async (req, res) => {
+  const { to } = testEmailSchema.parse(req.body);
+  if (!mailerConfigured()) {
+    res.status(503).json({ ok: false, error: "SMTP is not configured" });
+    return;
+  }
+  const result = await sendTestEmail(to);
+  await recordSecurityEvent({
+    action: "platform.email.test",
+    actorId: req.user!.id,
+    actorEmail: req.user!.email,
+    actorRole: req.user!.role,
+    targetType: "email",
+    detail: { to, ok: result.ok },
+    ip: clientIp(req),
+  });
+  res.json(result);
 });
