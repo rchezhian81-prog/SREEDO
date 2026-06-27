@@ -288,6 +288,19 @@ platformRouter.get("/invoices/:id", requirePermission("platform:read"), async (r
 
 /**
  * @openapi
+ * /platform/invoices/{id}/pdf:
+ *   get: { tags: [Platform], summary: Download the invoice as a PDF, security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: "application/pdf" }, 404: { description: Not found } } }
+ */
+platformRouter.get("/invoices/:id/pdf", requirePermission("platform:read"), async (req, res) => {
+  const id = uuidParam(req);
+  const buffer = await invoices.invoicePdfBuffer(id);
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `inline; filename="invoice-${id}.pdf"`);
+  res.send(buffer);
+});
+
+/**
+ * @openapi
  * /platform/invoices/{id}/lines:
  *   post: { tags: [Platform], summary: Add a line item to a draft invoice, security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Updated invoice }, 400: { description: Not a draft } } }
  */

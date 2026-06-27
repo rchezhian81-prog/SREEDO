@@ -36,6 +36,9 @@ describe("billing B2: gateway-free SaaS invoicing", () => {
       .send({
         taxPercent: 18,
         notes: "Annual subscription",
+        gstin: "29ABCDE1234F1Z5",
+        billingName: "Greenwood High",
+        billingAddress: "12 River Rd",
         lines: [
           { description: "Pro plan", quantity: 1, unitPrice: 1000 },
           { description: "Extra seats", quantity: 2, unitPrice: 250 },
@@ -44,19 +47,21 @@ describe("billing B2: gateway-free SaaS invoicing", () => {
     expect(draft.status).toBe(201);
     expect(draft.body.status).toBe("draft");
     expect(draft.body.number).toBeNull();
+    expect(draft.body.gstin).toBe("29ABCDE1234F1Z5");
+    expect(draft.body.billingName).toBe("Greenwood High");
     expect(Number(draft.body.subtotal)).toBe(1500); // 1000 + 2*250
     expect(Number(draft.body.taxAmount)).toBe(270); // 18% of 1500
     expect(Number(draft.body.total)).toBe(1770);
     expect(draft.body.lines).toHaveLength(2);
     const invoiceId = draft.body.id;
 
-    // Issue -> assigns a sequential number + status issued.
+    // Issue -> assigns a financial-year-segmented number + status issued.
     const issued = await request(app)
       .post(`/api/v1/platform/invoices/${invoiceId}/issue`)
       .set(auth(superToken));
     expect(issued.status).toBe(200);
     expect(issued.body.status).toBe("issued");
-    expect(issued.body.number).toMatch(/^SINV-\d{6}$/);
+    expect(issued.body.number).toMatch(/^SINV-FY\d{4}-\d{2}-\d{6}$/);
     expect(issued.body.issuedAt).toBeTruthy();
 
     // Can't add lines after issue.
@@ -66,14 +71,22 @@ describe("billing B2: gateway-free SaaS invoicing", () => {
       .send({ description: "late", unitPrice: 10 });
     expect(lateLine.status).toBe(400);
 
-    // Mark paid (offline).
+    // PDF download works on an issued invoice.
+    const pdf = await request(app)
+      .get(`/api/v1/platform/invoices/${invoiceId}/pdf`)
+      .set(auth(superToken));
+    expect(pdf.status).toBe(200);
+    expect(pdf.headers["content-type"]).toContain("application/pdf");
+
+    // Mark paid (offline) with a reference.
     const paid = await request(app)
       .post(`/api/v1/platform/invoices/${invoiceId}/mark-paid`)
       .set(auth(superToken))
-      .send({ paymentMethod: "bank_transfer" });
+      .send({ paymentMethod: "bank_transfer", reference: "NEFT-12345" });
     expect(paid.status).toBe(200);
     expect(paid.body.status).toBe("paid");
     expect(paid.body.paymentMethod).toBe("bank_transfer");
+    expect(paid.body.paymentReference).toBe("NEFT-12345");
     expect(paid.body.paidAt).toBeTruthy();
 
     // A paid invoice cannot be voided.

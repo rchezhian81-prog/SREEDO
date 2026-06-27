@@ -1,6 +1,8 @@
 import { query, withTransaction } from "../../db/postgres";
 import { env } from "../../config/env";
 import { ApiError } from "../../utils/api-error";
+import { sendMail } from "../../utils/mailer";
+import { invoicePdf, type InvoicePdfData } from "./invoices.pdf";
 import type { z } from "zod";
 import type {
   createInvoiceSchema,
@@ -11,20 +13,23 @@ import type {
 /**
  * Gateway-free SaaS invoicing (Billing Phase B2).
  *
- * The operator drafts an invoice for an institution, issues it (which assigns a
- * sequential number and freezes the line items), then records OFFLINE payment.
- * There is no payment gateway and no auto-charging — `markPaid` is a manual
- * super-admin action. All amounts are NUMERIC(12,2); totals are computed in SQL
- * to avoid floating-point drift.
+ * Draft → issue (assigns a financial-year-segmented number, freezes totals) →
+ * mark-paid (OFFLINE) / void. No payment gateway and no auto-charging — markPaid
+ * is a manual super-admin action. Amounts are NUMERIC(12,2) and all totals are
+ * computed in SQL to avoid floating-point drift.
  */
 
 const INVOICE_COLS = `
-  id, institution_id AS "institutionId", number, status, currency,
+  id, institution_id AS "institutionId", package_id AS "packageId",
+  number, status, currency,
   to_char(period_start, 'YYYY-MM-DD') AS "periodStart",
   to_char(period_end, 'YYYY-MM-DD') AS "periodEnd",
   subtotal, tax_percent AS "taxPercent", tax_amount AS "taxAmount", total,
-  notes, issued_at AS "issuedAt", paid_at AS "paidAt",
-  payment_method AS "paymentMethod", created_at AS "createdAt"`;
+  gstin, billing_name AS "billingName", billing_address AS "billingAddress",
+  tax_notes AS "taxNotes", notes,
+  issued_at AS "issuedAt", paid_at AS "paidAt",
+  payment_method AS "paymentMethod", payment_reference AS "paymentReference",
+  created_at AS "createdAt"`;
 
 const LINE_COLS = `
   id, invoice_id AS "invoiceId", description, quantity,
@@ -116,6 +121,18 @@ export async function listAll(status?: string) {
   return rows;
 }
 
+async function insertLine(
+  exec: (text: string, params: unknown[]) => Promise<unknown>,
+  invoiceId: string,
+  line: InvoiceLine
+): Promise<void> {
+  await exec(
+    `INSERT INTO saas_invoice_lines (invoice_id, description, quantity, unit_price, amount)
+     VALUES ($1,$2,$3,$4, round($3::numeric * $4::numeric, 2))`,
+    [invoiceId, line.description, line.quantity ?? 1, line.unitPrice ?? 0]
+  );
+}
+
 export async function createDraft(
   institutionId: string,
   input: CreateInvoice,
@@ -125,25 +142,27 @@ export async function createDraft(
   const id = await withTransaction(async (client) => {
     const { rows } = await client.query<{ id: string }>(
       `INSERT INTO saas_invoices
-         (institution_id, currency, period_start, period_end, tax_percent, notes, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+         (institution_id, package_id, currency, period_start, period_end,
+          tax_percent, gstin, billing_name, billing_address, tax_notes, notes, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
       [
         institutionId,
+        input.packageId ?? null,
         input.currency ?? env.saasInvoiceCurrency,
         input.periodStart ?? null,
         input.periodEnd ?? null,
         input.taxPercent ?? 0,
+        input.gstin ?? null,
+        input.billingName ?? null,
+        input.billingAddress ?? null,
+        input.taxNotes ?? null,
         input.notes ?? null,
         createdBy,
       ]
     );
     const invoiceId = rows[0].id;
     for (const line of input.lines ?? []) {
-      await client.query(
-        `INSERT INTO saas_invoice_lines (invoice_id, description, quantity, unit_price, amount)
-         VALUES ($1,$2,$3,$4, round($3::numeric * $4::numeric, 2))`,
-        [invoiceId, line.description, line.quantity ?? 1, line.unitPrice ?? 0]
-      );
+      await insertLine((t, p) => client.query(t, p as never[]), invoiceId, line);
     }
     return invoiceId;
   });
@@ -155,32 +174,90 @@ export async function addLine(invoiceId: string, line: InvoiceLine) {
   if ((await invoiceStatus(invoiceId)) !== "draft") {
     throw ApiError.badRequest("Lines can only be added to a draft invoice");
   }
-  await query(
-    `INSERT INTO saas_invoice_lines (invoice_id, description, quantity, unit_price, amount)
-     VALUES ($1,$2,$3,$4, round($3::numeric * $4::numeric, 2))`,
-    [invoiceId, line.description, line.quantity ?? 1, line.unitPrice ?? 0]
-  );
+  await insertLine((t, p) => query(t, p as unknown[]), invoiceId, line);
   await recomputeTotals(invoiceId);
   return getInvoice(invoiceId);
 }
 
-/** Issue a draft: assign the next sequential number and freeze it. */
+/** Current financial year label (India FY: Apr–Mar), e.g. 'FY2026-27'. */
+async function currentFyLabel(
+  client: { query: (t: string, p?: unknown[]) => Promise<{ rows: { label: string }[] }> }
+): Promise<string> {
+  const { rows } = await client.query(
+    `SELECT 'FY' || fy_start || '-' || lpad(((fy_start + 1) % 100)::text, 2, '0') AS label
+     FROM (
+       SELECT CASE WHEN extract(month FROM CURRENT_DATE) >= 4
+                   THEN extract(year FROM CURRENT_DATE)::int
+                   ELSE extract(year FROM CURRENT_DATE)::int - 1 END AS fy_start
+     ) s`
+  );
+  return rows[0].label;
+}
+
+/**
+ * Issue a draft: assign the next FY-segmented number (immutable), freeze totals,
+ * then best-effort email the institution's admins. Email failure NEVER fails the
+ * issue (sendMail is fire-and-forget; the whole notify step is also guarded).
+ */
 export async function issueInvoice(invoiceId: string) {
   if ((await invoiceStatus(invoiceId)) !== "draft") {
     throw ApiError.badRequest("Only a draft invoice can be issued");
   }
   await recomputeTotals(invoiceId);
-  const number = `${env.saasInvoicePrefix}${String(
-    (await query<{ n: string }>("SELECT nextval('saas_invoice_seq')::text AS n"))
-      .rows[0].n
-  ).padStart(6, "0")}`;
-  await query(
-    `UPDATE saas_invoices
-       SET status = 'issued', number = $2, issued_at = now()
-     WHERE id = $1`,
-    [invoiceId, number]
-  );
+  await withTransaction(async (client) => {
+    const label = await currentFyLabel(client as never);
+    const ctr = await client.query<{ last_value: number }>(
+      `INSERT INTO saas_invoice_counters (fy, last_value) VALUES ($1, 1)
+       ON CONFLICT (fy) DO UPDATE SET last_value = saas_invoice_counters.last_value + 1
+       RETURNING last_value`,
+      [label]
+    );
+    const number = `${env.saasInvoicePrefix}${label}-${String(
+      ctr.rows[0].last_value
+    ).padStart(6, "0")}`;
+    await client.query(
+      `UPDATE saas_invoices SET status = 'issued', number = $2, issued_at = now()
+       WHERE id = $1`,
+      [invoiceId, number]
+    );
+  });
+  await notifyInvoiceIssued(invoiceId);
   return getInvoice(invoiceId);
+}
+
+/** Best-effort "invoice issued" email to the institution's admins. Never throws. */
+async function notifyInvoiceIssued(invoiceId: string): Promise<void> {
+  try {
+    const { rows } = await query<{
+      number: string;
+      currency: string;
+      total: string;
+      institution_id: string;
+    }>(
+      `SELECT number, currency, total::text AS total, institution_id
+       FROM saas_invoices WHERE id = $1`,
+      [invoiceId]
+    );
+    const inv = rows[0];
+    if (!inv) return;
+    const admins = await query<{ email: string }>(
+      `SELECT email FROM users
+       WHERE institution_id = $1 AND role = 'admin' AND is_active = true`,
+      [inv.institution_id]
+    );
+    for (const a of admins.rows) {
+      await sendMail({
+        to: a.email,
+        subject: `Invoice ${inv.number} from SRE EDU OS`,
+        text:
+          `A new subscription invoice (${inv.number}) for ${inv.currency} ${inv.total} ` +
+          `has been issued to your institution. Please contact your SRE EDU OS ` +
+          `administrator for the PDF and payment details.`,
+      });
+    }
+  } catch (err) {
+    console.error("invoice issued email failed (continuing):", err);
+  }
 }
 
 /** Record OFFLINE payment (no gateway). */
@@ -190,10 +267,10 @@ export async function markPaid(invoiceId: string, input: MarkPaid) {
   }
   await query(
     `UPDATE saas_invoices
-       SET status = 'paid', payment_method = $2,
-           paid_at = COALESCE($3::timestamptz, now())
+       SET status = 'paid', payment_method = $2, payment_reference = $3,
+           paid_at = COALESCE($4::timestamptz, now())
      WHERE id = $1`,
-    [invoiceId, input.paymentMethod, input.paidAt ?? null]
+    [invoiceId, input.paymentMethod, input.reference ?? null, input.paidAt ?? null]
   );
   return getInvoice(invoiceId);
 }
@@ -208,4 +285,33 @@ export async function voidInvoice(invoiceId: string) {
     invoiceId,
   ]);
   return getInvoice(invoiceId);
+}
+
+/** Render the invoice as a PDF (super-admin download). */
+export async function invoicePdfBuffer(invoiceId: string): Promise<Buffer> {
+  const { rows } = await query<InvoicePdfData & { institutionName: string }>(
+    `SELECT i.number, i.status, i.currency,
+            inst.name AS "institutionName",
+            i.billing_name AS "billingName", i.billing_address AS "billingAddress",
+            i.gstin,
+            to_char(i.period_start, 'YYYY-MM-DD') AS "periodStart",
+            to_char(i.period_end, 'YYYY-MM-DD') AS "periodEnd",
+            i.issued_at::text AS "issuedAt", i.paid_at::text AS "paidAt",
+            i.payment_method AS "paymentMethod",
+            i.subtotal::text AS subtotal, i.tax_percent::text AS "taxPercent",
+            i.tax_amount::text AS "taxAmount", i.total::text AS total,
+            i.notes, i.tax_notes AS "taxNotes"
+     FROM saas_invoices i
+     JOIN institutions inst ON inst.id = i.institution_id
+     WHERE i.id = $1`,
+    [invoiceId]
+  );
+  if (!rows[0]) throw ApiError.notFound("Invoice not found");
+  const lines = await query<InvoicePdfData["lines"][number]>(
+    `SELECT description, quantity::text AS quantity,
+            unit_price::text AS "unitPrice", amount::text AS amount
+     FROM saas_invoice_lines WHERE invoice_id = $1 ORDER BY created_at`,
+    [invoiceId]
+  );
+  return invoicePdf({ ...rows[0], lines: lines.rows });
 }
