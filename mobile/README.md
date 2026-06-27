@@ -1,7 +1,37 @@
 # SRE EDU OS — Mobile
 
-Flutter app for staff and parents: dashboard, notice board and profile,
-with Firebase Cloud Messaging for push notifications.
+Flutter app for the SRE EDU OS school ERP, with Firebase Cloud Messaging for
+push notifications.
+
+## Parent/Student parity (Phase 1)
+
+The app is role-aware. Students and parents get a portal experience built
+entirely on the existing owner/tenant-scoped backend APIs (Bearer auth via
+`/auth/login` with refresh + graceful session expiry):
+
+- **Dashboard** with a parent **child selector** (attendance rate, outstanding
+  fees, pending invoices, quick links).
+- **Attendance** — monthly summary + recent records.
+- **Fees** — pending/paid invoices, **Pay Online** via the Online Fee Gateway
+  (hosted checkout), a payment-result screen, and fee-receipt download.
+- **Homework** — list, detail, attachment download, and text submission.
+- **Notices** — announcements + a message **inbox** with read state.
+- **Documents / Report cards / ID card** — authenticated PDF download + view.
+- **Profile** for the selected student/child.
+
+## Staff parity (Phase 2)
+
+Admin / teacher / accountant users get a **permission-gated** staff experience
+(tiles appear only when `auth.can(<permission>)`, loaded from
+`/auth/permissions`), all on the existing tenant/permission-scoped APIs:
+
+- **Dashboard hub** — KPI cards + quick-action tiles.
+- **Mark attendance** (class → section → date, present/absent/late/excused).
+- **Exam marks entry** (exam → section → subject roster).
+- **Homework** — create, list, review submissions, open attachments.
+- **Communication** — staff inbox/sent + compose (audience-targeted).
+- **My timetable** (teacher), **Reports** (export PDF), **My payslips** (PDF).
+- **Quick views** — student search, staff directory, fee dues, TC register.
 
 ## Getting started
 

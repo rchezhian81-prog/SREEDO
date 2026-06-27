@@ -7,6 +7,9 @@ export const createAnnouncementSchema = z.object({
     .enum(["all", "teachers", "students", "parents", "staff"])
     .optional(),
   isPinned: z.boolean().optional(),
+  // Optional ISO-8601 timestamp to schedule the announcement: until it passes
+  // the announcement is hidden from the audience (publishers still see it).
+  publishAt: z.string().datetime().optional(),
 });
 
 export const updateAnnouncementSchema = createAnnouncementSchema.partial();

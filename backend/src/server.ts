@@ -4,6 +4,8 @@ import { closeMongo, connectMongo } from "./db/mongo";
 import { assertPostgresConnection, pool } from "./db/postgres";
 import { runMigrations } from "./db/migrate";
 import { seedIfEmpty } from "./db/seed";
+import { verifyMailer } from "./utils/mailer";
+import { startWorker, stopWorker } from "./modules/jobs/jobs.worker";
 
 async function main(): Promise<void> {
   await assertPostgresConnection();
@@ -15,14 +17,31 @@ async function main(): Promise<void> {
   }
   await connectMongo();
 
+  // Validate SMTP up front so a misconfiguration surfaces in the boot logs
+  // rather than silently dropping every password-reset email. Non-fatal.
+  const mail = await verifyMailer();
+  if (!mail.configured) {
+    console.warn(
+      "SMTP not configured — transactional email (password reset, notifications) is disabled"
+    );
+  } else if (!mail.ok) {
+    console.warn(`SMTP configured but verification FAILED: ${mail.error}`);
+  } else {
+    console.log("SMTP verified — transactional email is deliverable");
+  }
+
   const app = createApp();
   const server = app.listen(env.port, () => {
     console.log(`SRE EDU OS API listening on port ${env.port}`);
     console.log(`Swagger UI: http://localhost:${env.port}/api/docs`);
   });
 
+  // Optional in-process background worker (off unless JOB_WORKER_ENABLED=true).
+  startWorker();
+
   const shutdown = (signal: string) => {
     console.log(`${signal} received — shutting down`);
+    stopWorker();
     server.close(async () => {
       await Promise.allSettled([pool.end(), closeMongo()]);
       process.exit(0);

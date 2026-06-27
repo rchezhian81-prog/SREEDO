@@ -1,25 +1,82 @@
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
-import morgan from "morgan";
 import swaggerUi from "swagger-ui-express";
 import { env } from "./config/env";
 import { swaggerSpec } from "./config/swagger";
 import { getMongoDb } from "./db/mongo";
 import { pool } from "./db/postgres";
 import { auditLog } from "./middleware/audit";
+import { csrfOriginGuard } from "./middleware/csrf";
 import { errorHandler, notFoundHandler } from "./middleware/error";
 import { apiRateLimiter } from "./middleware/rate-limit";
+import { requestContext } from "./middleware/request-context";
+import { requestLogger } from "./middleware/request-logger";
+import { observabilityRouter } from "./modules/observability/observability.routes";
+import { liveness, readiness } from "./modules/observability/observability.service";
 import { academicsRouter } from "./modules/academics/academics.routes";
+import { adminConsoleRouter } from "./modules/adminconsole/adminconsole.routes";
+import { activityRouter } from "./modules/activity/activity.routes";
+import { admissionsRouter } from "./modules/admissions/admissions.routes";
+import { financeRouter } from "./modules/finance/finance.routes";
+import { calendarRouter } from "./modules/calendar/calendar.routes";
+import { visitorsRouter } from "./modules/visitors/visitors.routes";
+import { feedbackRouter } from "./modules/feedback/feedback.routes";
+import { infirmaryRouter } from "./modules/infirmary/infirmary.routes";
+import { alumniRouter } from "./modules/alumni/alumni.routes";
+import { messRouter } from "./modules/mess/mess.routes";
+import { studyMaterialsRouter } from "./modules/studymaterials/studymaterials.routes";
+import { quizzesRouter } from "./modules/quizzes/quizzes.routes";
+import { reservationsRouter } from "./modules/reservations/reservations.routes";
+import { biometricRouter } from "./modules/biometric/biometric.routes";
+import { feeRefundsRouter } from "./modules/feerefunds/feerefunds.routes";
+import { pollsRouter } from "./modules/polls/polls.routes";
+import { lostFoundRouter } from "./modules/lostfound/lostfound.routes";
+import { galleryRouter } from "./modules/gallery/gallery.routes";
+import { integrationsRouter } from "./modules/integrations/integrations.routes";
+import { extRouter } from "./modules/ext/ext.routes";
+import { brandingRouter } from "./modules/branding/branding.routes";
+import { periodAttendanceRouter } from "./modules/periodattendance/periodattendance.routes";
+import { timetableGenRouter } from "./modules/timetablegen/timetablegen.routes";
 import { aiRouter } from "./modules/ai/ai.routes";
+import { aiInsightsRouter } from "./modules/aiinsights/aiinsights.routes";
 import { announcementsRouter } from "./modules/announcements/announcements.routes";
 import { attendanceRouter } from "./modules/attendance/attendance.routes";
 import { authRouter } from "./modules/auth/auth.routes";
+import { backupsRouter } from "./modules/backups/backups.routes";
+import { collegeRouter } from "./modules/college/college.routes";
+import { communicationRouter } from "./modules/communication/communication.routes";
+import { customReportsRouter } from "./modules/customreports/customreports.routes";
 import { dashboardRouter } from "./modules/dashboard/dashboard.routes";
+import { disciplinaryRouter } from "./modules/disciplinary/disciplinary.routes";
+import { documentsRouter } from "./modules/documents/documents.routes";
 import { examsRouter } from "./modules/exams/exams.routes";
 import { feesRouter } from "./modules/fees/fees.routes";
+import { homeworkRouter } from "./modules/homework/homework.routes";
+import { liveClassesRouter } from "./modules/liveclasses/liveclasses.routes";
+import { hostelRouter } from "./modules/hostel/hostel.routes";
+import { inventoryRouter } from "./modules/inventory/inventory.routes";
+import { jobsRouter } from "./modules/jobs/jobs.routes";
+import { libraryRouter } from "./modules/library/library.routes";
+import { onlinePaymentsRouter } from "./modules/onlinepayments/onlinepayments.routes";
+import { transportRouter } from "./modules/transport/transport.routes";
+import {
+  certificatesRouter,
+  feeReceiptsRouter,
+  idCardsRouter,
+} from "./modules/pdfs/pdfs.routes";
+import { payrollRouter } from "./modules/payroll/payroll.routes";
+import { platformRouter } from "./modules/platform/platform.routes";
+import { portalRouter } from "./modules/portal/portal.routes";
+import { reportCenterRouter } from "./modules/reportcenter/reportcenter.routes";
+import { reportsRouter } from "./modules/reports/reports.routes";
+import { scheduledReportsRouter } from "./modules/scheduledreports/scheduledreports.routes";
+import { leaveRouter, staffAttendanceRouter } from "./modules/staffleave/staffleave.routes";
 import { studentsRouter } from "./modules/students/students.routes";
+import { superAdminRouter } from "./modules/superadmin/superadmin.routes";
 import { teachersRouter } from "./modules/teachers/teachers.routes";
+import { timetableRouter } from "./modules/timetable/timetable.routes";
+import { transferCertificatesRouter } from "./modules/tc/tc.routes";
 import { usersRouter } from "./modules/users/users.routes";
 
 export function createApp(): express.Express {
@@ -28,10 +85,38 @@ export function createApp(): express.Express {
   // Behind nginx in production; needed for correct client IPs in rate limiting.
   app.set("trust proxy", 1);
 
-  app.use(helmet());
+  // Correlation id first, so every log line + response carries it.
+  app.use(requestContext);
+  // Helmet with an explicit Content-Security-Policy. The API serves JSON plus
+  // the (dev-only) Swagger UI, which needs inline script/style and data: images;
+  // object-src 'none', base-uri 'self' and frame-ancestors 'none' are real wins
+  // regardless. The web app sets its own, stricter CSP in next.config.mjs.
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'", "'unsafe-inline'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", "data:"],
+          objectSrc: ["'none'"],
+          baseUri: ["'self'"],
+          frameAncestors: ["'none'"],
+        },
+      },
+    })
+  );
   app.use(cors({ origin: env.corsOrigin, credentials: true }));
-  app.use(express.json({ limit: "1mb" }));
-  app.use(morgan(env.isProduction ? "combined" : "dev"));
+  app.use(
+    express.json({
+      limit: "1mb",
+      // Capture the raw bytes so payment webhooks can verify their HMAC signature.
+      verify: (req, _res, buf) => {
+        (req as express.Request).rawBody = buf;
+      },
+    })
+  );
+  app.use(requestLogger);
 
   app.get("/health", async (_req, res) => {
     let postgres = false;
@@ -49,13 +134,32 @@ export function createApp(): express.Express {
     });
   });
 
-  app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-  app.get("/api/docs.json", (_req, res) => {
-    res.json(swaggerSpec);
+  // Readiness probe — 503 until critical deps (DB + migrations) are ready. Public
+  // (k8s probes don't authenticate); returns only check flags, never secrets.
+  app.get("/ready", async (_req, res) => {
+    const result = await readiness();
+    res.status(result.ready ? 200 : 503).json(result);
   });
+
+  // Liveness — cheapest possible "process is up" probe.
+  app.get("/live", (_req, res) => {
+    res.json(liveness());
+  });
+
+  // Swagger is disabled in production by default (see env.enableApiDocs) so the
+  // API surface is not publicly browsable; set ENABLE_API_DOCS=true to expose it.
+  if (env.enableApiDocs) {
+    app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+    app.get("/api/docs.json", (_req, res) => {
+      res.json(swaggerSpec);
+    });
+  }
 
   const api = express.Router();
   api.use(apiRateLimiter);
+  // CSRF defense-in-depth for cookie-authenticated (portal) state changes.
+  // Bearer-token and server-to-server callers pass through untouched.
+  api.use(csrfOriginGuard);
   api.use(auditLog);
   api.use("/auth", authRouter);
   api.use("/users", usersRouter);
@@ -63,11 +167,64 @@ export function createApp(): express.Express {
   api.use("/teachers", teachersRouter);
   api.use("/", academicsRouter); // /academic-years, /classes, /sections, /subjects
   api.use("/attendance", attendanceRouter);
+  api.use("/timetable", timetableRouter);
   api.use("/exams", examsRouter);
   api.use("/fees", feesRouter);
+  api.use("/online-payments", onlinePaymentsRouter);
+  api.use("/transfer-certificates", transferCertificatesRouter);
+  api.use("/college", collegeRouter);
+  api.use("/library", libraryRouter);
+  api.use("/transport", transportRouter);
+  api.use("/hostel", hostelRouter);
+  api.use("/inventory", inventoryRouter);
+  api.use("/staff", staffAttendanceRouter);
+  api.use("/leave", leaveRouter);
+  api.use("/payroll", payrollRouter);
   api.use("/announcements", announcementsRouter);
   api.use("/dashboard", dashboardRouter);
+  api.use("/portal", portalRouter);
+  api.use("/reports", reportsRouter);
+  api.use("/report-center", reportCenterRouter);
+  api.use("/custom-reports", customReportsRouter);
+  api.use("/scheduled-reports", scheduledReportsRouter);
+  api.use("/jobs", jobsRouter);
+  api.use("/disciplinary", disciplinaryRouter);
+  api.use("/communication", communicationRouter);
+  api.use("/documents", documentsRouter);
+  api.use("/homework", homeworkRouter);
+  api.use("/live-classes", liveClassesRouter);
+  api.use("/fee-receipts", feeReceiptsRouter);
+  api.use("/id-cards", idCardsRouter);
+  api.use("/certificates", certificatesRouter);
   api.use("/ai", aiRouter);
+  api.use("/ai-insights", aiInsightsRouter);
+  api.use("/observability", observabilityRouter); // super-admin platform observability
+  api.use("/backups", backupsRouter); // super-admin backup / restore automation
+  api.use("/admin", adminConsoleRouter); // super-admin platform console
+  api.use("/activity", activityRouter); // institution-admin activity log (own tenant)
+  api.use("/admissions", admissionsRouter); // online admissions + public enquiry
+  api.use("/finance", financeRouter); // accounting: income/expense ledger
+  api.use("/calendar", calendarRouter); // events & academic calendar
+  api.use("/visitors", visitorsRouter); // front office: visitor log
+  api.use("/feedback", feedbackRouter); // feedback / grievance tracker
+  api.use("/infirmary", infirmaryRouter); // health / infirmary visit log
+  api.use("/alumni", alumniRouter); // alumni & placement directory
+  api.use("/cafeteria", messRouter); // cafeteria / mess menu (admin)
+  api.use("/study-materials", studyMaterialsRouter); // LMS study materials (admin/teacher)
+  api.use("/quizzes", quizzesRouter); // online quizzes authoring (admin/teacher)
+  api.use("/reservations", reservationsRouter); // library reservations (admin)
+  api.use("/biometric", biometricRouter); // biometric / RFID attendance devices
+  api.use("/fee-refunds", feeRefundsRouter); // fee refunds against payments (admin)
+  api.use("/polls", pollsRouter); // polls / surveys authoring (admin/teacher)
+  api.use("/lost-found", lostFoundRouter); // lost & found register (admin)
+  api.use("/gallery", galleryRouter); // photo gallery (admin)
+  api.use("/integrations", integrationsRouter); // API keys + webhooks (admin)
+  api.use("/ext", extRouter); // external read-only API, authenticated by x-api-key
+  api.use("/branding", brandingRouter); // white-labeling / branding
+  api.use("/period-attendance", periodAttendanceRouter); // per-period attendance (admin/teacher)
+  api.use("/timetable-gen", timetableGenRouter); // timetable auto-generation (admin)
+  api.use("/platform", platformRouter); // super-admin platform hardening
+  api.use("/", superAdminRouter); // /institutions, /branches, /packages
   app.use("/api/v1", api);
 
   app.use(notFoundHandler);

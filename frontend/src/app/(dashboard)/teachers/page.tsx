@@ -17,6 +17,8 @@ import {
   Spinner,
 } from "@/components/ui";
 import type { Paginated, Teacher } from "@/types";
+import { ImportCsvModal, type ImportColumn } from "@/components/ImportCsvModal";
+import { useTerms } from "@/lib/terms";
 
 const teacherSchema = z.object({
   firstName: z.string().min(1, "Required"),
@@ -29,11 +31,35 @@ const teacherSchema = z.object({
 
 type TeacherForm = z.infer<typeof teacherSchema>;
 
+const IMPORT_COLUMNS: ImportColumn[] = [
+  { key: "firstName", label: "First name", required: true },
+  { key: "lastName", label: "Last name", required: true },
+  { key: "email", label: "Email" },
+  { key: "phone", label: "Phone" },
+  { key: "qualification", label: "Qualification" },
+  { key: "specialization", label: "Specialization" },
+  { key: "joiningDate", label: "Joining date (YYYY-MM-DD)" },
+  { key: "employeeNo", label: "Employee no (auto if blank)" },
+];
+
+const IMPORT_SAMPLE: Record<string, string> = {
+  firstName: "Meena",
+  lastName: "Iyer",
+  email: "meena@example.com",
+  phone: "9000000001",
+  qualification: "M.Sc, B.Ed",
+  specialization: "Mathematics",
+  joiningDate: "2024-06-01",
+  employeeNo: "",
+};
+
 export default function TeachersPage() {
+  const term = useTerms();
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -70,7 +96,9 @@ export default function TeachersPage() {
       await load();
     } catch (err) {
       setServerError(
-        err instanceof ApiError ? err.message : "Failed to save teacher"
+        err instanceof ApiError
+          ? err.message
+          : `Failed to save ${term.teacher.toLowerCase()}`
       );
     }
   };
@@ -84,21 +112,28 @@ export default function TeachersPage() {
   return (
     <>
       <PageHeader
-        title="Teachers"
-        subtitle={`${total} on staff`}
+        title={term.teachers}
+        subtitle={`${total} ${term.teachers.toLowerCase()}`}
         action={
-          <Button onClick={() => setModalOpen(true)}>+ Add teacher</Button>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => setImportOpen(true)}>
+              Import CSV
+            </Button>
+            <Button onClick={() => setModalOpen(true)}>
+              + Add {term.teacher.toLowerCase()}
+            </Button>
+          </div>
         }
       />
 
       {loading ? (
         <Spinner />
       ) : teachers.length === 0 ? (
-        <EmptyState message="No teachers yet" />
+        <EmptyState message={`No ${term.teachers.toLowerCase()} yet`} />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-xl border border-line bg-surface">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+            <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
               <tr>
                 <th className="px-4 py-3">Employee No</th>
                 <th className="px-4 py-3">Name</th>
@@ -108,19 +143,19 @@ export default function TeachersPage() {
                 <th className="px-4 py-3" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-line">
               {teachers.map((teacher) => (
-                <tr key={teacher.id} className="hover:bg-slate-50">
+                <tr key={teacher.id} className="hover:bg-surface-2">
                   <td className="px-4 py-3 font-mono text-xs">
                     {teacher.employeeNo}
                   </td>
-                  <td className="px-4 py-3 font-medium text-slate-900">
+                  <td className="px-4 py-3 font-medium text-ink">
                     {teacher.firstName} {teacher.lastName}
                   </td>
                   <td className="px-4 py-3">
                     {teacher.email ?? "—"}
                     {teacher.phone && (
-                      <span className="block text-xs text-slate-400">
+                      <span className="block text-xs text-faint">
                         {teacher.phone}
                       </span>
                     )}
@@ -147,7 +182,7 @@ export default function TeachersPage() {
       )}
 
       <Modal
-        title="Add teacher"
+        title={`Add ${term.teacher.toLowerCase()}`}
         open={modalOpen}
         onClose={() => setModalOpen(false)}
       >
@@ -186,11 +221,22 @@ export default function TeachersPage() {
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Saving…" : "Save teacher"}
+              {isSubmitting ? "Saving…" : `Save ${term.teacher.toLowerCase()}`}
             </Button>
           </div>
         </form>
       </Modal>
+
+      <ImportCsvModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        title={`Import ${term.teachers.toLowerCase()} from CSV`}
+        endpoint="/teachers/import"
+        columns={IMPORT_COLUMNS}
+        sample={IMPORT_SAMPLE}
+        templateName="teachers-template.csv"
+        onImported={load}
+      />
     </>
   );
 }

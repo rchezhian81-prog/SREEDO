@@ -1,0 +1,148 @@
+import type { LucideIcon, LucideProps } from "lucide-react";
+import {
+  LayoutGrid,
+  Users,
+  GraduationCap,
+  Presentation,
+  School,
+  Calendar,
+  CalendarCheck,
+  FileText,
+  CreditCard,
+  Wallet,
+  Megaphone,
+  Sparkles,
+  Shield,
+  Building2,
+  Package,
+  Menu,
+  Search,
+  Bell,
+  MessageSquare,
+  Mail,
+  Sun,
+  Moon,
+  ChevronDown,
+  ChevronRight,
+  ChevronLeft,
+  Plus,
+  LogOut,
+  LifeBuoy,
+  TrendingUp,
+  TrendingDown,
+  Check,
+  UserPlus,
+  Briefcase,
+  BarChart3,
+  Star,
+  Wrench,
+  Settings,
+  Bus,
+  TriangleAlert,
+  Stethoscope,
+  Utensils,
+  BookOpen,
+  FileQuestion,
+  Fingerprint,
+  Receipt,
+  Image as ImageIcon,
+  Link2 as LinkIcon,
+  Palette,
+  Tag,
+  X,
+  ArrowRight,
+  ArrowLeft,
+  Lock,
+  Layers,
+  Network,
+  ClipboardList,
+  Rocket,
+  Video,
+} from "lucide-react";
+
+/*
+ * App icon set — a thin, named facade over `lucide-react` so the rest of the
+ * codebase keeps referencing icons by a stable short name (`<Icon name="grid" />`)
+ * while the underlying glyphs are the modern Lucide line set. Icons inherit the
+ * current text colour and are sized with a className (e.g. `h-5 w-5`).
+ */
+const MAP = {
+  grid: LayoutGrid,
+  users: Users,
+  cap: GraduationCap,
+  graduation: GraduationCap,
+  board: Presentation,
+  school: School,
+  calendar: Calendar,
+  calcheck: CalendarCheck,
+  file: FileText,
+  card: CreditCard,
+  wallet: Wallet,
+  megaphone: Megaphone,
+  sparkles: Sparkles,
+  shield: Shield,
+  building: Building2,
+  package: Package,
+  menu: Menu,
+  search: Search,
+  bell: Bell,
+  message: MessageSquare,
+  mail: Mail,
+  sun: Sun,
+  moon: Moon,
+  chevronDown: ChevronDown,
+  chevronRight: ChevronRight,
+  chevronLeft: ChevronLeft,
+  plus: Plus,
+  logout: LogOut,
+  help: LifeBuoy,
+  trendUp: TrendingUp,
+  trendDown: TrendingDown,
+  check: Check,
+  userPlus: UserPlus,
+  briefcase: Briefcase,
+  barChart: BarChart3,
+  star: Star,
+  wrench: Wrench,
+  gear: Settings,
+  bus: Bus,
+  alert: TriangleAlert,
+  health: Stethoscope,
+  utensils: Utensils,
+  bookOpen: BookOpen,
+  quiz: FileQuestion,
+  fingerprint: Fingerprint,
+  receipt: Receipt,
+  image: ImageIcon,
+  link: LinkIcon,
+  palette: Palette,
+  tag: Tag,
+  x: X,
+  arrowRight: ArrowRight,
+  arrowLeft: ArrowLeft,
+  lock: Lock,
+  layers: Layers,
+  network: Network,
+  clipboard: ClipboardList,
+  rocket: Rocket,
+  video: Video,
+} satisfies Record<string, LucideIcon>;
+
+export type IconName = keyof typeof MAP;
+
+export function Icon({
+  name,
+  className = "h-5 w-5",
+  strokeWidth = 1.85,
+  ...props
+}: { name: IconName; strokeWidth?: number } & LucideProps) {
+  const Glyph = MAP[name];
+  return (
+    <Glyph
+      className={className}
+      strokeWidth={strokeWidth}
+      aria-hidden="true"
+      {...props}
+    />
+  );
+}

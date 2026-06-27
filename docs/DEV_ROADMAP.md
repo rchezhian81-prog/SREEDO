@@ -1,0 +1,417 @@
+# Development Roadmap — SRE EDU OS
+
+Covers deliverables **#8 Development phases**, **#9 Testing plan**, and **#10
+Deployment plan**. Status reflects 2026-06-18. The operational run/deploy
+walkthrough also exists as `docs/ROADMAP.html`; this is the engineering plan.
+
+---
+
+## Part 1 — Development phases (#8)
+
+Phasing is sequenced so each phase is shippable and the riskiest cross-cutting
+work (multi-tenancy, permissions, security hardening) comes first.
+
+### Phase 0 — MVP ✅ DONE (baseline)
+Auth + RBAC, admin dashboard, students, teachers, academics, attendance, fees,
+exams (API), announcements, AI assistant, Swagger, seed, Docker, CI, unit tests.
+*This satisfies the brief's MVP list.*
+
+### Phase A — Foundation hardening & multi-tenancy 🟡 IN PROGRESS
+**Goal:** make the platform truly multi-institution and production-safe.
+1. **Security backlog (handover §8):** ✅ owner-scoped reads, ✅ soft-delete
+   students, ✅ invoice `amount_paid`, ✅ sequence-based numbering, ✅ Swagger
+   off in production, ✅ **httpOnly-cookie tokens** (shipped with the portal —
+   `authenticate` reads a Bearer header for staff or the cookie for the portal) —
+   all done.
+2. **Permissions layer:** ✅ `permissions` + `role_permissions` (migration
+   `0012`), `requirePermission()` middleware with a cached role→permission map,
+   seeded role matrix, `GET /auth/permissions`, and `super_admin` bypass. The
+   users module is wired to it; remaining routes migrate from `authorize(...)`
+   to `requirePermission(...)` incrementally.
+3. **Multi-tenancy:** ✅ `institutions`/`branches`/`subscription_packages`/
+   `institution_subscriptions` + `super_admin` role (migration `0011`);
+   `institution_id` added/backfilled/indexed on all tenant tables (`0013`) and
+   set `NOT NULL` (`0014`); tenant context in the JWT + `/auth/me`; a
+   `requireTenant` middleware; and **per-module query scoping** so every module
+   filters by the caller's `institution_id`. Cross-tenant isolation is proven by
+   integration tests. (Done in a dedicated follow-up PR after Phase A merged.)
+4. **Super Admin panel:** ✅ backend CRUD + web console (`/super-admin`:
+   institutions, branches, packages, subscriptions) and ✅ **hardening**
+   (migration `0030`, `/admin/*`): global institution settings + feature
+   flags/modules, **plan-limit enforcement**, a global **audit-log viewer**
+   (Mongo, CSV, graceful), safe **data export** + history, read-only
+   **cross-tenant snapshot**, and **system health**. ✅ **Platform Hardening**
+   (migration `0039`, `/platform/*`, `platform:*`) — a consolidated super-admin
+   surface with an explicit permission set (`platform:read|manage_institutions|
+   manage_subscriptions|audit_read|health_read|impersonate|usage_read`, granted to
+   super_admin only), **platform-wide KPIs** (institutions active/suspended,
+   students/staff/users, fees outstanding, online-payment + storage usage, module
+   adoption), **institution lifecycle** (create / update / **suspend** /
+   **activate** / assign subscription / set per-institution limits), a **durable
+   Postgres cross-tenant audit trail** (`platform_audit_log`) recording every
+   lifecycle/subscription/impersonation action with a read-only filterable viewer,
+   and **support impersonation** (audited, scoped token, never returns secrets,
+   refuses to impersonate a super admin). All routes are `authorize("super_admin")`
+   + `requirePermission`; tenant users are denied; no secret/payment fields are
+   exposed. ✅ **Global User-Role Management (RBAC console)** (migration `0042`,
+   `/platform/permissions|roles`, `platform:rbac_*`/`platform:permissions_*`): view
+   the permission **catalogue** (grouped by module, with the roles holding each)
+   and the **role→permission matrix**, and **grant/revoke** permissions per role
+   directly against `role_permissions` — each change **invalidates the runtime
+   permission cache** (applies immediately) and writes a durable `platform_audit_log`
+   entry. Safeguards: super-admin only; invalid permissions rejected; duplicate
+   grants idempotent; **super_admin's critical `platform:*` permissions cannot be
+   revoked**. Remaining: scheduled backup/restore automation.
+5. ✅ **MVP UI gaps filled:** Exams & Results page and Users/account-management
+   page shipped.
+
+### Phase B — Academic depth (college mode + timetables) ✅
+1. **College mode:** ✅ departments, programs/courses, semesters, academic
+   batches, course-/semester-wise subjects (with credits), student enrollment,
+   and staff allocation (migration `0023`) — tenant-scoped, permission-guarded
+   (`college:*`, `departments:*`, `programs:*`, `semesters:*`). Semester-tagged
+   exams + a **GPA/CGPA** foundation (grade-band `grade_point`, credit-weighted)
+   with owner-scoped student semester-result / CGPA views. Institutions switch
+   between school and college mode per `type` (school flow unchanged); web UI
+   shipped (`/college`). Additive, school-safe columns on `exams`,
+   `fee_structures`, `grade_bands`, and `timetable_entries`.
+2. **Timetable:** ✅ period & room masters, per-section timetable entries,
+   teacher/room/section **conflict checking** (service 409s + race-safe partial
+   unique indexes, migration `0015`), teacher-timetable view, CSV export, and
+   `timetable:*` permissions. Tenant-scoped; web UI shipped (`/timetable`).
+3. **Grading:** ✅ grade-band scale (migration `0017`), total/%/grade computation,
+   and **report-card + mark-sheet PDFs** (pdfkit) generated from exam results —
+   owner-scoped, permission-guarded, with a staff Reports page + portal download.
+
+### Phase C — Engagement (portals, homework, comms, AI+) ⬜
+1. **Object storage** ✅ — S3-compatible adapter (local-disk fallback), document
+   metadata table (migration `0019`), validated/safe-named uploads, protected
+   owner-scoped downloads, `documents:*` + `institution:logo:update` permissions,
+   and upload/list/download/delete UI (staff + portal). ID-card/photo/cert/TC +
+   message-attachment foundations included.
+2. **PDFs:** ✅ **report cards**, **mark sheets**, **fee receipts**, and **student/
+   staff ID cards** (incl. bulk section export) shipped on a shared pdfkit utility
+   (migration `0021` adds `fee_receipts:*` / `id_cards:*` permissions). Remaining:
+   transfer certificates.
+3. **Communication:** ✅ in-app messaging (audience targeting + read/unread inbox),
+   **email/SMS/FCM-push** adapters (optional, graceful), device-token registration,
+   **fee reminders** + **absence alerts** (migration `0018`). ✅ **Threaded
+   messaging** — conversation **threads** (one-to-one + group), replies, and
+   **per-participant read state** (unread counts, mark-read) with strict
+   participant-scoped access, same-institution participant validation, best-effort
+   reply notifications (reuse the channel adapters), archive, and 4 messaging
+   reports (migration `0035`, `/communication/threads`, `threads:*`). Legacy
+   inbox untouched.
+4. **Parent & Student portals** — ✅ base shipped (web): cookie auth (`/auth/portal/*`),
+   `guardians` parent⇄child links (migration `0016`), `/portal/*` owner-scoped
+   endpoints, and portal UI (dashboard, profile, attendance, timetable, fees,
+   notices, child selector). ✅ **Mobile parity (Phase 1)** — the Flutter app now
+   delivers the parent/student experience on mobile (Bearer auth via `/auth/login`
+   with refresh + graceful expiry, role-aware shell with a parent child-selector,
+   dashboard, attendance, fees + **Pay Online** via the gateway + receipt,
+   homework view/submit, announcements + inbox, documents/report-card/ID-card
+   PDFs, profile, best-effort FCM token registration). ✅ **Mobile parity
+   (Phase 2)** — the **staff** experience: permission-gated dashboard hub
+   (`auth.can(...)` from `/auth/permissions`) with KPI cards + action tiles to
+   mark **attendance**, enter **exam marks**, create/review **homework**, send/
+   read **communication**, view **my timetable**, run **reports**, download **my
+   payslips**, and quick views (student/staff search, fee dues, TC register).
+   Reuses the existing owner/tenant/permission-scoped APIs only — **no backend
+   changes**.
+5. **Homework/assignments** ✅ — section/subject assignments with attachments,
+   student submissions (text + file), teacher review/grading, assign/submit
+   notifications (migration `0020`); staff console + portal pages.
+6. **AI advanced:** ✅ a dedicated **AI Insights** module (`/ai-insights`,
+   `ai:*`, tenant-scoped + permission-guarded) — **report/KPI summaries** for 9
+   modules (attendance, fees, exams, homework, payroll, library, transport,
+   hostel, inventory), **attendance-risk alerts** (low-attendance students over a
+   window), **fee pending/collection risk** (overdue + outstanding, manual
+   reminder only — no auto-send), **embeddings document search** (semantic via
+   OpenAI when configured, keyword fallback otherwise — metadata only, never file
+   contents/keys), **deterministic workflow suggestions**, and an insights
+   dashboard. All metrics are computed deterministically from tenant data and
+   returned even when OpenAI is unconfigured; OpenAI only adds an optional
+   natural-language narrative + semantic ranking. AI usage is logged best-effort
+   to MongoDB. No new tables (migration `0031` adds the `ai:*` permissions only).
+
+### Phase D — Operations modules + reporting 🟡
+✅ **Reports Center** — 55 cross-module reports with filters + CSV/PDF export
+(migration `0022`, `/report-center`, permission-gated; includes 6 college, 6
+library, 7 transport, 6 hostel, 7 inventory, 7 staff-attendance/leave, 6 payroll
+reports). ✅ **Library Management** —
+catalogue, members, issue/return/renew with auto late-fines (→ Fees), settings, 6
+reports (migration `0024`). ✅ **Transport Management** — vehicle & driver masters
+(expiry tracking), routes + stops, student allocation, fee mapping with idempotent
+**invoice generation** (→ Fees), trip-log foundation, 7 reports (migration `0025`).
+✅ **Hostel Management** — hostels, blocks & rooms, student allocation with
+capacity enforcement + **room transfer/vacate**, fee mapping with invoice
+generation (→ Fees), 6 reports (migration `0026`). ✅ **Inventory Management** —
+item categories, items, vendors; **purchases (stock-in)**, **issues (stock-out,
+insufficient-stock guard)**, **adjustments** (damage/lost/correction); an
+authoritative `current_stock` + **stock-movements audit ledger**; 7 reports
+(migration `0027`, `/inventory`, `inventory:*`, tenant-scoped). ✅ **Staff
+Attendance + Leave** — daily/bulk staff attendance (monthly summary), leave types
++ balances, leave request → approve/reject/cancel (approval deducts balance +
+auto-marks attendance), a **payroll-attendance summary** foundation, and 7
+reports (migration `0028`, `/staff` + `/leave`, `staff_attendance:*` / `leave:*`,
+tenant-scoped + owner-scoped for staff). ✅ **Payroll Management** — salary
+components (fixed/%), per-staff salary structures (with revision history), a
+monthly **payroll run** that pulls the staff summary to prorate pay (auto
+unpaid-leave deduction) computing gross/deductions/net, idempotent per
+staff/month with **finalize/lock**, **owner-scoped payslip PDFs**, and 6 reports
+(migration `0029`, `/payroll`, `payroll:*`, tenant-scoped). ✅ **Online Fee
+Gateway** — pluggable, provider-agnostic hosted-checkout payments against existing
+invoices: env-configured adapter (no hardcoded credentials, no card/bank/UPI data
+stored), **payment orders** with anti-tampering (server-computed amount) and
+duplicate-success prevention, a secure **signature-verified, idempotent webhook**
+that credits the invoice + creates the existing fee-receipt payment on success,
+fee-receipt PDF after payment, gateway **refund** initiation, per-institution
+**feature-flag** enablement, 5 reports + reconciliation, and graceful degradation
+(offline collection unaffected) when unconfigured (migration `0032`,
+`/online-payments`, `online_payments:*`, tenant-scoped + owner-scoped for
+student/parent). ✅ **Fee Management Depth** — fee **categories**, **term-wise
+schedules** (class/section/program/semester/student-targeted) with idempotent
+**invoice generation** + preview, **late fines** (fixed/per-day/percent + grace;
+**waiver** permission-gated), **discounts/scholarships** (apply → approve, audited),
+and 8 **dues/collection reports** (class/student/category dues, term collection,
+fine collection, discounts, outstanding, defaulters). Built additively —
+`amount_due` stays the net payable so offline payments + the online gateway are
+unchanged (migration `0033`, `/fees/*`, `fee_categories|fee_schedules|fee_fines|
+fee_discounts|fee_reports:*`, tenant + owner-scoped). ✅ **Transfer Certificates**
+— TC register with atomic **sequence-based numbering**, draft→issued→cancelled
+lifecycle, student/dues **snapshots**, a **dues check** (fees/library/transport/
+hostel) that blocks issue unless an authorised user records a **dues override**,
+**TC PDF** (cancelled = watermarked) re-downloadable, owner-scoped portal
+download, student lifecycle (issuing flips the student to `transferred`, data
+retained), and 4 reports (migration `0034`, `/transfer-certificates`,
+`transfer_certificates:*`, tenant + owner-scoped). ✅ **Custom Report Builder**
+— saved + ad-hoc report definitions over the Reports Center registry: pick a
+source, choose columns (discovered by previewing the source), apply reusable
+filters (date range, class/section, status, category, search) and sorting, then
+preview/run/export **CSV + PDF** without leaving the page. Saved definitions
+support edit/duplicate/delete and **private vs shared** visibility (sharing is a
+separate permission). Crucially a custom report **never widens access** — running,
+previewing or exporting re-checks the *underlying* report's own permission, and
+everything is tenant-scoped with no cross-institution access; students/parents are
+blocked entirely (migration `0036`, `/custom-reports`, `custom_reports:*`).
+✅ **Disciplinary Records** — a behavioural **incident register** for school &
+college students: log an incident (category, severity low→critical, description,
+reported-by, involved staff, follow-up), with a **status lifecycle** (open →
+under_review → action_taken → closed, or cancelled) driven by permission-gated
+workflow actions and an **audit-friendly action timeline**. The register
+snapshots the student's class/section or program/semester at creation. **Portal
+visibility is OFF by default** — students/parents can read their own / linked
+child's records only when an admin enables it (institution feature flag) AND
+holds `disciplinary:portal_read`, owner-scoped; staff access is permission-based
+and sensitive records never leak to unauthorised users. 6 reports (register,
+student-wise history, category-wise, severity-wise, open/pending, action-taken).
+Tenant-scoped, no cross-institution access (migration `0037`, `/disciplinary`
++ `/portal/.../disciplinary`, `disciplinary:*`). ✅ **Scheduled Reports** —
+automated delivery of any **saved Custom Report** on a daily/weekly/monthly
+cadence, plus on-demand **manual runs**. Generation reuses the Custom Report
+service, so the **underlying report's own permission is always enforced** (run as
+the triggering user for manual runs, as the schedule's creator for scheduled
+runs) and **delivery is filtered to recipients who hold that permission** — a
+schedule can never leak data. Delivery via the existing channels (**in-app**
+messages + best-effort **email**, degrading gracefully when SMTP is
+unconfigured); CSV/PDF/both generation; every run recorded in an audit **run
+history** (pending/running/success/failed/skipped). A `run-due` endpoint drives
+the scheduler tick (now driven by the background job queue below). Tenant-scoped,
+no cross-institution access; students/parents have no access (migration `0038`,
+`/scheduled-reports`, `scheduled_reports:*`). **Phase D operations are
+complete.**
+
+### Phase E — Scale & polish 🟡
+✅ **Background Job Queue** — a durable, Postgres-backed async queue + worker (no
+external broker): a `jobs` table (type, payload, status, priority, attempts/
+max_attempts, run_at, lock columns, error, institution_id, dedupe_key), an atomic
+**claim** with `FOR UPDATE SKIP LOCKED` (no double-processing), **exponential
+backoff** retries, and **permanent failure** after max_attempts. A **scheduler
+tick** (`/jobs/run-scheduler`) enqueues due **Scheduled Reports** (deduped per
+schedule+window) so they run automatically through the worker — manual runs still
+work. Handlers: `scheduled_report_run`, `fee_reminder_sweep`, `absence_alert_sweep`,
+`noop` (reusing existing services). An optional in-process worker (env
+`JOB_WORKER_ENABLED`, off by default → CI-safe) runs the tick + drains the queue
+on an interval; otherwise the queue is driven via the API. Admin/observability:
+`/jobs` list/detail + retry/cancel + run-scheduler/process, **tenant-scoped**
+(admins see only their institution; super_admin platform-wide; staff/portal users
+denied), no secrets in payloads/errors (migration `0040`, `jobs:*`).
+✅ **Observability** — **structured JSON request logging** (curated, safe fields
+only — never bodies/headers/tokens/secrets; query strings dropped), a
+**correlation id** (`x-request-id` honoured or generated, echoed in the response,
+flows into logs), **Prometheus metrics** (`/api/v1/observability/metrics`:
+http request/error/duration counters, `jobs_processed_total` by result,
+`jobs_queue_depth`, `scheduled_report_runs_total`), public **liveness/readiness**
+probes (`/health`, `/live`, `/ready` — readiness fails only on critical deps DB +
+migrations; optional deps reported, never fail it; no secrets/tenant data), and a
+super-admin **overview + detailed health** (`/observability/overview|health`,
+queue depth, recent failures, request/error summary, worker + scheduled-report
+delivery status). Protected endpoints are super-admin-only (`observability:*`);
+the worker records job metrics (migration `0041`).
+✅ **Caching** — a tiny **in-process TTL cache** for hot read paths (per-instance,
+suits the single-VPS target; no external store, no migration): a generic
+get-or-load helper with namespaced keys, lazy expiry, and hit/miss/invalidation
+counters (`src/cache/cache.ts`). Cached targets are deliberately low-risk and
+**tenant-scoped**: the **dashboard stats** payload (key `dashboard:stats:<institutionId>`,
+30 s TTL, invalidated on student create/status-change/archive/delete) and the
+super-admin **RBAC catalogue/matrix** (global reference data, 60 s TTL, dropped
+on every grant/revoke alongside the runtime permission cache). Keys always carry
+the `institution_id` so nothing leaks across tenants; no secrets or per-request
+private data are cached. **Cache metrics** ride the existing observability surface
+(`/observability/metrics`: `cache_hits_total`, `cache_misses_total`,
+`cache_invalidations_total` counters + `cache_entries` gauge; `/observability/overview`
+gains a `cache` block, surfaced on the web dashboard with a hit-rate).
+✅ **Scheduled Backup / Restore Automation** — durable database backups + a guarded
+restore workflow, **super-admin only** (`backup:*`, migration `0043`). A backup is a
+**portable logical snapshot** (per-table `to_jsonb` rows + sequence positions, gzipped) —
+no external `pg_dump` binary, so it runs identically in CI and on the VPS. Artifacts go
+to **object storage** (S3) or the local-disk fallback (dev); only an internal,
+app-generated key is stored and it is **never exposed via the API** (protected,
+audited download route). `backups` metadata (scope global/institution, status, trigger,
+size, table/row counts, schema version, created-by/system) + a singleton
+`backup_settings` (retention + schedule). **Manual trigger** (`POST /backups`) and
+**automatic schedule** (the job worker enqueues a `scheduled_backup` when due, deduped
+per window). **Restore** (`/backups/:id/restore`) is global-only, always needs
+`confirm=true`, additionally needs `force=true` in production, runs in one transaction
+(`session_replication_role=replica` so tables reload in any order; rolls back on error)
+with a non-destructive **preview** first, and **every attempt is audited**. **Retention**
+keeps the latest N successful backups (NULL = never delete). **Metrics**:
+`backups_total`/`restores_total` by result, `backups_stored`, `backup_last_success_timestamp_seconds`
++ a `backups` block on `/observability/overview`.
+✅ **Internationalization (i18n)** — multi-language support for the **web frontend**
+(English default + **Tamil**, designed so Hindi/others slot in via one dictionary file).
+A tiny client-side framework (`src/i18n/`): flat dot-keyed dictionaries (`en` source of
+truth, `ta` Partial), a `translate()` with **English fallback** then key-fallback (never
+crashes) + `{var}` interpolation, an `I18nProvider` (default locale on SSR/first paint to
+avoid hydration mismatch, then the **persisted** per-browser choice from `localStorage`),
+and a `LanguageSwitcher` in the **staff dashboard, parent/student portal, and both login
+screens**. Translated surfaces: all navigation (school + super-admin + portal), login
+(incl. validation messages via translated keys), layout chrome (sign-out/viewing/app
+name), common buttons (save/cancel/delete/edit/download/upload/export/search/filter/submit),
+and page headers across the listed modules. Backend/API stay English-stable; the frontend
+maps its own fallback messages. PDFs/reports are unchanged (keys structured for later).
+Frontend now has its own **vitest** suite (i18n core: default/Tamil-load/fallback/interp/
+locale-validation), wired into CI (`typecheck` + `test` + `build`).
+✅ **Accessibility (WCAG 2.1 AA)** — a baseline a11y pass focused on the shared primitives
+and layouts so every page benefits. Global **visible keyboard focus** (`:focus-visible`
+rings) and **reduced-motion** support (`prefers-reduced-motion` neutralises the spinner/
+transitions). Hardened `ui.tsx`: `Field` now associates its `<label>` with the control via
+a generated id and wires `aria-invalid` + `aria-describedby` for errors; `Modal` is a
+labelled `role="dialog"` with `aria-modal`, **Escape-to-close**, **Tab focus-trap**, and
+focus restore; `Spinner` is a `role="status"` with an sr-only label; `ErrorNote` is a
+`role="alert"`; icon-only buttons carry accessible names. Both layouts add a **skip-to-content**
+link, a labelled `<nav>` landmark, `aria-current="page"` on the active item, and a focusable
+`<main id="main-content">`. Frontend tests extended with **jsdom + Testing Library**
+component a11y tests (label association, dialog semantics + Escape, status/alert roles, skip
+link). Remaining: read replicas if needed, load testing.
+✅ **Load / Performance Testing** — a CI-safe load suite in `backend/perf/` built on
+**autocannon** (npm, no external binary). Scenarios for the hot endpoints (login, dashboard
+stats, students/staff lists, attendance summary, fees/dues, Reports Center, timetable reads,
+RBAC catalogue/matrix) with per-scenario **P95 budgets**; the runner logs in, drives each
+with autocannon, gates on **p97.5 (≥ p95)**, and surfaces cache hit/miss + error counts from
+`/observability/metrics`. A **bulk seed** (`perf:seed`) generates seed-scale data (multiple
+institutions, students, staff, attendance, fees, homework). The actual load test is **manual**
+(local/staging); CI only runs `perf:validate` (typecheck + config validation, no server) so
+normal CI stays fast. Targets: **P95 < 300 ms for cached hot reads**, no error spike/crashes.
+Reference run (2 inst × 200 students, single dev container): all read endpoints **6–24 ms P95**,
+zero errors, ~21k cache hits; login bcrypt-bound (informational). Guide: `docs/PERFORMANCE.md`
+(how to run, thresholds, reading results, single-VPS meaning, when read replicas are needed).
+**Phase E Scale & Polish is complete.** Optional follow-ups remain (read replicas if/when
+signals appear, deeper a11y/i18n).
+
+---
+
+## Part 2 — Testing plan (#9)
+
+**Pyramid:** many fast unit tests → focused API integration tests → a thin layer
+of E2E. Every PR must keep CI green.
+
+| Layer | Tooling | Scope | Status |
+|-------|---------|-------|--------|
+| **Unit** | Vitest | utils (jwt, password, pagination) | ✅ 11 tests (`npm test`) |
+| **API integration** | Supertest + real Postgres | auth/RBAC, owner-scoping, tenant isolation, sequence numbering, invoice `amount_paid` + overpay, per-module flows (incl. AI insights fallback, online-payment webhook idempotency + signature, fee schedule generation/fines/discounts, TC issue/dues-override/owner-scoped download, thread participant-scoping/read-state + permission guards, custom-report saved/ad-hoc run + column projection + CSV/PDF export + share/private access + underlying-report permission enforcement, disciplinary incident workflow + cancel/delete/close permission gating + portal-default-off owner-scoped read + reports, scheduled-report manual/scheduled run + run-history success/failure + CSV/PDF delivery + recipient & underlying-report permission enforcement + email graceful fallback, platform super-admin lifecycle/suspend/activate/subscription/limits + durable audit trail + KPIs + audited impersonation + tenant-denied boundary + no-secret-leak, job-queue enqueue/dedupe + safe claim + retry-backoff/permanent-failure + scheduler-tick enqueues+runs scheduled reports + retry/cancel permission gates + tenant isolation + no-secret-leak, observability correlation-id generate/preserve + structured-log no-secret/safe-fields + /health + /ready DB-readiness + Prometheus metrics + metrics permission gate + job-failure metric increment + student/parent blocked, RBAC catalogue/matrix + grant/revoke + cache-invalidation-takes-effect + duplicate-idempotent + invalid-rejected + super_admin-critical-protected + audit + tenant-denied + no-secret-leak, caching hot-read hit/miss + dashboard invalidation-after-write + tenant-scoped cache isolation + RBAC catalogue/matrix invalidation-on-role-change + no-stale-permission-after-role-change + cache metrics counters in /observability + super-admin boundary, backup manual-trigger + metadata + protected download + non-super-admin denied + restore confirmation/force-required + global-only restore + confirmed full restore round-trip + retention cleanup + retention-off-never-deletes + scheduled-backup enqueue+run + durable audit + backup/restore metrics + no-secret/path-exposure), Swagger gating | ✅ 295 tests (`npm run test:integration`, in CI) |
+| **Contract** | OpenAPI spec validity + group coverage + live status conformance + security contracts (Supertest) | drift between code and Swagger; authn/authz/tenant/owner isolation | ✅ `contract.int.test.ts` (in CI integration suite) |
+| **Frontend** | Vitest (i18n core ✅ + jsdom/Testing Library component a11y ✅); **Playwright E2E** ✅ (smoke/security/critical/extended) | i18n + a11y units; E2E login → dashboard → create student, language switch, portal login, auth redirects, critical happy-path | 🟡 17 unit tests in CI + Playwright suite (`e2e:validate` in CI; browser run manual — `docs/E2E_TESTING.md`) |
+| **Mobile** | `flutter analyze` + `flutter test` | parent/student (Phase 1) + **staff (Phase 2)**: attendance/marks/homework/communication/reports/payslips/timetable + quick views | 🟡 analyze in CI + smoke tests; widget/provider tests ⬜ |
+| **Security** | dependency audit, `/security-review` on diffs, authz tests | RBAC, owner-scope, input validation, rate limits | 🟡 |
+| **Performance** | autocannon on hot endpoints (`backend/perf/`); CI validates config | P95 < 300 ms at seed scale on cached hot reads | ✅ suite + seed + guide; `perf:validate` in CI, manual run local/staging (`docs/PERFORMANCE.md`) |
+
+**Test data:** the `seed` script provides deterministic demo data; integration
+tests run migrate + seed against an ephemeral Postgres (Compose service or CI
+container). **Coverage targets:** services and middleware ≥ 80%; auth/fees
+(money + access control) ≥ 95%.
+
+**Definition of done per feature:** schema + service + route (+ `@openapi`),
+unit tests for logic, an integration test for the endpoint(s), UI wired through
+`lib/api.ts`, and green CI (backend typecheck+test+build, frontend build, flutter
+analyze, Docker builds).
+
+---
+
+## Part 3 — Deployment plan — Hostinger VPS (#10)
+
+Reference deployment: **Docker Compose + Nginx + SSL + GitHub Actions** on a
+Hostinger VPS (works on any Docker host).
+
+✅ **Production hardening shipped** — full step-by-step runbook in
+[`docs/DEPLOYMENT.md`](./DEPLOYMENT.md): a production-complete root `docker-compose.yml`
+(NODE_ENV=production, auto-migrate on boot, **in-process worker** `JOB_WORKER_ENABLED=true`,
+S3/SMTP/SMS/FCM/payment env passthroughs, a backend `/ready` **healthcheck**, persistent
+volumes), a TLS-ready `infra/nginx/production.conf.example` (HTTP→HTTPS redirect, HSTS +
+security headers), a root `.env.production.example` (all secrets templated, none committed),
+a **production-safe super-admin bootstrap** (no demo data), the **restore drill**, monitoring/
+log-rotation guidance, rollback steps, and a **go-live checklist**. Security defaults verified
+(secure httpOnly cookies in prod, restricted CORS, rate limiting, upload limits, protected
+private downloads, Swagger off, tenant/RBAC unchanged).
+
+### Topology
+Nginx (:80/:443, TLS) → `frontend` (:3000) + `backend` (:4000); `postgres` +
+`mongo` internal-only with named volumes. Backend runs migrations on startup.
+
+### One-time VPS setup
+1. Provision the VPS (Ubuntu LTS). Point your domain's A record at its IP.
+2. Install **Docker + Docker Compose**; create a deploy user; enable a firewall
+   (allow 22/80/443 only).
+3. Clone the repo to `/opt/sreedo`.
+4. Create `.env` from `.env.example` with **strong secrets**
+   (`openssl rand -hex 64` for `JWT_ACCESS_SECRET` + `JWT_REFRESH_SECRET`), a
+   strong `POSTGRES_PASSWORD`, real `CORS_ORIGIN`, and `SEED_ON_START=true` for
+   the **first boot only**.
+5. `docker compose up -d --build`. Verify `https?://<host>/health`,
+   `/api/docs`, and login. Then set `SEED_ON_START=false` and change the seeded
+   admin password.
+
+### TLS / SSL
+- Easiest: run certbot on the host (`certbot --nginx`) to issue + auto-renew Let's
+  Encrypt certs; or mount your own certs and add a `443` server block to
+  `infra/nginx/default.conf` (HTTP→HTTPS redirect, HSTS).
+- In production, **restrict `/api/docs`** (handover §8.5) — IP allowlist or basic
+  auth at nginx.
+
+### CI/CD (GitHub Actions)
+- **CI today** (`.github/workflows/ci.yml`): backend typecheck + tests + build,
+  frontend build, `flutter analyze`, Docker image builds — must be green to merge.
+- **Add a deploy job** (Phase A) on push to `main`: build/push images to a
+  registry (or build on host), then SSH to the VPS and
+  `docker compose pull && docker compose up -d` (zero-downtime via health checks).
+  Store `SSH_KEY`, host, and registry creds as GitHub **secrets**.
+
+### Backups (do not skip — fee data is money)
+- ✅ Built-in **Scheduled Backup / Restore** module (super-admin) — schedule + retention,
+  artifacts to object storage **off the VPS**, guarded/audited restore. Drive it from the app
+  or API; the in-process worker runs the schedule. (Migration `0043`; see `docs/DEPLOYMENT.md` §8.)
+- Run the **restore drill** on staging before go-live and periodically. Mongo (audit/AI) is
+  non-critical but can be snapshotted.
+- Phase A adds an admin-triggered backup endpoint/Ui on top of the cron baseline.
+
+### Go-live checklist
+- [ ] Strong secrets set; seeded admin password changed; `SEED_ON_START=false`.
+- [ ] TLS valid + auto-renew; HTTP→HTTPS redirect; HSTS on.
+- [ ] `/api/docs` restricted; `CORS_ORIGIN` locked to real domains.
+- [ ] Nightly off-box `pg_dump` verified by a test restore.
+- [ ] CI green; deploy job tested on a staging tag.
+- [ ] `/health` monitored (uptime check); error logs shipped/retained.
+- [ ] Owner-scoping live before any student/parent logins are issued.
+
+Detailed click-by-click ops steps (for the non-technical owner) live in
+`docs/ROADMAP.html` Phases 5–6.

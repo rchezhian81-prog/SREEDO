@@ -1,9 +1,11 @@
 import { Router } from "express";
 import { uuidParam } from "../../utils/params";
 import { authenticate, authorize } from "../../middleware/auth";
+import { requireTenant, tenantId } from "../../middleware/tenant";
 import { parsePagination } from "../../utils/pagination";
 import {
   createTeacherSchema,
+  importTeachersSchema,
   listTeachersQuerySchema,
   updateTeacherSchema,
 } from "./teachers.schema";
@@ -11,7 +13,7 @@ import * as teachersService from "./teachers.service";
 
 export const teachersRouter = Router();
 
-teachersRouter.use(authenticate);
+teachersRouter.use(authenticate, requireTenant);
 
 /**
  * @openapi
@@ -53,14 +55,47 @@ teachersRouter.get("/", async (req, res) => {
   const queryParams = listTeachersQuerySchema.parse(req.query);
   const result = await teachersService.listTeachers(
     parsePagination(queryParams),
-    { search: queryParams.search }
+    { search: queryParams.search },
+    tenantId(req)
   );
   res.json(result);
 });
 
 teachersRouter.post("/", authorize("admin"), async (req, res) => {
   const input = createTeacherSchema.parse(req.body);
-  res.status(201).json(await teachersService.createTeacher(input));
+  res.status(201).json(await teachersService.createTeacher(input, tenantId(req)));
+});
+
+/**
+ * @openapi
+ * /teachers/import:
+ *   post:
+ *     tags: [Teachers]
+ *     summary: Bulk-import teachers from parsed CSV rows (admin)
+ *     description: Validates all rows and inserts them atomically (the whole batch rolls back on any error). Omitted employee numbers are auto-generated. Limited to 1000 rows per request.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [rows]
+ *             properties:
+ *               rows:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   required: [firstName, lastName]
+ *     responses:
+ *       201: { description: "{ imported: number }" }
+ *       400: { description: Validation failed or duplicate employee number }
+ *       403: { description: Plan limit exceeded }
+ */
+teachersRouter.post("/import", authorize("admin"), async (req, res) => {
+  const { rows } = importTeachersSchema.parse(req.body);
+  const result = await teachersService.importTeachers(rows, tenantId(req));
+  res.status(201).json(result);
 });
 
 /**
@@ -92,15 +127,15 @@ teachersRouter.post("/", authorize("admin"), async (req, res) => {
  *       204: { description: Deleted }
  */
 teachersRouter.get("/:id", async (req, res) => {
-  res.json(await teachersService.getTeacher(uuidParam(req)));
+  res.json(await teachersService.getTeacher(uuidParam(req), tenantId(req)));
 });
 
 teachersRouter.patch("/:id", authorize("admin"), async (req, res) => {
   const input = updateTeacherSchema.parse(req.body);
-  res.json(await teachersService.updateTeacher(uuidParam(req), input));
+  res.json(await teachersService.updateTeacher(uuidParam(req), input, tenantId(req)));
 });
 
 teachersRouter.delete("/:id", authorize("admin"), async (req, res) => {
-  await teachersService.removeTeacher(uuidParam(req));
+  await teachersService.removeTeacher(uuidParam(req), tenantId(req));
   res.status(204).end();
 });

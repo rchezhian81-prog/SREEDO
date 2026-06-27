@@ -5,10 +5,31 @@ on:
     branches: [main]
   pull_request:
 
+# Cancel an in-progress run when a newer commit lands on the same ref, so PRs
+# don't pile up redundant runs (and the latest push gets a runner sooner).
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   backend:
     name: Backend (typecheck, test, build)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: sreedo
+          POSTGRES_PASSWORD: sreedo
+          POSTGRES_DB: sreedo_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sreedo -d sreedo_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     defaults:
       run:
         working-directory: backend
@@ -22,11 +43,20 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - run: npm run test:integration
+        env:
+          DATABASE_URL: postgres://sreedo:sreedo@localhost:5432/sreedo_test
+          JWT_ACCESS_SECRET: ci-access-secret-not-dev
+          JWT_REFRESH_SECRET: ci-refresh-secret-not-dev
       - run: npm run build
+      # Validate the performance suite (config + types) without running a load
+      # test, so CI stays fast. The actual run is manual (local/staging).
+      - run: npm run perf:validate
 
   frontend:
-    name: Frontend (build)
+    name: Frontend (typecheck, test, build)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: frontend
@@ -38,11 +68,17 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
       - run: npm run build
+      # Validate the Playwright E2E suite (compile + discover) without launching
+      # browsers, so CI stays fast. The actual browser run is manual (local/staging).
+      - run: npm run e2e:validate
 
   mobile:
     name: Mobile (analyze)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: mobile
@@ -55,9 +91,40 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze --no-fatal-infos
 
+  security:
+    name: Security scan (npm audit, secrets)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Dependency vulnerability scan — reported, non-blocking (a freshly
+      # disclosed transitive CVE must not wedge the pipeline). Review findings in
+      # the job log; escalate to a fix when a direct/high-severity issue lands.
+      - name: npm audit (backend)
+        working-directory: backend
+        run: npm audit --audit-level=high
+        continue-on-error: true
+      - name: npm audit (frontend)
+        working-directory: frontend
+        run: npm audit --audit-level=high
+        continue-on-error: true
+      # Secret scan across the full history. Non-blocking until the baseline is
+      # confirmed clean, then promote it to a required check.
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   docker:
     name: Docker images build
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: [backend, frontend]
     if: github.event_name == 'push'
     steps:

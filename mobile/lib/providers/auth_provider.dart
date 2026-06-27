@@ -24,14 +24,52 @@ class AppUser {
 }
 
 class AuthProvider extends ChangeNotifier {
-  AuthProvider(this._api);
+  AuthProvider(this._api) {
+    // When a request is unauthorized and cannot be refreshed, drop the session
+    // so GoRouter routes back to login (graceful expiry handling).
+    _api.onUnauthorized = _handleExpired;
+  }
 
   final ApiClient _api;
 
   AppUser? user;
+  Set<String> permissions = {};
   bool restoring = true;
 
   bool get isAuthenticated => user != null;
+
+  String get role => user?.role ?? '';
+  bool get isParent => role == 'parent';
+  bool get isPortal => role == 'student' || role == 'parent';
+  bool get isStaff =>
+      role == 'admin' ||
+      role == 'teacher' ||
+      role == 'accountant' ||
+      role == 'super_admin';
+
+  /// Permission gate for staff navigation — super_admin holds every permission.
+  bool can(String key) => role == 'super_admin' || permissions.contains(key);
+
+  /// Best-effort load of the caller's permission set (drives staff tiles).
+  Future<void> _loadPermissions() async {
+    try {
+      final data = await _api.get('/auth/permissions') as Map<String, dynamic>;
+      final keys = (data['permissions'] as List<dynamic>? ?? const [])
+          .map((e) => e.toString())
+          .toSet();
+      permissions = keys;
+    } catch (_) {
+      permissions = {};
+    }
+  }
+
+  void _handleExpired() {
+    if (user != null) {
+      user = null;
+      permissions = {};
+      notifyListeners();
+    }
+  }
 
   /// Restores a persisted session on app start by validating the stored
   /// tokens against /auth/me.
@@ -41,6 +79,7 @@ class AuthProvider extends ChangeNotifier {
       try {
         final profile = await _api.get('/auth/me');
         user = AppUser.fromJson(profile as Map<String, dynamic>);
+        await _loadPermissions();
       } catch (_) {
         await _api.clearTokens();
       }
@@ -59,6 +98,7 @@ class AuthProvider extends ChangeNotifier {
       data['refreshToken'] as String,
     );
     user = AppUser.fromJson(data['user'] as Map<String, dynamic>);
+    await _loadPermissions();
     notifyListeners();
   }
 
@@ -73,6 +113,7 @@ class AuthProvider extends ChangeNotifier {
     }
     await _api.clearTokens();
     user = null;
+    permissions = {};
     notifyListeners();
   }
 }

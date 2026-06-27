@@ -1,6 +1,9 @@
 import { Router } from "express";
 import { uuidParam } from "../../utils/params";
-import { authenticate, authorize } from "../../middleware/auth";
+import { authenticate } from "../../middleware/auth";
+import { requireTenant, tenantId } from "../../middleware/tenant";
+import { requirePermission } from "../../middleware/permissions";
+import { clientIp, recordSecurityEvent } from "../../utils/security-audit";
 import { parsePagination } from "../../utils/pagination";
 import {
   createUserSchema,
@@ -11,7 +14,7 @@ import * as usersService from "./users.service";
 
 export const usersRouter = Router();
 
-usersRouter.use(authenticate, authorize("admin"));
+usersRouter.use(authenticate, requireTenant, requirePermission("users:manage"));
 
 /**
  * @openapi
@@ -50,16 +53,30 @@ usersRouter.use(authenticate, authorize("admin"));
  */
 usersRouter.get("/", async (req, res) => {
   const queryParams = listUsersQuerySchema.parse(req.query);
-  const result = await usersService.listUsers(parsePagination(queryParams), {
-    role: queryParams.role,
-    search: queryParams.search,
-  });
+  const result = await usersService.listUsers(
+    parsePagination(queryParams),
+    {
+      role: queryParams.role,
+      search: queryParams.search,
+    },
+    tenantId(req)
+  );
   res.json(result);
 });
 
 usersRouter.post("/", async (req, res) => {
   const input = createUserSchema.parse(req.body);
-  const user = await usersService.createUser(input);
+  const user = await usersService.createUser(input, tenantId(req));
+  await recordSecurityEvent({
+    action: "user.created",
+    actorId: req.user!.id,
+    actorEmail: req.user!.email,
+    actorRole: req.user!.role,
+    institutionId: tenantId(req),
+    targetId: user.id,
+    detail: { email: user.email, role: user.role },
+    ip: clientIp(req),
+  });
   res.status(201).json(user);
 });
 
@@ -93,15 +110,78 @@ usersRouter.post("/", async (req, res) => {
  *       204: { description: Deactivated }
  */
 usersRouter.get("/:id", async (req, res) => {
-  res.json(await usersService.getUser(uuidParam(req)));
+  res.json(await usersService.getUser(uuidParam(req), tenantId(req)));
 });
 
 usersRouter.patch("/:id", async (req, res) => {
   const input = updateUserSchema.parse(req.body);
-  res.json(await usersService.updateUser(uuidParam(req), input));
+  res.json(await usersService.updateUser(uuidParam(req), input, tenantId(req)));
 });
 
 usersRouter.delete("/:id", async (req, res) => {
-  await usersService.deactivateUser(uuidParam(req));
+  await usersService.deactivateUser(uuidParam(req), tenantId(req));
+  await recordSecurityEvent({
+    action: "user.deactivated",
+    actorId: req.user!.id,
+    actorEmail: req.user!.email,
+    actorRole: req.user!.role,
+    institutionId: tenantId(req),
+    targetId: uuidParam(req),
+    ip: clientIp(req),
+  });
+  res.status(204).end();
+});
+
+/**
+ * @openapi
+ * /users/{id}/disable-2fa:
+ *   post:
+ *     tags: [Users]
+ *     summary: Reset (disable) a user's two-factor authentication — admin recovery
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       204: { description: Two-factor reset for the user }
+ *       404: { description: User not found }
+ */
+usersRouter.post("/:id/disable-2fa", async (req, res) => {
+  await usersService.resetUserTwoFactor(uuidParam(req), tenantId(req));
+  await recordSecurityEvent({
+    action: "user.2fa_reset",
+    actorId: req.user!.id,
+    actorEmail: req.user!.email,
+    actorRole: req.user!.role,
+    institutionId: tenantId(req),
+    targetId: uuidParam(req),
+    ip: clientIp(req),
+  });
+  res.status(204).end();
+});
+
+/**
+ * @openapi
+ * /users/{id}/unlock:
+ *   post:
+ *     tags: [Users]
+ *     summary: Unlock a user locked out by failed logins — admin recovery
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       204: { description: Account unlocked }
+ *       404: { description: User not found }
+ */
+usersRouter.post("/:id/unlock", async (req, res) => {
+  await usersService.unlockUser(uuidParam(req), tenantId(req));
+  await recordSecurityEvent({
+    action: "user.unlock",
+    actorId: req.user!.id,
+    actorEmail: req.user!.email,
+    actorRole: req.user!.role,
+    institutionId: tenantId(req),
+    targetId: uuidParam(req),
+    ip: clientIp(req),
+  });
   res.status(204).end();
 });

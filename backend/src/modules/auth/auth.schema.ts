@@ -3,6 +3,7 @@ import { z } from "zod";
 export const loginSchema = z.object({
   email: z.string().email().transform((value) => value.toLowerCase()),
   password: z.string().min(1, "Password is required"),
+  totpCode: z.string().optional(),
 });
 
 export const refreshSchema = z.object({
@@ -16,4 +17,25 @@ export const changePasswordSchema = z.object({
     .min(8, "Password must be at least 8 characters")
     .regex(/[A-Za-z]/, "Password must contain a letter")
     .regex(/[0-9]/, "Password must contain a digit"),
+});
+
+export const forgotPasswordSchema = z.object({
+  email: z.string().email().transform((value) => value.toLowerCase()),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(1, "Reset token is required"),
+  newPassword: z
+    .string()
+    .min(8, "Password must be at least 8 characters")
+    .regex(/[A-Za-z]/, "Password must contain a letter")
+    .regex(/[0-9]/, "Password must contain a digit"),
+});
+
+export const enableTwoFactorSchema = z.object({
+  code: z.string().trim().regex(/^\d{6}$/, "Enter the 6-digit code"),
+});
+
+export const disableTwoFactorSchema = z.object({
+  password: z.string().min(1, "Password is required"),
 });

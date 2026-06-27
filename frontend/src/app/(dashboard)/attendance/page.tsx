@@ -13,6 +13,8 @@ import {
   Spinner,
 } from "@/components/ui";
 import type { AttendanceRow, SchoolClass } from "@/types";
+import { useI18n } from "@/i18n/I18nProvider";
+import { useTerms } from "@/lib/terms";
 
 const STATUSES = ["present", "absent", "late", "excused"] as const;
 type Status = (typeof STATUSES)[number];
@@ -30,6 +32,8 @@ interface SectionOption {
 }
 
 export default function AttendancePage() {
+  const term = useTerms();
+  const { t } = useI18n();
   const [sections, setSections] = useState<SectionOption[]>([]);
   const [sectionId, setSectionId] = useState("");
   const [date, setDate] = useState(() =>
@@ -113,13 +117,13 @@ export default function AttendancePage() {
   return (
     <>
       <PageHeader
-        title="Attendance"
-        subtitle="Mark and review daily attendance"
+        title={t("pages.attendance.title")}
+        subtitle={t("pages.attendance.subtitle")}
       />
 
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <div className="w-56">
-          <span className="mb-1 block text-sm font-medium text-slate-700">
+          <span className="mb-1 block text-sm font-medium text-ink">
             Section
           </span>
           <Select
@@ -134,7 +138,7 @@ export default function AttendancePage() {
           </Select>
         </div>
         <div className="w-44">
-          <span className="mb-1 block text-sm font-medium text-slate-700">
+          <span className="mb-1 block text-sm font-medium text-ink">
             Date
           </span>
           <Input
@@ -152,7 +156,7 @@ export default function AttendancePage() {
       </div>
 
       {message && (
-        <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+        <p className="mb-3 rounded-lg bg-emerald-500/12 px-3 py-2 text-sm text-emerald-600 dark:text-emerald-400">
           {message}
         </p>
       )}
@@ -163,19 +167,19 @@ export default function AttendancePage() {
       ) : rows.length === 0 ? (
         <EmptyState message="No active students in this section" />
       ) : (
-        <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <div className="mt-3 overflow-x-auto rounded-xl border border-line bg-surface">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+            <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
               <tr>
                 <th className="px-4 py-3">Student</th>
-                <th className="px-4 py-3">Admission No</th>
+                <th className="px-4 py-3">{term.admissionNo}</th>
                 <th className="px-4 py-3">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-line">
               {rows.map((row) => (
                 <tr key={row.studentId}>
-                  <td className="px-4 py-3 font-medium text-slate-900">
+                  <td className="px-4 py-3 font-medium text-ink">
                     {row.firstName} {row.lastName}
                   </td>
                   <td className="px-4 py-3 font-mono text-xs">
@@ -191,7 +195,7 @@ export default function AttendancePage() {
                             "rounded-full px-3 py-1 text-xs font-medium capitalize transition",
                             row.status === status
                               ? STATUS_STYLES[status]
-                              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                              : "bg-hover text-muted hover:bg-hover"
                           )}
                         >
                           {status}

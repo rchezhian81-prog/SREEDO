@@ -1,4 +1,5 @@
 export type UserRole =
+  | "super_admin"
   | "admin"
   | "teacher"
   | "accountant"
@@ -10,11 +11,55 @@ export interface User {
   email: string;
   fullName: string;
   role: UserRole;
+  phone?: string | null;
+  institutionId?: string | null;
+}
+
+export interface PortalChild {
+  id: string;
+  admissionNo: string;
+  firstName: string;
+  lastName: string;
+  sectionId: string | null;
+  sectionName: string | null;
+  className: string | null;
+  relationship: string | null;
+}
+
+export interface StudentSummary {
+  profile: Student & { sectionName: string | null; className: string | null };
+  attendance: {
+    total: number;
+    present: number;
+    absent: number;
+    late: number;
+    excused: number;
+    rate: number | null;
+  };
+  fees: {
+    totalDue: number;
+    totalPaid: number;
+    outstanding: number;
+    pendingInvoices: number;
+  };
 }
 
 export interface Paginated<T> {
   data: T[];
   meta: { page: number; limit: number; total: number; totalPages: number };
+}
+
+export interface DocumentMeta {
+  id: string;
+  ownerType: string;
+  ownerId: string | null;
+  category: string;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  storageMode: string;
+  uploadedBy: string | null;
+  createdAt: string;
 }
 
 export interface Student {
@@ -30,7 +75,18 @@ export interface Student {
   guardianName: string | null;
   guardianPhone: string | null;
   guardianEmail: string | null;
+  guardianRelation: string | null;
   address: string | null;
+  bloodGroup: string | null;
+  nationality: string | null;
+  religion: string | null;
+  category: string | null;
+  nationalId: string | null;
+  admissionDate: string | null;
+  rollNumber: string | null;
+  previousSchool: string | null;
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
   status: string;
 }
 
@@ -83,6 +139,18 @@ export interface Invoice {
   status: "pending" | "partially_paid" | "paid" | "cancelled";
 }
 
+export interface Payment {
+  id: string;
+  amount: string;
+  method: string;
+  reference: string | null;
+  paidAt: string;
+}
+
+export interface InvoiceWithPayments extends Invoice {
+  payments: Payment[];
+}
+
 export interface FeeSummary {
   totalInvoiced: number;
   totalCollected: number;
@@ -97,7 +165,342 @@ export interface Announcement {
   audience: string;
   isPinned: boolean;
   publishedAt: string;
+  scheduled: boolean;
   createdByName: string | null;
+}
+
+export interface InboxMessage {
+  id: string;
+  readAt: string | null;
+  category: string;
+  subject: string;
+  body: string;
+  createdAt: string;
+  senderName: string | null;
+}
+
+export interface SentMessage {
+  id: string;
+  category: string;
+  subject: string;
+  audienceType: string | null;
+  createdAt: string;
+  senderName: string | null;
+  recipientCount: number;
+  readCount: number;
+}
+
+export interface Subject {
+  id: string;
+  name: string;
+  code: string;
+}
+
+export interface ClassSubject {
+  id: string;
+  sectionId: string;
+  subjectId: string;
+  subjectName: string;
+  subjectCode: string;
+  teacherId: string | null;
+  teacherName: string | null;
+}
+
+export interface Homework {
+  id: string;
+  sectionId: string;
+  sectionName: string | null;
+  className: string | null;
+  subjectId: string;
+  subjectName: string | null;
+  title: string;
+  description: string;
+  instructions: string | null;
+  dueDate: string | null;
+  maxMarks: string | null;
+  attachmentCount: number;
+  submissionCount: number;
+  createdAt: string;
+}
+
+export interface HomeworkAttachment {
+  id: string;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt: string;
+}
+
+export interface HomeworkDetail extends Homework {
+  attachments: HomeworkAttachment[];
+  submission: {
+    id: string;
+    content: string | null;
+    status: string;
+    marks: string | null;
+    remarks: string | null;
+    submittedAt: string;
+    reviewedAt: string | null;
+  } | null;
+}
+
+export interface HomeworkSubmission {
+  id: string;
+  studentId: string;
+  studentName: string;
+  admissionNo: string;
+  content: string | null;
+  status: string;
+  marks: string | null;
+  remarks: string | null;
+  submittedAt: string;
+  reviewedAt: string | null;
+  attachmentCount: number;
+}
+
+export interface AcademicYear {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  isCurrent: boolean;
+}
+
+export interface Exam {
+  id: string;
+  name: string;
+  academicYearId: string | null;
+  academicYearName: string | null;
+  startDate: string | null;
+  endDate: string | null;
+}
+
+export interface ExamResultRow {
+  studentId: string;
+  firstName: string;
+  lastName: string;
+  admissionNo: string;
+  subjectName: string;
+  marksObtained: string;
+  maxMarks: string;
+  grade: string | null;
+}
+
+export interface GradeBand {
+  id: string;
+  grade: string;
+  minPercent: string; // NUMERIC → returned as strings e.g. "90.00"
+  maxPercent: string;
+  remark: string | null;
+  sortOrder: number;
+}
+
+export interface SessionInfo {
+  id: string;
+  userAgent: string | null;
+  createdAt: string;
+  lastUsedAt: string;
+  current: boolean;
+}
+
+export interface NotificationPreferences {
+  emailEnabled: boolean;
+  smsEnabled: boolean;
+  pushEnabled: boolean;
+}
+
+export interface AccountUser {
+  id: string;
+  email: string;
+  fullName: string;
+  role: UserRole;
+  phone: string | null;
+  isActive: boolean;
+  twoFactorEnabled: boolean;
+  isLocked: boolean;
+  lockedUntil: string | null;
+  createdAt: string;
+}
+
+export interface Branch {
+  id: string;
+  institutionId: string;
+  name: string;
+  address: string | null;
+  timezone: string;
+  isActive: boolean;
+}
+
+export interface InstitutionSubscription {
+  id: string;
+  status: string;
+  startsAt: string;
+  endsAt: string | null;
+  packageId: string;
+  packageName: string;
+}
+
+export interface Institution {
+  id: string;
+  name: string;
+  code: string;
+  type: "school" | "college";
+  isActive: boolean;
+  branchCount?: string | number;
+  branches?: Branch[];
+  subscription?: InstitutionSubscription | null;
+}
+
+export interface SubscriptionPackage {
+  id: string;
+  name: string;
+  maxStudents: number | null;
+  maxStaff: number | null;
+  price: string | number;
+  billingCycle: "monthly" | "quarterly" | "annual";
+  isActive: boolean;
+}
+
+// --- Super Admin console (platform hardening) ---
+
+/** Brief institution row from GET /admin/institutions (selectors). */
+export interface AdminInstitutionBrief {
+  id: string;
+  name: string;
+  code: string;
+  type: "school" | "college";
+  isActive: boolean;
+}
+
+export interface InstitutionSettings {
+  id: string;
+  name: string;
+  code: string;
+  type: "school" | "college";
+  isActive: boolean;
+  settings: {
+    contact?: {
+      email?: string | null;
+      phone?: string | null;
+      address?: string | null;
+    };
+    enabledModules?: string[];
+    featureFlags?: Record<string, boolean>;
+    academicYearDefaults?: Record<string, unknown>;
+  } | null;
+}
+
+export interface InstitutionLimits {
+  packageName: string;
+  maxStudents: number | null;
+  students: number;
+  maxStaff: number | null;
+  staff: number;
+  storageLimitMb: number | null;
+  smsQuota: number | null;
+  withinLimits: boolean;
+}
+
+export interface InstitutionStats {
+  students: number;
+  teachers: number;
+  classes: number;
+  sections: number;
+  subjects: number;
+  users: number;
+  feesOutstanding: number | string;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  method: string;
+  path: string;
+  module: string | null;
+  statusCode: number | null;
+  userRole: string | null;
+  userId: string | null;
+  institutionId: string | null;
+  ip: string | null;
+  createdAt: string;
+}
+
+export interface AuditLogResponse {
+  available: boolean;
+  rows: AuditLogEntry[];
+}
+
+export interface DataExportSummary {
+  institution: { name: string; code: string; type: string };
+  counts: Record<string, number>;
+  generatedAt: string;
+}
+
+export interface DataExport {
+  id: string;
+  institutionId: string;
+  institutionName?: string;
+  kind: string;
+  status: string;
+  summary: DataExportSummary;
+  createdAt: string;
+}
+
+export interface SystemHealth {
+  postgres: boolean;
+  mongo: boolean;
+  auditLog: boolean;
+  institutions: number;
+  users: number;
+  uptimeSeconds: number;
+}
+
+export interface Period {
+  id: string;
+  name: string;
+  startTime: string;
+  endTime: string;
+  sortOrder: number;
+  isBreak: boolean;
+}
+
+export interface Room {
+  id: string;
+  name: string;
+  code: string;
+  capacity: number | null;
+  building: string | null;
+}
+
+export interface TimetableEntry {
+  id: string;
+  sectionId: string;
+  sectionName: string;
+  className: string;
+  dayOfWeek: number;
+  periodId: string;
+  periodName: string;
+  startTime: string;
+  endTime: string;
+  periodOrder: number;
+  subjectId: string;
+  subjectName: string;
+  teacherId: string | null;
+  teacherName: string | null;
+  roomId: string | null;
+  roomName: string | null;
+}
+
+export interface ReportMeta {
+  key: string;
+  title: string;
+  category: string;
+  permission: string;
+}
+
+export interface ReportData {
+  title: string;
+  columns: { key: string; label: string }[];
+  rows: Record<string, unknown>[];
 }
 
 export interface DashboardStats {
@@ -110,4 +513,1341 @@ export interface DashboardStats {
     totalInvoiced: number;
     totalCollected: number;
   };
+}
+
+// --- College Mode ---
+
+export interface CollegeOverview {
+  type: "school" | "college";
+  departments: number;
+  programs: number;
+  semesters: number;
+  enrollments: number;
+}
+
+export interface CollegeDepartment {
+  id: string;
+  name: string;
+  code: string;
+  headTeacherId: string | null;
+  headTeacherName: string | null;
+  programCount: number;
+}
+
+export interface CollegeProgram {
+  id: string;
+  name: string;
+  code: string;
+  departmentId: string;
+  departmentName: string | null;
+  durationSemesters: number | null;
+}
+
+export interface CollegeSemester {
+  id: string;
+  name: string;
+  number: number;
+  programId: string;
+  programName: string | null;
+  academicYearId: string | null;
+  startDate: string | null;
+  endDate: string | null;
+}
+
+export interface CollegeBatch {
+  id: string;
+  name: string;
+  startYear: number | null;
+  programId: string;
+}
+
+export interface CollegeProgramSubject {
+  id: string;
+  programId: string;
+  semesterId: string | null;
+  semesterName: string | null;
+  subjectId: string;
+  subjectName: string | null;
+  credits: number | null;
+}
+
+export interface CollegeEnrollment {
+  id: string;
+  studentId: string;
+  studentName: string;
+  admissionNo: string;
+  programId: string;
+  programName: string | null;
+  semesterId: string | null;
+  semesterName: string | null;
+  batchId: string | null;
+  status: string;
+}
+
+export interface CollegeResultSubject {
+  subject: string;
+  credits: number | null;
+  percent: number | null;
+  grade: string | null;
+  gradePoint: number | null;
+}
+
+export interface CollegeSemesterResult {
+  semesterId: string;
+  semesterName: string;
+  subjects: CollegeResultSubject[];
+  totalCredits: number;
+  gpa: number | null;
+}
+
+export interface CollegeCgpa {
+  programId: string;
+  cgpa: number | null;
+  totalCredits: number;
+  perSemester: { semesterId: string; gpa: number | null }[];
+}
+
+// --- Library ---
+
+export interface LibrarySettings {
+  loanDays: number;
+  finePerDay: number;
+  maxRenewals: number;
+  maxBooksPerMember: number;
+}
+
+export interface BookCategory {
+  id: string;
+  name: string;
+  code: string | null;
+  bookCount: number;
+}
+
+export interface LibraryBook {
+  id: string;
+  title: string;
+  author: string | null;
+  isbn: string | null;
+  publisher: string | null;
+  edition: string | null;
+  subject: string | null;
+  language: string | null;
+  rackLocation: string | null;
+  categoryId: string | null;
+  categoryName: string | null;
+  totalCopies: number;
+  availableCopies: number;
+}
+
+export type BookCopyStatus =
+  | "available"
+  | "issued"
+  | "lost"
+  | "damaged"
+  | "retired";
+
+export interface BookCopy {
+  id: string;
+  accessionNumber: string | null;
+  barcode: string | null;
+  status: BookCopyStatus;
+}
+
+export interface LibraryBookDetail extends LibraryBook {
+  copies: BookCopy[];
+}
+
+export type LibraryMemberType = "student" | "staff";
+
+export interface LibraryMember {
+  id: string;
+  memberType: LibraryMemberType;
+  memberCode: string | null;
+  status: string;
+  studentId: string | null;
+  teacherId: string | null;
+  name: string;
+  identifier: string | null;
+  openLoans: number;
+}
+
+export interface LibraryHistoryRow {
+  id: string;
+  bookId: string;
+  title: string;
+  accessionNumber: string | null;
+  issueDate: string;
+  dueDate: string;
+  returnDate: string | null;
+  status: string;
+  renewedCount: number;
+  fineAmount: number | string | null;
+  fineStatus: string | null;
+  overdue: boolean;
+}
+
+// --- Transport ---
+
+export interface Vehicle {
+  id: string;
+  registrationNo: string;
+  type: string | null;
+  capacity: number | null;
+  insuranceExpiry: string | null;
+  fitnessExpiry: string | null;
+  permitExpiry: string | null;
+  isActive: boolean;
+  routeCount: number;
+}
+
+export interface Driver {
+  id: string;
+  name: string;
+  phone: string | null;
+  licenseNumber: string | null;
+  licenseExpiry: string | null;
+  helperName: string | null;
+  helperPhone: string | null;
+  isActive: boolean;
+  routeCount: number;
+}
+
+export interface TransportRoute {
+  id: string;
+  name: string;
+  code: string;
+  isActive: boolean;
+  vehicleId: string | null;
+  vehicleNo: string | null;
+  driverId: string | null;
+  driverName: string | null;
+  stopCount: number;
+  studentCount: number;
+}
+
+export interface RouteStop {
+  id: string;
+  routeId: string;
+  name: string;
+  stopOrder: number;
+  pickupTime: string | null;
+  dropTime: string | null;
+  distanceKm: number | string | null;
+  zone: string | null;
+}
+
+export type TransportTripType = "pickup" | "drop" | "both";
+
+export interface TransportAllocation {
+  id: string;
+  studentId: string;
+  studentName: string;
+  admissionNo: string;
+  routeId: string;
+  routeName: string;
+  stopId: string | null;
+  stopName: string | null;
+  tripType: string;
+  effectiveDate: string | null;
+  status: string;
+}
+
+export interface TransportFee {
+  id: string;
+  routeId: string;
+  routeName: string;
+  stopId: string | null;
+  stopName: string | null;
+  amount: number | string;
+  frequency: string;
+}
+
+export interface TransportTrip {
+  id: string;
+  routeId: string;
+  tripDate: string;
+  tripType: "pickup" | "drop";
+  vehicleId: string | null;
+  driverId: string | null;
+  status: string;
+}
+
+// --- Hostel ---
+
+export type HostelType = "boys" | "girls" | "co_ed" | "staff";
+
+export interface Hostel {
+  id: string;
+  name: string;
+  code: string;
+  type: HostelType | string | null;
+  address: string | null;
+  wardenName: string | null;
+  wardenPhone: string | null;
+  contactPhone: string | null;
+  capacity: number | null;
+  isActive: boolean;
+  roomCount: number;
+  bedCount: number;
+  occupied: number;
+}
+
+export interface HostelBlock {
+  id: string;
+  hostelId: string;
+  name: string;
+}
+
+export type HostelRoomStatus =
+  | "available"
+  | "occupied"
+  | "maintenance"
+  | "inactive";
+
+export interface HostelRoom {
+  id: string;
+  hostelId: string;
+  blockId: string | null;
+  blockName: string | null;
+  roomNumber: string;
+  floor: string | null;
+  roomType: string | null;
+  capacity: number;
+  status: HostelRoomStatus | string;
+  occupied: number;
+  availableBeds: number;
+}
+
+export interface HostelAllocation {
+  id: string;
+  studentId: string;
+  studentName: string;
+  admissionNo: string;
+  hostelId: string;
+  hostelName: string;
+  roomId: string;
+  roomNumber: string;
+  bedNo: string | null;
+  allocationDate: string | null;
+  vacateDate: string | null;
+  status: string;
+}
+
+export interface HostelFee {
+  id: string;
+  hostelId: string;
+  hostelName: string;
+  roomType: string | null;
+  amount: number | string;
+  frequency: string;
+}
+
+// --- Inventory ---
+
+export interface ItemCategory {
+  id: string;
+  name: string;
+  code: string | null;
+  itemCount: number;
+}
+
+export interface Vendor {
+  id: string;
+  name: string;
+  contactPerson: string | null;
+  phone: string | null;
+  email: string | null;
+  gstNumber: string | null;
+  address: string | null;
+  paymentTerms: string | null;
+  isActive: boolean;
+}
+
+export interface InventoryItem {
+  id: string;
+  name: string;
+  code: string;
+  unit: string | null;
+  categoryId: string | null;
+  categoryName: string | null;
+  openingStock: number;
+  currentStock: number;
+  minStockLevel: number;
+  location: string | null;
+  isActive: boolean;
+  lowStock: boolean;
+}
+
+export interface StockMovement {
+  id: string;
+  type: string;
+  change: number;
+  balanceAfter: number;
+  refTable: string | null;
+  note: string | null;
+  createdAt: string;
+}
+
+export interface Purchase {
+  id: string;
+  vendorId: string | null;
+  vendorName: string | null;
+  purchaseDate: string;
+  billNo: string | null;
+  totalAmount: number | string;
+  documentId: string | null;
+  notes: string | null;
+  lineCount: number;
+}
+
+export interface PurchaseItem {
+  id: string;
+  itemId: string;
+  itemName: string;
+  unit: string | null;
+  quantity: number | string;
+  rate: number | string | null;
+  amount: number | string;
+}
+
+export interface PurchaseDetail extends Purchase {
+  items: PurchaseItem[];
+}
+
+export interface StockIssue {
+  id: string;
+  itemId: string;
+  itemName: string;
+  unit: string | null;
+  quantity: number | string;
+  issuedToType: string | null;
+  issuedTo: string | null;
+  purpose: string | null;
+  issueDate: string;
+  receivedBy: string | null;
+}
+
+export interface StockAdjustment {
+  id: string;
+  itemId: string;
+  itemName: string;
+  quantity: number | string;
+  reason: string | null;
+  note: string | null;
+  approvedBy: string | null;
+  createdAt: string;
+}
+
+// --- Staff Attendance & Leave ---
+
+export type StaffAttendanceStatus =
+  | "present"
+  | "absent"
+  | "half_day"
+  | "leave"
+  | "holiday";
+
+export interface StaffAttendance {
+  id: string;
+  teacherId: string;
+  teacherName: string;
+  employeeNo: string;
+  date: string;
+  status: StaffAttendanceStatus;
+  checkIn: string | null;
+  checkOut: string | null;
+  late: boolean;
+  earlyOut: boolean;
+  leaveTypeId: string | null;
+  remarks: string | null;
+}
+
+export interface StaffAttendanceSummary {
+  teacherId: string;
+  employeeNo: string;
+  name: string;
+  present: number;
+  absent: number;
+  halfDay: number;
+  leave: number;
+  holiday: number;
+  lateCount: number;
+}
+
+export interface PayrollSummary {
+  teacherId: string;
+  employeeNo: string;
+  name: string;
+  workingDays: number;
+  presentDays: number;
+  absentDays: number;
+  halfDays: number;
+  paidLeave: number;
+  unpaidLeave: number;
+  lateCount: number;
+}
+
+export interface LeaveType {
+  id: string;
+  name: string;
+  code: string;
+  isPaid: boolean;
+  defaultBalance: number;
+  isActive: boolean;
+}
+
+// --- Payroll ---
+
+export type PayrollComponentType = "earning" | "deduction";
+export type PayrollCalcType = "fixed" | "percent";
+
+export interface SalaryComponent {
+  id: string;
+  name: string;
+  code: string;
+  type: PayrollComponentType;
+  calcType: PayrollCalcType;
+  defaultValue: number | string | null;
+  isActive: boolean;
+}
+
+export interface SalaryStructure {
+  id: string;
+  teacherId: string;
+  teacherName: string;
+  employeeNo: string;
+  effectiveDate: string | null;
+  isActive: boolean;
+  fixedEarnings: number | string;
+}
+
+export interface SalaryStructureLine {
+  id: string;
+  componentId: string;
+  name: string;
+  code: string;
+  type: PayrollComponentType;
+  calcType: PayrollCalcType;
+  value: number | string;
+}
+
+export interface SalaryStructureDetail extends SalaryStructure {
+  components: SalaryStructureLine[];
+}
+
+export type PayrollRunStatus = "draft" | "finalized";
+
+export interface PayrollRun {
+  id: string;
+  month: string;
+  status: PayrollRunStatus;
+  notes: string | null;
+  finalizedAt: string | null;
+  payslipCount: number | string;
+  netTotal: number | string;
+}
+
+export type PayslipStatus = "draft" | "finalized";
+
+export interface Payslip {
+  id: string;
+  teacherId: string;
+  teacherName: string;
+  employeeNo: string;
+  month: string;
+  workingDays: number;
+  presentDays: number;
+  absentDays: number;
+  paidLeave: number;
+  unpaidLeave: number;
+  halfDays: number;
+  gross: number | string;
+  deductions: number | string;
+  net: number | string;
+  status: PayslipStatus;
+}
+
+export interface PayslipLine {
+  name: string;
+  type: PayrollComponentType;
+  amount: number | string;
+}
+
+export interface PayslipDetail extends Payslip {
+  lines: PayslipLine[];
+}
+
+export interface LeaveBalance {
+  id: string;
+  teacherId: string;
+  teacherName: string;
+  leaveTypeId: string;
+  leaveTypeName: string;
+  isPaid: boolean;
+  balance: number;
+}
+
+export type LeaveRequestStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "cancelled";
+
+export interface LeaveRequest {
+  id: string;
+  teacherId: string;
+  teacherName: string;
+  leaveTypeId: string;
+  leaveTypeName: string;
+  isPaid: boolean;
+  startDate: string;
+  endDate: string;
+  days: number;
+  reason: string | null;
+  status: LeaveRequestStatus;
+  decidedAt: string | null;
+  decisionNote: string | null;
+}
+
+// --- AI Insights ---
+
+export interface AiSuggestion {
+  key: string;
+  label: string;
+  count: number;
+  href: string;
+}
+
+export interface AiDashboard {
+  aiAvailable: boolean;
+  headline: {
+    students: number;
+    staff: number;
+    feesOutstanding: number;
+    attendanceRate: number | null;
+  };
+  suggestionCount: number;
+  suggestions: AiSuggestion[];
+}
+
+export interface AiSummary {
+  report: string;
+  metrics: Record<string, number>;
+  narrative: string | null;
+  aiAvailable: boolean;
+}
+
+export interface AiAttendanceRiskStudent {
+  studentId: string;
+  admissionNo: string;
+  name: string;
+  present: number;
+  total: number;
+  rate: number;
+}
+
+export interface AiAttendanceRisk {
+  threshold: number;
+  windowDays: number;
+  count: number;
+  students: AiAttendanceRiskStudent[];
+  narrative: string | null;
+  aiAvailable: boolean;
+}
+
+export interface AiFeeRiskInvoice {
+  id: string;
+  invoiceNo: string;
+  student: string;
+  outstanding: number;
+  dueDate: string | null;
+  overdue: boolean;
+}
+
+export interface AiFeeRisk {
+  pendingCount: number;
+  overdueCount: number;
+  totalOutstanding: number;
+  invoices: AiFeeRiskInvoice[];
+  suggestedAction: string | null;
+  narrative: string | null;
+  aiAvailable: boolean;
+}
+
+export interface AiDocSearchResult {
+  id: string;
+  name: string;
+  category: string;
+  ownerType: string;
+  score?: number;
+}
+
+export interface AiDocSearch {
+  mode: "semantic" | "keyword";
+  results: AiDocSearchResult[];
+}
+
+// --- Online Fee Gateway ---
+
+export interface PaymentOrder {
+  id: string; orderNo: string; invoiceId: string; invoiceNo: string;
+  studentId: string; studentName: string; amount: number | string; currency: string;
+  status: "created" | "pending" | "success" | "failed" | "cancelled" | "expired" | "refunded";
+  provider: string; gatewayRef: string | null; gatewayPaymentId: string | null;
+  paymentId: string | null; checkoutUrl: string | null; createdAt: string; updatedAt: string;
+}
+
+export interface GatewayStatus {
+  configured: boolean; provider: string | null; currency: string;
+  institutionEnabled: boolean; enabled: boolean;
+}
+
+// --- Fee Management Depth ---
+
+export interface FeeCategory {
+  id: string;
+  name: string;
+  code: string | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export type FeeTermType =
+  | "one_time"
+  | "monthly"
+  | "quarterly"
+  | "term"
+  | "annual";
+
+export interface FeeSchedule {
+  id: string;
+  name: string;
+  categoryId: string | null;
+  categoryName: string | null;
+  amount: number | string;
+  termType: FeeTermType | string;
+  termLabel: string | null;
+  dueDate: string;
+  classId: string | null;
+  sectionId: string | null;
+  programId: string | null;
+  semesterId: string | null;
+  studentId: string | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface FeeSchedulePreview {
+  schedule: FeeSchedule;
+  targetCount: number;
+  toGenerate: number;
+  students: { id: string; name: string; alreadyInvoiced: boolean }[];
+}
+
+export type FineType = "fixed" | "per_day" | "percent";
+
+export interface FineRule {
+  id: string;
+  name: string;
+  categoryId: string | null;
+  categoryName: string | null;
+  fineType: FineType | string;
+  amount: number | string;
+  graceDays: number | null;
+  createdAt: string;
+}
+
+export type DiscountKind = "discount" | "scholarship";
+export type DiscountType = "fixed" | "percent";
+
+export interface FeeDiscount {
+  id: string;
+  name: string;
+  kind: DiscountKind | string;
+  categoryId: string | null;
+  categoryName: string | null;
+  discountType: DiscountType | string;
+  value: number | string;
+  createdAt: string;
+}
+
+export interface InvoiceBreakdown {
+  invoice: {
+    invoiceNo: string;
+    amountDue: number | string;
+    amountPaid: number | string;
+    discountTotal: number | string;
+    fineTotal: number | string;
+    status: string;
+    categoryName: string | null;
+  };
+  base: number | string;
+  discountTotal: number | string;
+  fineTotal: number | string;
+  outstanding: number | string;
+  fines: {
+    id: string;
+    amount: number | string;
+    days: number | null;
+    status: string;
+    reason: string | null;
+    createdAt: string;
+  }[];
+  discounts: {
+    id: string;
+    amount: number | string;
+    status: string;
+    reason: string | null;
+    createdAt: string;
+  }[];
+}
+
+// --- Transfer Certificates ---
+
+export interface TransferCertificate {
+  id: string;
+  tcNo: string;
+  studentId: string;
+  studentName: string;
+  admissionNo: string;
+  className: string | null;
+  sectionName: string | null;
+  programName: string | null;
+  semesterName: string | null;
+  academicYear: string | null;
+  dateOfIssue: string | null;
+  lastAttendanceDate: string | null;
+  leavingReason: string | null;
+  conduct: string | null;
+  feeDuesStatus: string | null;
+  libraryDuesStatus: string | null;
+  transportDuesStatus: string | null;
+  hostelDuesStatus: string | null;
+  duesOverride: boolean;
+  duesOverrideReason: string | null;
+  remarks: string | null;
+  status: "draft" | "issued" | "cancelled";
+  issuedAt: string | null;
+  cancelledAt: string | null;
+  cancelReason: string | null;
+  createdAt: string;
+}
+
+export interface StudentDues {
+  fee: { amount: number | string; count: number };
+  transport: { amount: number | string };
+  hostel: { amount: number | string };
+  library: { books: number; fines: number | string };
+  hasDues: boolean;
+}
+
+// --- Threaded Messaging ---
+
+export type ThreadType = "direct" | "group";
+
+export interface Thread {
+  id: string;
+  subject: string | null;
+  type: ThreadType;
+  lastMessageAt: string | null;
+  createdAt: string;
+  lastMessage: string | null;
+  unreadCount: number;
+  participants: string;
+}
+
+export interface ThreadParticipant {
+  userId: string;
+  name: string;
+  role: string;
+  lastReadAt: string | null;
+}
+
+export interface ThreadMessage {
+  id: string;
+  senderId: string | null;
+  senderName: string | null;
+  body: string;
+  createdAt: string;
+}
+
+export interface ThreadDetail {
+  id: string;
+  subject: string | null;
+  type: ThreadType;
+  createdBy: string | null;
+  lastMessageAt: string | null;
+  createdAt: string;
+  participants: ThreadParticipant[];
+  messages: ThreadMessage[];
+}
+
+// --- Custom Report Builder ---
+
+export interface ReportSource {
+  key: string;
+  title: string;
+  category: string;
+  permission: string;
+}
+
+export interface ReportColumn {
+  key: string;
+  label: string;
+}
+
+export interface CustomReportResult {
+  title: string;
+  columns: ReportColumn[];
+  rows: Record<string, unknown>[];
+}
+
+export interface CustomReport {
+  id: string;
+  name: string;
+  reportKey: string;
+  columns: string[];
+  filters: Record<string, string>;
+  sort: { key: string; dir: string } | null;
+  groupBy: string | null;
+  visibility: "private" | "shared";
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// --- Disciplinary Records ---
+
+export type DisciplinarySeverity = "low" | "medium" | "high" | "critical";
+
+export type DisciplinaryStatus =
+  | "open"
+  | "under_review"
+  | "action_taken"
+  | "closed"
+  | "cancelled";
+
+export interface DisciplinaryRecord {
+  id: string;
+  studentId: string;
+  studentName: string;
+  admissionNo: string;
+  className: string | null;
+  sectionName: string | null;
+  programName: string | null;
+  semesterName: string | null;
+  incidentDate: string;
+  category: string;
+  severity: DisciplinarySeverity;
+  description: string | null;
+  reportedBy: string | null;
+  involvedStaff: string | null;
+  actionTaken: string | null;
+  followUpDate: string | null;
+  status: DisciplinaryStatus;
+  remarks: string | null;
+  closedAt: string | null;
+  cancelledAt: string | null;
+  cancelReason: string | null;
+  createdAt: string;
+}
+
+export interface DisciplinaryAction {
+  id: string;
+  action: string;
+  note: string | null;
+  fromStatus: DisciplinaryStatus | null;
+  toStatus: DisciplinaryStatus | null;
+  byName: string | null;
+  createdAt: string;
+}
+
+export interface DisciplinarySettings {
+  portalEnabled: boolean;
+}
+
+// --- Scheduled Reports ---
+
+export type ScheduleFrequency = "daily" | "weekly" | "monthly";
+
+export type ScheduleChannel = "in_app" | "email";
+
+export type ScheduleExportFormat = "csv" | "pdf" | "both";
+
+export type ScheduledReportRunStatus =
+  | "pending"
+  | "running"
+  | "success"
+  | "failed"
+  | "skipped";
+
+export type ScheduledReportTrigger = "manual" | "scheduled";
+
+export interface ScheduledReportLastRun {
+  status: ScheduledReportRunStatus;
+  completedAt: string | null;
+}
+
+export interface ScheduledReport {
+  id: string;
+  reportId: string;
+  reportName: string;
+  name: string;
+  frequency: ScheduleFrequency;
+  runTime: string;
+  timezone: string;
+  dayOfWeek: number | null;
+  dayOfMonth: number | null;
+  recipients: string[];
+  channels: ScheduleChannel[];
+  exportFormat: ScheduleExportFormat;
+  enabled: boolean;
+  lastRunAt: string | null;
+  nextRunAt: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  lastRun: ScheduledReportLastRun | null;
+}
+
+export interface ScheduledReportRun {
+  id: string;
+  scheduleId: string;
+  status: ScheduledReportRunStatus;
+  trigger: ScheduledReportTrigger;
+  startedAt: string | null;
+  completedAt: string | null;
+  errorMessage: string | null;
+  exportFormat: ScheduleExportFormat;
+  exportBytes: number | null;
+  rowCount: number | null;
+  recipientCount: number | null;
+  deliveryStatus: string | null;
+  triggeredBy: string | null;
+  createdAt: string;
+}
+
+// --- Super Admin Console: Platform Hardening (/platform/*) ---
+
+export interface PlatformModuleAdoption {
+  withStudents: number;
+  withFees: number;
+  withOnlinePayments: number;
+  withLibrary: number;
+  withScheduledReports: number;
+}
+
+/** Aggregate platform metrics from GET /platform/kpis. */
+export interface PlatformKpis {
+  totalInstitutions: number;
+  activeInstitutions: number;
+  suspendedInstitutions: number;
+  totalStudents: number;
+  totalStaff: number;
+  totalUsers: number;
+  feesOutstanding: number | string;
+  onlinePaymentsTotal: number | string;
+  totalDocuments: number;
+  storageBytes: number | string;
+  scheduledReports: number;
+  customReports: number;
+  activeSessions: number;
+  moduleAdoption: PlatformModuleAdoption;
+}
+
+/** Platform-level health from GET /platform/health (mirrors SystemHealth). */
+export type PlatformHealth = SystemHealth;
+
+/** Institution row from GET /platform/institutions. */
+export interface PlatformInstitution {
+  id: string;
+  name: string;
+  code: string;
+  type: "school" | "college";
+  isActive: boolean;
+  createdAt: string;
+  students: number;
+  staff: number;
+  users: number;
+  packageName: string | null;
+}
+
+export interface PlatformInstitutionBranch {
+  id: string;
+  name: string;
+  address?: string | null;
+  timezone?: string | null;
+}
+
+export interface PlatformInstitutionSubscription {
+  id?: string;
+  packageId?: string | null;
+  packageName: string | null;
+  status: string;
+  startsAt?: string | null;
+  endsAt?: string | null;
+}
+
+/** Plan usage block returned in institution detail (`limits`). */
+export interface PlatformInstitutionLimits {
+  packageName: string | null;
+  maxStudents: number | null;
+  students: number;
+  maxStaff: number | null;
+  staff: number;
+  maxBranches: number | null;
+  branches: number;
+  storageLimitMb: number | null;
+  reportsQuota: number | null;
+  withinLimits?: boolean;
+}
+
+/** Operational stats block returned in institution detail (`stats`). */
+export interface PlatformInstitutionStats {
+  students: number;
+  teachers: number;
+  classes: number;
+  users: number;
+  feesOutstanding: number | string;
+  [key: string]: number | string;
+}
+
+/** Full institution detail from GET /platform/institutions/:id. */
+export interface PlatformInstitutionDetail {
+  id: string;
+  name: string;
+  code: string;
+  type: "school" | "college";
+  isActive: boolean;
+  createdAt?: string;
+  settings: Record<string, unknown> | null;
+  branches: PlatformInstitutionBranch[];
+  subscription: PlatformInstitutionSubscription | null;
+  limits: PlatformInstitutionLimits | null;
+  stats: PlatformInstitutionStats | null;
+}
+
+/** Durable cross-tenant audit row from GET /platform/audit. */
+export interface PlatformAuditEntry {
+  id: string;
+  action: string;
+  targetType: string | null;
+  targetId: string | null;
+  institutionId: string | null;
+  actorId: string | null;
+  actorEmail: string | null;
+  actorRole: string | null;
+  detail: unknown;
+  ip: string | null;
+  createdAt: string;
+}
+
+/** Scoped support session from POST /platform/impersonate. */
+export interface ImpersonationResult {
+  impersonating: boolean;
+  token: string;
+  user: {
+    id: string;
+    email: string;
+    role: UserRole;
+    institutionId: string | null;
+    fullName: string;
+  };
+}
+
+// --- Background Job Queue ---
+
+export type JobStatus =
+  | "pending"
+  | "running"
+  | "success"
+  | "failed"
+  | "cancelled";
+
+/** A queued background job from GET /jobs and GET /jobs/:id. */
+export interface BackgroundJob {
+  id: string;
+  type: string;
+  payload: Record<string, unknown> | null;
+  status: JobStatus;
+  priority: number;
+  attempts: number;
+  maxAttempts: number;
+  runAt: string | null;
+  lockedAt: string | null;
+  lockedBy: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  error: string | null;
+  dedupeKey: string | null;
+  institutionId: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Result of POST /jobs/run-scheduler. */
+export interface JobSchedulerResult {
+  due: number;
+  enqueued: number;
+}
+
+/** Result of POST /jobs/process. */
+export interface JobProcessResult {
+  processed: number;
+  success: number;
+  failed: number;
+  retried: number;
+}
+
+// --- Phase E: Observability (super-admin, /observability/*) ---
+
+/** A recently failed background job, from observability overview. */
+export interface ObservabilityRecentFailure {
+  id: string;
+  type: string;
+  error: string | null;
+  institutionId: string | null;
+  completedAt: string | null;
+}
+
+/** Aggregate request/job/report metrics from GET /observability/overview. */
+export interface ObservabilityOverview {
+  requests: {
+    total: number;
+    errors: number;
+    byStatusClass: Record<string, number>;
+    avgDurationMs: number;
+  };
+  jobs: {
+    success: number;
+    failed: number;
+    retried: number;
+    queue: Record<string, number>;
+  };
+  scheduledReports: Record<string, number>;
+  /** Hot-path read cache counters (in-process). */
+  cache: {
+    hits: number;
+    misses: number;
+    invalidations: number;
+    size: number;
+  };
+  recentFailures: ObservabilityRecentFailure[];
+  worker: { enabled: boolean; intervalMs: number };
+}
+
+/** Live health snapshot from GET /observability/health. */
+export interface ObservabilityHealth {
+  status: string;
+  postgres: boolean;
+  mongo: boolean;
+  migrations: number;
+  queue: Record<string, number>;
+  jobWorkerEnabled: boolean;
+  storageConfigured: boolean;
+  uptimeSeconds: number;
+}
+
+// --- Super Admin RBAC Console (/platform/permissions, /platform/roles) ---
+
+/** A single permission within the catalogue, with the roles that hold it. */
+export interface RbacPermission {
+  key: string;
+  description: string;
+  /** Roles currently holding this permission. */
+  roles: string[];
+}
+
+/** Permission catalogue grouped by module, from GET /platform/permissions. */
+export interface RbacPermissionGroup {
+  module: string;
+  permissions: RbacPermission[];
+}
+
+/** Explicit role → permissions matrix from GET /platform/roles. */
+export interface RbacRoleMatrixEntry {
+  role: string;
+  permissions: string[];
+}
+
+/** Result of POST /platform/roles/:role/permissions (grant). */
+export interface RbacGrantResult {
+  role: string;
+  permission: string;
+  granted: boolean;
+  alreadyGranted: boolean;
+}
+
+/** Result of POST /platform/roles/:role/permissions/revoke (revoke). */
+export interface RbacRevokeResult {
+  role: string;
+  permission: string;
+  revoked: boolean;
+  removed: boolean;
+}
+
+// --- Super Admin: Scheduled Backup / Restore Automation (/backups/*) ---
+
+/** A database backup (super-admin backup/restore automation). */
+export interface Backup {
+  id: string;
+  scope: "global" | "institution";
+  institutionId: string | null;
+  status: "pending" | "running" | "success" | "failed";
+  trigger: "manual" | "scheduled";
+  storageMode: "s3" | "local" | null;
+  sizeBytes: number | string | null; // bigint serialises as a string
+  tableCount: number | null;
+  rowCount: number | null;
+  schemaVersion: number | null;
+  error: string | null;
+  hasArtifact: boolean;
+  createdBy: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+}
+
+export interface BackupSettings {
+  retentionCount: number | null;
+  scheduleEnabled: boolean;
+  scheduleFrequency: "daily" | "weekly" | "monthly";
+  scheduleRunTime: string;
+  nextRunAt: string | null;
+  updatedAt: string;
+}
+
+export interface BackupRestorePreview {
+  backupId: string;
+  scope: string;
+  createdAt: string;
+  schemaVersion: number;
+  currentSchemaVersion: number;
+  schemaMatches: boolean;
+  restorable: boolean;
+  tableCount: number;
+  totalRows: number;
+  tables: { name: string; rowCount: number }[];
+}
+
+// --- Live Classes ---
+
+export type LiveClassProvider = "zoom" | "meet" | "teams" | "jitsi" | "other";
+
+export type LiveClassStatus = "scheduled" | "live" | "completed" | "cancelled";
+
+export interface LiveClass {
+  id: string;
+  title: string;
+  description: string | null;
+  subject: string | null;
+  target: string | null;
+  provider: LiveClassProvider;
+  joinUrl: string;
+  hostName: string | null;
+  scheduledAt: string;
+  durationMin: number;
+  status: LiveClassStatus;
+  createdAt: string;
 }

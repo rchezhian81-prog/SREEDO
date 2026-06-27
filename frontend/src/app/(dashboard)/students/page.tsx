@@ -17,7 +17,22 @@ import {
   Select,
   Spinner,
 } from "@/components/ui";
-import type { Paginated, SchoolClass, Student } from "@/types";
+import type {
+  CollegeEnrollment,
+  CollegeProgram,
+  CollegeSemester,
+  Paginated,
+  SchoolClass,
+  Student,
+} from "@/types";
+import { useI18n } from "@/i18n/I18nProvider";
+import { ImportCsvModal, type ImportColumn } from "@/components/ImportCsvModal";
+import { CertificateModal } from "@/components/CertificateModal";
+import { GuardiansModal } from "@/components/GuardiansModal";
+import { StudentPerformanceModal } from "@/components/StudentPerformanceModal";
+import { PromoteStudentsModal } from "@/components/PromoteStudentsModal";
+import { useTerms } from "@/lib/terms";
+import { useModeStore } from "@/stores/mode-store";
 
 const studentSchema = z.object({
   firstName: z.string().min(1, "Required"),
@@ -25,16 +40,55 @@ const studentSchema = z.object({
   gender: z.enum(["male", "female", "other"]).optional(),
   dateOfBirth: z.string().optional(),
   sectionId: z.string().optional(),
+  programId: z.string().optional(),
+  semesterId: z.string().optional(),
   guardianName: z.string().optional(),
+  guardianRelation: z.string().optional(),
   guardianPhone: z.string().optional(),
   guardianEmail: z
     .string()
     .email("Enter a valid email")
     .optional()
     .or(z.literal("")),
+  bloodGroup: z.string().optional(),
+  nationality: z.string().optional(),
+  religion: z.string().optional(),
+  category: z.string().optional(),
+  nationalId: z.string().optional(),
+  admissionDate: z.string().optional(),
+  rollNumber: z.string().optional(),
+  previousSchool: z.string().optional(),
+  emergencyContactName: z.string().optional(),
+  emergencyContactPhone: z.string().optional(),
 });
 
 type StudentForm = z.infer<typeof studentSchema>;
+
+const IMPORT_COLUMNS: ImportColumn[] = [
+  { key: "firstName", label: "First name", required: true },
+  { key: "lastName", label: "Last name", required: true },
+  { key: "dateOfBirth", label: "Date of birth (YYYY-MM-DD)" },
+  { key: "gender", label: "Gender (male/female/other)" },
+  { key: "guardianName", label: "Guardian name" },
+  { key: "guardianPhone", label: "Guardian phone" },
+  { key: "guardianEmail", label: "Guardian email" },
+  { key: "guardianRelation", label: "Relationship (father/mother/guardian/other)" },
+  { key: "address", label: "Address" },
+  { key: "admissionNo", label: "Admission no (auto if blank)" },
+];
+
+const IMPORT_SAMPLE: Record<string, string> = {
+  firstName: "Asha",
+  lastName: "Rao",
+  dateOfBirth: "2014-05-10",
+  gender: "female",
+  guardianName: "Ramesh Rao",
+  guardianPhone: "9000000000",
+  guardianEmail: "ramesh@example.com",
+  guardianRelation: "father",
+  address: "12 Main Street",
+  admissionNo: "",
+};
 
 interface SectionOption {
   id: string;
@@ -42,13 +96,28 @@ interface SectionOption {
 }
 
 export default function StudentsPage() {
+  const { t } = useI18n();
+  const term = useTerms();
+  const mode = useModeStore((s) => s.mode);
+  const isCollege = mode === "college";
   const [students, setStudents] = useState<Student[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [sections, setSections] = useState<SectionOption[]>([]);
+  const [programs, setPrograms] = useState<CollegeProgram[]>([]);
+  const [semesters, setSemesters] = useState<CollegeSemester[]>([]);
+  const [enrollMap, setEnrollMap] = useState<Record<string, CollegeEnrollment>>(
+    {}
+  );
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [certFor, setCertFor] = useState<Student | null>(null);
+  const [guardiansFor, setGuardiansFor] = useState<Student | null>(null);
+  const [perfFor, setPerfFor] = useState<Student | null>(null);
+  const [editing, setEditing] = useState<Student | null>(null);
+  const [promoteOpen, setPromoteOpen] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
 
   const limit = 10;
@@ -71,11 +140,36 @@ export default function StudentsPage() {
     }
   }, [page, search]);
 
+  // College placement (program/semester) for the table column, refreshed after
+  // a new enrollment is created.
+  const loadEnrollments = useCallback(async () => {
+    if (!isCollege) return;
+    try {
+      const rows = await api.get<CollegeEnrollment[]>("/college/enrollments");
+      const map: Record<string, CollegeEnrollment> = {};
+      for (const e of rows) if (!map[e.studentId]) map[e.studentId] = e;
+      setEnrollMap(map);
+    } catch {
+      /* ignore */
+    }
+  }, [isCollege]);
+
   useEffect(() => {
     load().catch(() => setLoading(false));
   }, [load]);
 
   useEffect(() => {
+    loadEnrollments();
+  }, [loadEnrollments]);
+
+  // Placement options for the Add form: a school assigns a class/section, a
+  // college assigns a program/semester (sections don't exist for colleges).
+  useEffect(() => {
+    if (isCollege) {
+      api.get<CollegeProgram[]>("/college/programs").then(setPrograms).catch(() => undefined);
+      api.get<CollegeSemester[]>("/college/semesters").then(setSemesters).catch(() => undefined);
+      return;
+    }
     api
       .get<SchoolClass[]>("/classes")
       .then((classes) =>
@@ -89,26 +183,91 @@ export default function StudentsPage() {
         )
       )
       .catch(() => undefined);
-  }, []);
+  }, [isCollege]);
 
   const {
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<StudentForm>({ resolver: zodResolver(studentSchema) });
+
+  const selectedProgramId = watch("programId");
+  const semesterOptions = selectedProgramId
+    ? semesters.filter((s) => s.programId === selectedProgramId)
+    : semesters;
+
+  const closeModal = () => {
+    setModalOpen(false);
+    setEditing(null);
+  };
+
+  const studentToForm = (s: Student): StudentForm => ({
+    firstName: s.firstName,
+    lastName: s.lastName,
+    gender: (s.gender || undefined) as StudentForm["gender"],
+    dateOfBirth: s.dateOfBirth ?? "",
+    sectionId: s.sectionId ?? "",
+    programId: "",
+    semesterId: "",
+    guardianName: s.guardianName ?? "",
+    guardianRelation: s.guardianRelation ?? "",
+    guardianPhone: s.guardianPhone ?? "",
+    guardianEmail: s.guardianEmail ?? "",
+    bloodGroup: s.bloodGroup ?? "",
+    nationality: s.nationality ?? "",
+    religion: s.religion ?? "",
+    category: s.category ?? "",
+    nationalId: s.nationalId ?? "",
+    admissionDate: s.admissionDate ?? "",
+    rollNumber: s.rollNumber ?? "",
+    previousSchool: s.previousSchool ?? "",
+    emergencyContactName: s.emergencyContactName ?? "",
+    emergencyContactPhone: s.emergencyContactPhone ?? "",
+  });
+
+  const openAdd = () => {
+    setEditing(null);
+    reset();
+    setServerError(null);
+    setModalOpen(true);
+  };
+
+  const openEdit = (student: Student) => {
+    setEditing(student);
+    reset(studentToForm(student));
+    setServerError(null);
+    setModalOpen(true);
+  };
 
   const onSubmit = async (values: StudentForm) => {
     setServerError(null);
     try {
-      await api.post("/students", {
-        ...values,
+      const { programId, semesterId, sectionId, ...rest } = values;
+      const payload = {
+        ...rest,
         gender: values.gender || undefined,
         dateOfBirth: values.dateOfBirth || undefined,
-        sectionId: values.sectionId || undefined,
         guardianEmail: values.guardianEmail || undefined,
-      });
-      setModalOpen(false);
+        guardianRelation: values.guardianRelation || undefined,
+        sectionId: isCollege ? undefined : sectionId || undefined,
+      };
+      if (editing) {
+        await api.patch(`/students/${editing.id}`, payload);
+      } else {
+        const created = await api.post<Student>("/students", payload);
+        // College: place the new student into a program/semester via enrollment.
+        if (isCollege && programId) {
+          await api.post("/college/enrollments", {
+            studentId: created.id,
+            programId,
+            semesterId: semesterId || undefined,
+          });
+          await loadEnrollments();
+        }
+      }
+      closeModal();
       reset();
       await load();
     } catch (err) {
@@ -129,16 +288,24 @@ export default function StudentsPage() {
   return (
     <>
       <PageHeader
-        title="Students"
-        subtitle={`${total} enrolled`}
+        title={t("pages.students.title")}
+        subtitle={t("pages.students.subtitle")}
         action={
-          <Button onClick={() => setModalOpen(true)}>+ Add student</Button>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => setImportOpen(true)}>
+              Import CSV
+            </Button>
+            <Button variant="secondary" onClick={() => setPromoteOpen(true)}>
+              Promote
+            </Button>
+            <Button onClick={openAdd}>+ Add student</Button>
+          </div>
         }
       />
 
       <div className="mb-4 max-w-xs">
         <Input
-          placeholder="Search by name or admission no…"
+          placeholder={`Search by name or ${term.admissionNo.toLowerCase()}…`}
           value={search}
           onChange={(event) => {
             setSearch(event.target.value);
@@ -152,36 +319,48 @@ export default function StudentsPage() {
       ) : students.length === 0 ? (
         <EmptyState message="No students found" />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-xl border border-line bg-surface">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+            <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
               <tr>
-                <th className="px-4 py-3">Admission No</th>
+                <th className="px-4 py-3">{term.admissionNo}</th>
                 <th className="px-4 py-3">Name</th>
-                <th className="px-4 py-3">Class</th>
+                <th className="px-4 py-3">{term.klass}</th>
                 <th className="px-4 py-3">Guardian</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-line">
               {students.map((student) => (
-                <tr key={student.id} className="hover:bg-slate-50">
+                <tr key={student.id} className="hover:bg-surface-2">
                   <td className="px-4 py-3 font-mono text-xs">
                     {student.admissionNo}
                   </td>
-                  <td className="px-4 py-3 font-medium text-slate-900">
+                  <td className="px-4 py-3 font-medium text-ink">
                     {student.firstName} {student.lastName}
                   </td>
                   <td className="px-4 py-3">
-                    {student.className
-                      ? `${student.className} — ${student.sectionName}`
-                      : "Unassigned"}
+                    {isCollege
+                      ? [
+                          enrollMap[student.id]?.programName,
+                          enrollMap[student.id]?.semesterName,
+                        ]
+                          .filter(Boolean)
+                          .join(" — ") || "Unassigned"
+                      : student.className
+                        ? `${student.className} — ${student.sectionName}`
+                        : "Unassigned"}
                   </td>
                   <td className="px-4 py-3">
                     {student.guardianName ?? "—"}
+                    {student.guardianRelation && (
+                      <span className="ml-1 text-xs capitalize text-faint">
+                        ({student.guardianRelation})
+                      </span>
+                    )}
                     {student.guardianPhone && (
-                      <span className="block text-xs text-slate-400">
+                      <span className="block text-xs text-faint">
                         {student.guardianPhone}
                       </span>
                     )}
@@ -192,12 +371,38 @@ export default function StudentsPage() {
                     </Badge>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => removeStudent(student)}
-                      className="text-xs font-medium text-red-600 hover:text-red-700"
-                    >
-                      Delete
-                    </button>
+                    <div className="flex justify-end gap-3">
+                      <button
+                        onClick={() => setPerfFor(student)}
+                        className="text-xs font-medium text-brand-600 hover:text-brand-600 dark:text-brand-300"
+                      >
+                        Insights
+                      </button>
+                      <button
+                        onClick={() => setGuardiansFor(student)}
+                        className="text-xs font-medium text-brand-600 hover:text-brand-600 dark:text-brand-300"
+                      >
+                        Guardians
+                      </button>
+                      <button
+                        onClick={() => setCertFor(student)}
+                        className="text-xs font-medium text-brand-600 hover:text-brand-600 dark:text-brand-300"
+                      >
+                        Certificate
+                      </button>
+                      <button
+                        onClick={() => openEdit(student)}
+                        className="text-xs font-medium text-brand-600 hover:text-brand-600 dark:text-brand-300"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => removeStudent(student)}
+                        className="text-xs font-medium text-red-600 hover:text-red-700"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -215,7 +420,7 @@ export default function StudentsPage() {
           >
             Previous
           </Button>
-          <span className="text-slate-500">
+          <span className="text-muted">
             Page {page} of {totalPages}
           </span>
           <Button
@@ -229,9 +434,9 @@ export default function StudentsPage() {
       )}
 
       <Modal
-        title="Add student"
+        title={editing ? "Edit student" : "Add student"}
         open={modalOpen}
-        onClose={() => setModalOpen(false)}
+        onClose={closeModal}
       >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
@@ -255,25 +460,103 @@ export default function StudentsPage() {
               <Input type="date" {...register("dateOfBirth")} />
             </Field>
           </div>
-          <Field label="Section">
-            <Select {...register("sectionId")}>
-              <option value="">Unassigned</option>
-              {sections.map((section) => (
-                <option key={section.id} value={section.id}>
-                  {section.label}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Guardian name">
-            <Input {...register("guardianName")} />
-          </Field>
+          {isCollege ? (
+            !editing && (
+              <div className="grid grid-cols-2 gap-3">
+                <Field label={term.klass}>
+                  <Select {...register("programId")}>
+                    <option value="">Unassigned</option>
+                    {programs.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label={term.term}>
+                  <Select {...register("semesterId")} disabled={!selectedProgramId}>
+                    <option value="">—</option>
+                    {semesterOptions.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              </div>
+            )
+          ) : (
+            <Field label={term.section}>
+              <Select {...register("sectionId")}>
+                <option value="">Unassigned</option>
+                {sections.map((section) => (
+                  <option key={section.id} value={section.id}>
+                    {section.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Guardian name">
+              <Input {...register("guardianName")} />
+            </Field>
+            <Field label="Relationship">
+              <Select {...register("guardianRelation")}>
+                <option value="">—</option>
+                <option value="father">Father</option>
+                <option value="mother">Mother</option>
+                <option value="guardian">Guardian</option>
+                <option value="other">Other</option>
+              </Select>
+            </Field>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Guardian phone">
               <Input {...register("guardianPhone")} />
             </Field>
             <Field label="Guardian email" error={errors.guardianEmail?.message}>
               <Input type="email" {...register("guardianEmail")} />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Emergency contact">
+              <Input {...register("emergencyContactName")} />
+            </Field>
+            <Field label="Emergency phone">
+              <Input {...register("emergencyContactPhone")} />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Admission date">
+              <Input type="date" {...register("admissionDate")} />
+            </Field>
+            <Field label="Roll number">
+              <Input {...register("rollNumber")} />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Blood group">
+              <Input placeholder="O+" {...register("bloodGroup")} />
+            </Field>
+            <Field label="Category">
+              <Input placeholder="General / OBC / SC / ST" {...register("category")} />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Religion">
+              <Input {...register("religion")} />
+            </Field>
+            <Field label="Nationality">
+              <Input placeholder="Indian" {...register("nationality")} />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="National ID">
+              <Input placeholder="Aadhaar / ID no." {...register("nationalId")} />
+            </Field>
+            <Field label="Previous school">
+              <Input {...register("previousSchool")} />
             </Field>
           </div>
           <ErrorNote message={serverError} />
@@ -286,11 +569,47 @@ export default function StudentsPage() {
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Saving…" : "Save student"}
+              {isSubmitting
+                ? "Saving…"
+                : editing
+                  ? "Save changes"
+                  : "Save student"}
             </Button>
           </div>
         </form>
       </Modal>
+
+      <ImportCsvModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        title="Import students from CSV"
+        endpoint="/students/import"
+        columns={IMPORT_COLUMNS}
+        sample={IMPORT_SAMPLE}
+        templateName="students-template.csv"
+        onImported={load}
+      />
+
+      <CertificateModal student={certFor} onClose={() => setCertFor(null)} />
+
+      <GuardiansModal
+        student={guardiansFor}
+        onClose={() => setGuardiansFor(null)}
+      />
+
+      <StudentPerformanceModal
+        student={perfFor}
+        onClose={() => setPerfFor(null)}
+      />
+
+      <PromoteStudentsModal
+        open={promoteOpen}
+        onClose={() => setPromoteOpen(false)}
+        onDone={() => {
+          load();
+          loadEnrollments();
+        }}
+      />
     </>
   );
 }

@@ -20,17 +20,21 @@ import {
   Textarea,
 } from "@/components/ui";
 import type { Announcement, Paginated } from "@/types";
+import { useTerms } from "@/lib/terms";
 
 const announcementSchema = z.object({
   title: z.string().min(1, "Required"),
   body: z.string().min(1, "Required"),
   audience: z.enum(["all", "teachers", "students", "parents", "staff"]),
   isPinned: z.boolean(),
+  // datetime-local value (no timezone); converted to ISO on submit.
+  publishAt: z.string().optional(),
 });
 
 type AnnouncementForm = z.infer<typeof announcementSchema>;
 
 export default function AnnouncementsPage() {
+  const term = useTerms();
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -65,9 +69,13 @@ export default function AnnouncementsPage() {
   const onSubmit = async (values: AnnouncementForm) => {
     setServerError(null);
     try {
-      await api.post("/announcements", values);
+      const { publishAt, ...rest } = values;
+      await api.post("/announcements", {
+        ...rest,
+        publishAt: publishAt ? new Date(publishAt).toISOString() : undefined,
+      });
       setModalOpen(false);
-      reset({ audience: "all", isPinned: false });
+      reset({ audience: "all", isPinned: false, publishAt: "" });
       await load();
     } catch (err) {
       setServerError(
@@ -103,18 +111,22 @@ export default function AnnouncementsPage() {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="font-medium text-slate-900">
+                    <h3 className="font-medium text-ink">
                       {announcement.title}
                     </h3>
                     {announcement.isPinned && (
                       <Badge tone="amber">Pinned</Badge>
                     )}
                     <Badge tone="blue">{announcement.audience}</Badge>
+                    {announcement.scheduled && (
+                      <Badge tone="slate">Scheduled</Badge>
+                    )}
                   </div>
-                  <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">
+                  <p className="mt-2 whitespace-pre-wrap text-sm text-muted">
                     {announcement.body}
                   </p>
-                  <p className="mt-2 text-xs text-slate-400">
+                  <p className="mt-2 text-xs text-faint">
+                    {announcement.scheduled ? "Scheduled for " : ""}
                     {new Date(announcement.publishedAt).toLocaleString()} ·{" "}
                     {announcement.createdByName ?? "System"}
                   </p>
@@ -147,21 +159,28 @@ export default function AnnouncementsPage() {
             <Field label="Audience">
               <Select {...register("audience")}>
                 <option value="all">Everyone</option>
-                <option value="teachers">Teachers</option>
+                <option value="teachers">{term.teachers}</option>
                 <option value="students">Students</option>
                 <option value="parents">Parents</option>
                 <option value="staff">Staff</option>
               </Select>
             </Field>
-            <label className="flex items-center gap-2 pb-2 text-sm text-slate-700">
+            <label className="flex items-center gap-2 pb-2 text-sm text-ink">
               <input
                 type="checkbox"
-                className="h-4 w-4 rounded border-slate-300"
+                className="h-4 w-4 rounded border-line"
                 {...register("isPinned")}
               />
               Pin to top
             </label>
           </div>
+          <Field label="Schedule for (optional)">
+            <Input type="datetime-local" {...register("publishAt")} />
+          </Field>
+          <p className="-mt-2 text-xs text-faint">
+            Leave blank to publish now. Until the scheduled time, only
+            admins and teachers can see it.
+          </p>
           <ErrorNote message={serverError} />
           <div className="flex justify-end gap-2">
             <Button

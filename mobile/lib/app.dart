@@ -2,11 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import 'providers/auth_provider.dart';
-import 'screens/announcements_screen.dart';
-import 'screens/dashboard_screen.dart';
 import 'screens/home_shell.dart';
 import 'screens/login_screen.dart';
-import 'screens/profile_screen.dart';
 
 class SreedoApp extends StatefulWidget {
   const SreedoApp({super.key, required this.authProvider});
@@ -19,13 +16,13 @@ class SreedoApp extends StatefulWidget {
 
 class _SreedoAppState extends State<SreedoApp> {
   late final GoRouter _router = GoRouter(
-    initialLocation: '/dashboard',
+    initialLocation: '/home',
     refreshListenable: widget.authProvider,
     redirect: (context, state) {
       final loggedIn = widget.authProvider.isAuthenticated;
       final loggingIn = state.matchedLocation == '/login';
       if (!loggedIn && !loggingIn) return '/login';
-      if (loggedIn && loggingIn) return '/dashboard';
+      if (loggedIn && loggingIn) return '/home';
       return null;
     },
     routes: [
@@ -33,29 +30,9 @@ class _SreedoAppState extends State<SreedoApp> {
         path: '/login',
         builder: (context, state) => const LoginScreen(),
       ),
-      StatefulShellRoute.indexedStack(
-        builder: (context, state, navigationShell) =>
-            HomeShell(shell: navigationShell),
-        branches: [
-          StatefulShellBranch(routes: [
-            GoRoute(
-              path: '/dashboard',
-              builder: (context, state) => const DashboardScreen(),
-            ),
-          ]),
-          StatefulShellBranch(routes: [
-            GoRoute(
-              path: '/announcements',
-              builder: (context, state) => const AnnouncementsScreen(),
-            ),
-          ]),
-          StatefulShellBranch(routes: [
-            GoRoute(
-              path: '/profile',
-              builder: (context, state) => const ProfileScreen(),
-            ),
-          ]),
-        ],
+      GoRoute(
+        path: '/home',
+        builder: (context, state) => const HomeShell(),
       ),
     ],
   );

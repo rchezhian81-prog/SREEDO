@@ -45,6 +45,26 @@ infra/      Nginx reverse-proxy config
 .github/    CI: backend typecheck+tests+build, frontend build, flutter analyze
 ```
 
+## Documentation
+
+📖 **[`docs/README.md`](docs/README.md) is the documentation hub — start there.**
+New team members should begin with **[Team Onboarding](docs/TEAM_ONBOARDING.md)**.
+
+Key entry points:
+
+- [Documentation index](docs/README.md) — links to every document.
+- [Team onboarding](docs/TEAM_ONBOARDING.md) — zero-to-productive guide.
+- [Deployment guide](docs/DEPLOYMENT.md) — VPS + Docker + TLS go-live runbook.
+- [Latest document register](docs/governance/LATEST_DOCUMENT_REGISTER.md) — the
+  canonical document for every area.
+- [File naming standard](docs/governance/FILE_NAMING_STANDARD.md) — how docs are
+  named, versioned, and kept duplicate-free.
+- [Module docs](docs/modules/) · [pipeline diagrams](docs/diagrams/) — per-module
+  references and Mermaid flows.
+- [Planning suite](docs/PLANNING_INDEX.md) · [developer handover](docs/DEVELOPER_HANDOVER.md)
+  — original specs (PRD, architecture, schema, API, roles, workflows, UI,
+  roadmap), conventions, and the prioritized backlog.
+
 ## Quick start (Docker)
 
 ```bash
