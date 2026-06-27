@@ -19,6 +19,13 @@ import {
 } from "./platform.schema";
 import * as service from "./platform.service";
 import * as billing from "../billing/billing.service";
+import * as invoices from "../billing/invoices.service";
+import {
+  createInvoiceSchema,
+  invoiceLineSchema,
+  listInvoicesQuerySchema,
+  markPaidSchema,
+} from "../billing/invoices.schema";
 
 // The platform console sits ABOVE any tenant: super-admin-only (actor
 // institution_id = null). authorize("super_admin") is the hard role boundary;
@@ -256,4 +263,90 @@ platformRouter.get("/institutions/:id/subscription/status", requirePermission("p
  */
 platformRouter.get("/institutions/:id/subscription/events", requirePermission("platform:audit_read"), async (req, res) => {
   res.json(await billing.listSubscriptionEvents(uuidParam(req), 50));
+});
+
+// --- SaaS invoicing (Billing Phase B2; gateway-free, offline payment) ---
+
+/**
+ * @openapi
+ * /platform/invoices:
+ *   get: { tags: [Platform], summary: List all SaaS invoices (optional status filter), security: [{ bearerAuth: [] }], parameters: [{ in: query, name: status, schema: { type: string, enum: [draft, issued, paid, void] } }], responses: { 200: { description: Invoices, newest first } } }
+ */
+platformRouter.get("/invoices", requirePermission("platform:read"), async (req, res) => {
+  const { status } = listInvoicesQuerySchema.parse(req.query);
+  res.json(await invoices.listAll(status));
+});
+
+/**
+ * @openapi
+ * /platform/invoices/{id}:
+ *   get: { tags: [Platform], summary: Get a SaaS invoice with its line items, security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Invoice }, 404: { description: Not found } } }
+ */
+platformRouter.get("/invoices/:id", requirePermission("platform:read"), async (req, res) => {
+  res.json(await invoices.getInvoice(uuidParam(req)));
+});
+
+/**
+ * @openapi
+ * /platform/invoices/{id}/pdf:
+ *   get: { tags: [Platform], summary: Download the invoice as a PDF, security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: "application/pdf" }, 404: { description: Not found } } }
+ */
+platformRouter.get("/invoices/:id/pdf", requirePermission("platform:read"), async (req, res) => {
+  const id = uuidParam(req);
+  const buffer = await invoices.invoicePdfBuffer(id);
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `inline; filename="invoice-${id}.pdf"`);
+  res.send(buffer);
+});
+
+/**
+ * @openapi
+ * /platform/invoices/{id}/lines:
+ *   post: { tags: [Platform], summary: Add a line item to a draft invoice, security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Updated invoice }, 400: { description: Not a draft } } }
+ */
+platformRouter.post("/invoices/:id/lines", requirePermission("platform:manage_subscriptions"), async (req, res) => {
+  res.json(await invoices.addLine(uuidParam(req), invoiceLineSchema.parse(req.body)));
+});
+
+/**
+ * @openapi
+ * /platform/invoices/{id}/issue:
+ *   post: { tags: [Platform], summary: Issue a draft invoice (assigns a sequential number), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Issued invoice }, 400: { description: Not a draft } } }
+ */
+platformRouter.post("/invoices/:id/issue", requirePermission("platform:manage_subscriptions"), async (req, res) => {
+  res.json(await invoices.issueInvoice(uuidParam(req)));
+});
+
+/**
+ * @openapi
+ * /platform/invoices/{id}/mark-paid:
+ *   post: { tags: [Platform], summary: Record OFFLINE payment for an issued invoice (no gateway), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Paid invoice }, 400: { description: Not issued } } }
+ */
+platformRouter.post("/invoices/:id/mark-paid", requirePermission("platform:manage_subscriptions"), async (req, res) => {
+  res.json(await invoices.markPaid(uuidParam(req), markPaidSchema.parse(req.body)));
+});
+
+/**
+ * @openapi
+ * /platform/invoices/{id}/void:
+ *   post: { tags: [Platform], summary: Void a draft or issued invoice (a paid invoice cannot be voided), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Voided invoice }, 400: { description: Paid invoice } } }
+ */
+platformRouter.post("/invoices/:id/void", requirePermission("platform:manage_subscriptions"), async (req, res) => {
+  res.json(await invoices.voidInvoice(uuidParam(req)));
+});
+
+/**
+ * @openapi
+ * /platform/institutions/{id}/invoices:
+ *   get: { tags: [Platform], summary: List a tenant's SaaS invoices, security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }, { in: query, name: status, schema: { type: string } }], responses: { 200: { description: Invoices } } }
+ *   post: { tags: [Platform], summary: Create a draft SaaS invoice for a tenant, security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 201: { description: Draft invoice } } }
+ */
+platformRouter.get("/institutions/:id/invoices", requirePermission("platform:read"), async (req, res) => {
+  const { status } = listInvoicesQuerySchema.parse(req.query);
+  res.json(await invoices.listForInstitution(uuidParam(req), status));
+});
+platformRouter.post("/institutions/:id/invoices", requirePermission("platform:manage_subscriptions"), async (req, res) => {
+  res.status(201).json(
+    await invoices.createDraft(uuidParam(req), createInvoiceSchema.parse(req.body), req.user!.id)
+  );
 });
