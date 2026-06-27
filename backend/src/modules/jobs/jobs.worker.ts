@@ -8,6 +8,7 @@ import {
 } from "../communication/communication.service";
 import { enqueueDueScheduledBackups, runScheduledBackup } from "../backups/backups.service";
 import { runWebhookDeliveryJob } from "../integrations/webhooks.delivery";
+import { sweepSubscriptionLifecycle } from "../billing/billing.service";
 import { runSchedulerTick } from "./jobs.service";
 
 interface ClaimedJob {
@@ -172,6 +173,7 @@ export function startWorker(): void {
       try {
         await runSchedulerTick(null);
         await enqueueDueScheduledBackups();
+        await sweepSubscriptionLifecycle();
         await processDueJobs({ limit: 50 });
       } catch (err) {
         console.error("job worker tick failed:", err);

@@ -112,6 +112,23 @@ export const env = {
   jobWorkerEnabled: process.env.JOB_WORKER_ENABLED === "true",
   jobWorkerIntervalMs: Number(process.env.JOB_WORKER_INTERVAL_MS ?? 15000),
 
+  // Subscription lifecycle (Billing Phase B1). The sweep transitions expired
+  // subscriptions and sends renewal reminders; it runs in the worker tick (when
+  // JOB_WORKER_ENABLED) or on demand via POST /platform/subscriptions/run-lifecycle.
+  // Days of grace after a term ends before a subscription is marked expired.
+  billingGraceDays: Number(process.env.BILLING_GRACE_DAYS ?? 14),
+  // Days-before-expiry on which to send a renewal reminder (comma-separated).
+  billingReminderDays: (process.env.BILLING_REMINDER_DAYS ?? "14,7,1")
+    .split(",")
+    .map((d) => Number(d.trim()))
+    .filter((d) => Number.isFinite(d) && d > 0),
+  // When true, an expired subscription also suspends the institution
+  // (institutions.is_active = false). OFF by default so the sweep is non-disruptive.
+  billingAutoSuspend: process.env.BILLING_AUTO_SUSPEND === "true",
+  // Placeholder enforcement: when true, requireActiveSubscription blocks writes
+  // for expired/suspended tenants. OFF by default (the guard is not yet mounted).
+  billingEnforceSubscription: process.env.BILLING_ENFORCE_SUBSCRIPTION === "true",
+
   // Online payment gateway (provider-agnostic hosted checkout) — optional.
   // When PAYMENT_GATEWAY_PROVIDER + PAYMENT_GATEWAY_WEBHOOK_SECRET are unset the
   // gateway is "not configured": online payments degrade gracefully and offline
