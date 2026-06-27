@@ -129,6 +129,11 @@ export const env = {
   // for expired/suspended tenants. OFF by default (the guard is not yet mounted).
   billingEnforceSubscription: process.env.BILLING_ENFORCE_SUBSCRIPTION === "true",
 
+  // SaaS invoicing (Billing Phase B2) — gateway-free. Prefix + default currency
+  // for operator-issued subscription invoices (paid offline; no gateway).
+  saasInvoicePrefix: process.env.SAAS_INVOICE_PREFIX ?? "SINV-",
+  saasInvoiceCurrency: process.env.SAAS_INVOICE_CURRENCY ?? "INR",
+
   // Online payment gateway (provider-agnostic hosted checkout) — optional.
   // When PAYMENT_GATEWAY_PROVIDER + PAYMENT_GATEWAY_WEBHOOK_SECRET are unset the
   // gateway is "not configured": online payments degrade gracefully and offline

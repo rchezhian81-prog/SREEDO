@@ -89,6 +89,8 @@ const TABLES = [
   "timetable_entries",
   "periods",
   "rooms",
+  "saas_invoice_lines",
+  "saas_invoices",
   "subscription_events",
   "institution_subscriptions",
   "branches",
