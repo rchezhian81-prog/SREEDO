@@ -4,10 +4,12 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth-store";
+import { formatDate, formatMoney } from "@/lib/format";
 import {
   Badge,
   Button,
   Card,
+  ConfirmDialog,
   ErrorNote,
   Field,
   Input,
@@ -35,6 +37,9 @@ interface Invoice {
   currency: string;
   periodStart: string | null;
   periodEnd: string | null;
+  paymentTermsDays: number | null;
+  dueDate: string | null;
+  isOverdue: boolean;
   subtotal: string;
   taxPercent: string;
   taxAmount: string;
@@ -55,22 +60,39 @@ type Tone = "slate" | "green" | "amber" | "red" | "blue";
 const statusTone = (s: string): Tone =>
   s === "paid" ? "green" : s === "issued" ? "blue" : s === "void" ? "slate" : "amber";
 
+type ConfirmState = {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  run: () => Promise<unknown>;
+  reloadAfter?: boolean;
+};
+
+type LineDraft = { id: string; description: string; quantity: string; unitPrice: string };
+
 export default function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [inv, setInv] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const [newLine, setNewLine] = useState({ description: "", quantity: "1", unitPrice: "0" });
+  const [editingLine, setEditingLine] = useState<LineDraft | null>(null);
   const [payMethod, setPayMethod] = useState("bank_transfer");
   const [payRef, setPayRef] = useState("");
+
+  const [confirm, setConfirm] = useState<ConfirmState | null>(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
 
   // Edit-draft header form (prefilled from the loaded invoice).
   const [edit, setEdit] = useState({
     currency: "",
     taxPercent: "0",
+    paymentTermsDays: "",
+    dueDate: "",
     billingName: "",
     gstin: "",
     billingAddress: "",
@@ -80,7 +102,7 @@ export default function InvoiceDetailPage() {
     notes: "",
   });
 
-  const money = (v: string | number) => `${inv?.currency ?? ""} ${Number(v).toFixed(2)}`;
+  const money = (v: string | number) => formatMoney(v, inv?.currency ?? "INR");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -91,6 +113,9 @@ export default function InvoiceDetailPage() {
       setEdit({
         currency: data.currency ?? "",
         taxPercent: String(Number(data.taxPercent) || 0),
+        paymentTermsDays:
+          data.paymentTermsDays != null ? String(data.paymentTermsDays) : "",
+        dueDate: data.dueDate ?? "",
         billingName: data.billingName ?? "",
         gstin: data.gstin ?? "",
         billingAddress: data.billingAddress ?? "",
@@ -113,6 +138,7 @@ export default function InvoiceDetailPage() {
   const act = async (fn: () => Promise<unknown>) => {
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
       await fn();
       await load();
@@ -120,6 +146,23 @@ export default function InvoiceDetailPage() {
       setError(err instanceof ApiError ? err.message : "Action failed");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const runConfirm = async () => {
+    if (!confirm) return;
+    setConfirmBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await confirm.run();
+      const reload = confirm.reloadAfter !== false;
+      setConfirm(null);
+      if (reload) await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Action failed");
+    } finally {
+      setConfirmBusy(false);
     }
   };
 
@@ -133,14 +176,32 @@ export default function InvoiceDetailPage() {
       setNewLine({ description: "", quantity: "1", unitPrice: "0" });
     });
 
-  const removeLine = (lineId: string) =>
-    act(() => api.delete(`/platform/invoices/${id}/lines/${lineId}`));
+  const startEditLine = (l: Line) =>
+    setEditingLine({
+      id: l.id,
+      description: l.description,
+      quantity: String(Number(l.quantity)),
+      unitPrice: String(Number(l.unitPrice)),
+    });
+
+  const saveLine = () =>
+    act(async () => {
+      if (!editingLine) return;
+      await api.patch(`/platform/invoices/${id}/lines/${editingLine.id}`, {
+        description: editingLine.description,
+        quantity: Number(editingLine.quantity) || 0,
+        unitPrice: Number(editingLine.unitPrice) || 0,
+      });
+      setEditingLine(null);
+    });
 
   const saveEdit = () =>
     act(() =>
       api.patch(`/platform/invoices/${id}`, {
         currency: edit.currency || undefined,
         taxPercent: Number(edit.taxPercent) || 0,
+        paymentTermsDays: edit.paymentTermsDays ? Number(edit.paymentTermsDays) : null,
+        dueDate: edit.dueDate || null,
         billingName: edit.billingName || null,
         gstin: edit.gstin || null,
         billingAddress: edit.billingAddress || null,
@@ -152,6 +213,7 @@ export default function InvoiceDetailPage() {
     );
 
   const issue = () => act(() => api.post(`/platform/invoices/${id}/issue`));
+
   const markPaid = () =>
     act(() =>
       api.post(`/platform/invoices/${id}/mark-paid`, {
@@ -159,7 +221,63 @@ export default function InvoiceDetailPage() {
         reference: payRef || undefined,
       })
     );
-  const voidInvoice = () => act(() => api.post(`/platform/invoices/${id}/void`));
+
+  const resend = () =>
+    act(async () => {
+      const r = await api.post<{ recipients: number }>(
+        `/platform/invoices/${id}/resend`
+      );
+      setNotice(
+        r.recipients > 0
+          ? `Invoice email sent to ${r.recipients} admin recipient(s).`
+          : "No active admin emails found (or email is not configured)."
+      );
+    });
+
+  const duplicate = async () => {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const created = await api.post<{ id: string }>(
+        `/platform/invoices/${id}/duplicate`
+      );
+      router.push(`/super-admin/invoices/${created.id}`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to duplicate invoice");
+      setBusy(false);
+    }
+  };
+
+  const askVoid = () =>
+    setConfirm({
+      title: "Void invoice",
+      message:
+        "Void this invoice? It stays in the records but is marked void. This can't be undone.",
+      confirmLabel: "Void",
+      run: () => api.post(`/platform/invoices/${id}/void`),
+    });
+
+  const askRemoveLine = (lineId: string) =>
+    setConfirm({
+      title: "Remove line",
+      message: "Remove this line item from the draft?",
+      confirmLabel: "Remove",
+      run: () => api.delete(`/platform/invoices/${id}/lines/${lineId}`),
+    });
+
+  const askDelete = () =>
+    setConfirm({
+      title: "Delete draft",
+      message:
+        "Permanently delete this draft invoice and its line items? This can't be undone.",
+      confirmLabel: "Delete",
+      reloadAfter: false,
+      run: async () => {
+        await api.delete(`/platform/invoices/${id}`);
+        router.push("/super-admin/invoices");
+      },
+    });
 
   const downloadPdf = async () => {
     const token = useAuthStore.getState().accessToken;
@@ -194,10 +312,36 @@ export default function InvoiceDetailPage() {
       />
 
       {error && <ErrorNote message={error} />}
+      {notice && (
+        <div className="mb-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300">
+          {notice}
+        </div>
+      )}
+
+      {/* Toolbar: actions available regardless of edit state */}
+      <div className="mb-4 flex flex-wrap gap-2">
+        <Button variant="secondary" onClick={downloadPdf}>
+          Download PDF
+        </Button>
+        <Button variant="secondary" onClick={duplicate} disabled={busy}>
+          Duplicate
+        </Button>
+        {(inv.status === "issued" || inv.status === "paid") && (
+          <Button variant="secondary" onClick={resend} disabled={busy}>
+            Resend email
+          </Button>
+        )}
+        {isDraft && (
+          <Button variant="danger" onClick={askDelete} disabled={busy}>
+            Delete draft
+          </Button>
+        )}
+      </div>
 
       <Card className="mb-4">
         <div className="flex flex-wrap items-center gap-3">
           <Badge tone={statusTone(inv.status)}>{inv.status}</Badge>
+          {inv.isOverdue && <Badge tone="red">overdue</Badge>}
           <span className="text-xs text-muted">Currency {inv.currency}</span>
           {(inv.periodStart || inv.periodEnd) && (
             <span className="text-xs text-muted">
@@ -205,11 +349,20 @@ export default function InvoiceDetailPage() {
             </span>
           )}
           {inv.issuedAt && (
-            <span className="text-xs text-muted">Issued {inv.issuedAt.slice(0, 10)}</span>
+            <span className="text-xs text-muted">Issued {formatDate(inv.issuedAt)}</span>
+          )}
+          {inv.dueDate && (
+            <span
+              className={`text-xs ${
+                inv.isOverdue ? "font-medium text-red-600 dark:text-red-400" : "text-muted"
+              }`}
+            >
+              Due {formatDate(inv.dueDate)}
+            </span>
           )}
           {inv.status === "paid" && inv.paidAt && (
             <span className="text-xs text-muted">
-              Paid {inv.paidAt.slice(0, 10)}
+              Paid {formatDate(inv.paidAt)}
               {inv.paymentMethod ? ` · ${inv.paymentMethod}` : ""}
               {inv.paymentReference ? ` · ${inv.paymentReference}` : ""}
             </span>
@@ -236,26 +389,90 @@ export default function InvoiceDetailPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {inv.lines.map((l) => (
-              <tr key={l.id}>
-                <td className="py-2 text-ink">{l.description}</td>
-                <td className="py-2 text-muted">{Number(l.quantity)}</td>
-                <td className="py-2 text-muted">{money(l.unitPrice)}</td>
-                <td className="py-2 text-right text-ink">{money(l.amount)}</td>
-                {isDraft && (
-                  <td className="py-2 text-right">
-                    <button
-                      onClick={() => removeLine(l.id)}
-                      disabled={busy}
-                      className="text-xs text-red-600 hover:text-red-700"
-                      aria-label="Remove line"
-                    >
-                      ✕
-                    </button>
-                  </td>
-                )}
-              </tr>
-            ))}
+            {inv.lines.map((l) => {
+              const editing = editingLine?.id === l.id;
+              if (editing && editingLine) {
+                return (
+                  <tr key={l.id}>
+                    <td className="py-2 pr-2">
+                      <Input
+                        value={editingLine.description}
+                        onChange={(e) =>
+                          setEditingLine({ ...editingLine, description: e.target.value })
+                        }
+                      />
+                    </td>
+                    <td className="py-2 pr-2">
+                      <Input
+                        type="number"
+                        value={editingLine.quantity}
+                        onChange={(e) =>
+                          setEditingLine({ ...editingLine, quantity: e.target.value })
+                        }
+                      />
+                    </td>
+                    <td className="py-2 pr-2">
+                      <Input
+                        type="number"
+                        value={editingLine.unitPrice}
+                        onChange={(e) =>
+                          setEditingLine({ ...editingLine, unitPrice: e.target.value })
+                        }
+                      />
+                    </td>
+                    <td className="py-2 text-right text-faint">—</td>
+                    <td className="py-2">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={saveLine}
+                          disabled={busy || !editingLine.description.trim()}
+                          className="text-xs font-medium text-brand-600 hover:text-brand-700 disabled:opacity-50 dark:text-brand-300"
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={() => setEditingLine(null)}
+                          disabled={busy}
+                          className="text-xs text-muted hover:text-ink"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              }
+              return (
+                <tr key={l.id}>
+                  <td className="py-2 text-ink">{l.description}</td>
+                  <td className="py-2 text-muted">{Number(l.quantity)}</td>
+                  <td className="py-2 text-muted">{money(l.unitPrice)}</td>
+                  <td className="py-2 text-right text-ink">{money(l.amount)}</td>
+                  {isDraft && (
+                    <td className="py-2">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() => startEditLine(l)}
+                          disabled={busy}
+                          className="text-xs text-brand-600 hover:text-brand-700 dark:text-brand-300"
+                          aria-label="Edit line"
+                        >
+                          ✎
+                        </button>
+                        <button
+                          onClick={() => askRemoveLine(l.id)}
+                          disabled={busy}
+                          className="text-xs text-red-600 hover:text-red-700"
+                          aria-label="Remove line"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
             {inv.lines.length === 0 && (
               <tr>
                 <td colSpan={isDraft ? 5 : 4} className="py-3 text-faint">
@@ -283,7 +500,7 @@ export default function InvoiceDetailPage() {
         {inv.notes && <p className="mt-3 text-sm text-muted">Notes: {inv.notes}</p>}
       </Card>
 
-      {/* Draft: edit header, add/remove lines, issue, void */}
+      {/* Draft: edit header, add/edit/remove lines, issue, void */}
       {isDraft && (
         <>
           <Card className="mb-4">
@@ -300,6 +517,21 @@ export default function InvoiceDetailPage() {
                   type="number"
                   value={edit.taxPercent}
                   onChange={(e) => setEdit({ ...edit, taxPercent: e.target.value })}
+                />
+              </Field>
+              <Field label="Payment terms (days)">
+                <Input
+                  type="number"
+                  placeholder="e.g. 15"
+                  value={edit.paymentTermsDays}
+                  onChange={(e) => setEdit({ ...edit, paymentTermsDays: e.target.value })}
+                />
+              </Field>
+              <Field label="Due date">
+                <Input
+                  type="date"
+                  value={edit.dueDate}
+                  onChange={(e) => setEdit({ ...edit, dueDate: e.target.value })}
                 />
               </Field>
               <Field label="Period start">
@@ -386,7 +618,11 @@ export default function InvoiceDetailPage() {
                 />
               </div>
               <div className="col-span-1 flex items-center">
-                <Button variant="secondary" onClick={addLine} disabled={busy || !newLine.description}>
+                <Button
+                  variant="secondary"
+                  onClick={addLine}
+                  disabled={busy || !newLine.description}
+                >
                   +
                 </Button>
               </div>
@@ -395,7 +631,7 @@ export default function InvoiceDetailPage() {
               <Button onClick={issue} disabled={busy || inv.lines.length === 0}>
                 Issue invoice
               </Button>
-              <Button variant="danger" onClick={voidInvoice} disabled={busy}>
+              <Button variant="danger" onClick={askVoid} disabled={busy}>
                 Void
               </Button>
             </div>
@@ -403,7 +639,7 @@ export default function InvoiceDetailPage() {
         </>
       )}
 
-      {/* Issued: mark paid, download PDF, void */}
+      {/* Issued: mark paid, void */}
       {inv.status === "issued" && (
         <Card className="mb-4">
           <p className="mb-2 text-sm font-medium text-ink">Record offline payment</p>
@@ -431,23 +667,22 @@ export default function InvoiceDetailPage() {
             </div>
           </div>
           <div className="mt-4 flex gap-2">
-            <Button variant="secondary" onClick={downloadPdf}>
-              Download PDF
-            </Button>
-            <Button variant="danger" onClick={voidInvoice} disabled={busy}>
+            <Button variant="danger" onClick={askVoid} disabled={busy}>
               Void
             </Button>
           </div>
         </Card>
       )}
 
-      {(inv.status === "paid" || inv.status === "void") && (
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={downloadPdf}>
-            Download PDF
-          </Button>
-        </div>
-      )}
+      <ConfirmDialog
+        open={confirm !== null}
+        title={confirm?.title ?? ""}
+        message={confirm?.message ?? ""}
+        confirmLabel={confirm?.confirmLabel ?? "Confirm"}
+        busy={confirmBusy}
+        onConfirm={runConfirm}
+        onClose={() => setConfirm(null)}
+      />
     </>
   );
 }

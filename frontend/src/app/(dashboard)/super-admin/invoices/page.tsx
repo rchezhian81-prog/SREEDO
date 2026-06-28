@@ -3,9 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
+import { useAuthStore } from "@/stores/auth-store";
+import { formatDate, formatMoney } from "@/lib/format";
 import {
   Badge,
   Button,
+  Card,
   EmptyState,
   ErrorNote,
   Field,
@@ -17,6 +20,9 @@ import {
   Textarea,
 } from "@/components/ui";
 
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
+
 interface InvoiceRow {
   id: string;
   institutionName: string;
@@ -25,7 +31,27 @@ interface InvoiceRow {
   status: string;
   currency: string;
   total: string;
+  dueDate: string | null;
+  isOverdue: boolean;
   createdAt: string;
+}
+
+interface Paged {
+  rows: InvoiceRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+interface Summary {
+  draftCount: number;
+  issuedCount: number;
+  paidCount: number;
+  voidCount: number;
+  outstandingAmount: string;
+  paidAmount: string;
+  overdueCount: number;
+  overdueAmount: string;
 }
 
 interface InstitutionBrief {
@@ -49,14 +75,57 @@ type Tone = "slate" | "green" | "amber" | "red" | "blue";
 const statusTone = (s: string): Tone =>
   s === "paid" ? "green" : s === "issued" ? "blue" : s === "void" ? "slate" : "amber";
 
+type SortKey = "createdAt" | "dueDate" | "total" | "number" | "status";
+
+function StatCard({
+  label,
+  value,
+  sub,
+  tone,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  tone?: "default" | "red" | "green" | "blue";
+}) {
+  const valueColor =
+    tone === "red"
+      ? "text-red-600 dark:text-red-400"
+      : tone === "green"
+        ? "text-green-600 dark:text-green-400"
+        : tone === "blue"
+          ? "text-brand-600 dark:text-brand-300"
+          : "text-ink";
+  return (
+    <Card className="flex-1">
+      <p className="text-xs uppercase tracking-wide text-faint">{label}</p>
+      <p className={`mt-1 text-2xl font-bold ${valueColor}`}>{value}</p>
+      {sub && <p className="mt-0.5 text-xs text-muted">{sub}</p>}
+    </Card>
+  );
+}
+
 export default function InvoicesPage() {
   const router = useRouter();
-  const [rows, setRows] = useState<InvoiceRow[]>([]);
+  const [data, setData] = useState<Paged>({ rows: [], total: 0, page: 1, pageSize: 20 });
+  const [summary, setSummary] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState("");
-  const [search, setSearch] = useState("");
 
+  // Filters + paging + sort.
+  const [statusFilter, setStatusFilter] = useState("");
+  const [institutionFilter, setInstitutionFilter] = useState("");
+  const [overdueOnly, setOverdueOnly] = useState(false);
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [sort, setSort] = useState<SortKey>("createdAt");
+  const [order, setOrder] = useState<"asc" | "desc">("desc");
+
+  // Create-modal state.
   const [open, setOpen] = useState(false);
   const [institutions, setInstitutions] = useState<InstitutionBrief[]>([]);
   const [packages, setPackages] = useState<PackageBrief[]>([]);
@@ -65,6 +134,8 @@ export default function InvoicesPage() {
     packageId: "",
     currency: "INR",
     taxPercent: "0",
+    paymentTermsDays: "",
+    dueDate: "",
     billingName: "",
     gstin: "",
     billingAddress: "",
@@ -78,35 +149,73 @@ export default function InvoicesPage() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  // Debounce the free-text search so we don't refetch on every keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 400);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // Any filter change resets to page 1.
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter, institutionFilter, overdueOnly, from, to, debouncedSearch, pageSize]);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const q = statusFilter ? `?status=${statusFilter}` : "";
-      setRows(await api.get<InvoiceRow[]>(`/platform/invoices${q}`));
+      const params = new URLSearchParams();
+      if (statusFilter) params.set("status", statusFilter);
+      if (institutionFilter) params.set("institutionId", institutionFilter);
+      if (overdueOnly) params.set("overdue", "true");
+      if (from) params.set("from", from);
+      if (to) params.set("to", to);
+      if (debouncedSearch.trim()) params.set("q", debouncedSearch.trim());
+      params.set("page", String(page));
+      params.set("pageSize", String(pageSize));
+      params.set("sort", sort);
+      params.set("order", order);
+      const [list, sum] = await Promise.all([
+        api.get<Paged>(`/platform/invoices?${params.toString()}`),
+        api.get<Summary>("/platform/invoices/summary").catch(() => null),
+      ]);
+      setData(list);
+      if (sum) setSummary(sum);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load invoices");
     } finally {
       setLoading(false);
     }
-  }, [statusFilter]);
+  }, [
+    statusFilter,
+    institutionFilter,
+    overdueOnly,
+    from,
+    to,
+    debouncedSearch,
+    page,
+    pageSize,
+    sort,
+    order,
+  ]);
 
   useEffect(() => {
     load();
   }, [load]);
 
+  // Institutions power both the filter dropdown and the create form.
+  useEffect(() => {
+    api
+      .get<InstitutionBrief[]>("/platform/institutions")
+      .then(setInstitutions)
+      .catch(() => {
+        /* best-effort */
+      });
+  }, []);
+
   const openCreate = async () => {
     setFormError(null);
     setOpen(true);
-    if (institutions.length === 0) {
-      try {
-        setInstitutions(
-          await api.get<InstitutionBrief[]>("/platform/institutions")
-        );
-      } catch {
-        /* institution list is best-effort for the picker */
-      }
-    }
     if (packages.length === 0) {
       try {
         setPackages(await api.get<PackageBrief[]>("/packages"));
@@ -131,6 +240,10 @@ export default function InvoicesPage() {
         packageId: form.packageId || undefined,
         currency: form.currency || undefined,
         taxPercent: Number(form.taxPercent) || 0,
+        paymentTermsDays: form.paymentTermsDays
+          ? Number(form.paymentTermsDays)
+          : undefined,
+        dueDate: form.dueDate || undefined,
         gstin: form.gstin || undefined,
         billingName: form.billingName || undefined,
         billingAddress: form.billingAddress || undefined,
@@ -160,6 +273,41 @@ export default function InvoicesPage() {
     }
   };
 
+  const downloadPdf = async (id: string) => {
+    const token = useAuthStore.getState().accessToken;
+    const res = await fetch(`${API_URL}/platform/invoices/${id}/pdf`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) return;
+    const url = URL.createObjectURL(await res.blob());
+    window.open(url, "_blank");
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  };
+
+  const toggleSort = (key: SortKey) => {
+    if (sort === key) {
+      setOrder((o) => (o === "asc" ? "desc" : "asc"));
+    } else {
+      setSort(key);
+      setOrder("desc");
+    }
+  };
+
+  const SortTh = ({ label, sortKey }: { label: string; sortKey: SortKey }) => (
+    <th className="px-4 py-3">
+      <button
+        type="button"
+        onClick={() => toggleSort(sortKey)}
+        className="inline-flex items-center gap-1 uppercase hover:text-ink"
+      >
+        {label}
+        {sort === sortKey && <span>{order === "asc" ? "▲" : "▼"}</span>}
+      </button>
+    </th>
+  );
+
+  const totalPages = Math.max(1, Math.ceil(data.total / data.pageSize));
+
   return (
     <>
       <PageHeader
@@ -168,79 +316,193 @@ export default function InvoicesPage() {
         action={<Button onClick={openCreate}>+ New invoice</Button>}
       />
 
-      <div className="mb-4 flex flex-wrap gap-3">
-        <div className="w-44">
-          <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-            <option value="">All statuses</option>
-            <option value="draft">Draft</option>
-            <option value="issued">Issued</option>
-            <option value="paid">Paid</option>
-            <option value="void">Void</option>
-          </Select>
-        </div>
-        <div className="max-w-xs flex-1">
-          <Input
-            placeholder="Search institution or invoice no…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+      {summary && (
+        <div className="mb-4 flex flex-wrap gap-3">
+          <StatCard
+            label="Outstanding"
+            value={formatMoney(summary.outstandingAmount)}
+            sub={`${summary.issuedCount} issued`}
+            tone="blue"
           />
+          <StatCard
+            label="Overdue"
+            value={formatMoney(summary.overdueAmount)}
+            sub={`${summary.overdueCount} past due`}
+            tone="red"
+          />
+          <StatCard
+            label="Paid"
+            value={formatMoney(summary.paidAmount)}
+            sub={`${summary.paidCount} settled`}
+            tone="green"
+          />
+          <StatCard label="Drafts" value={String(summary.draftCount)} sub="not issued" />
         </div>
+      )}
+
+      <div className="mb-4 flex flex-wrap items-end gap-3">
+        <div className="w-40">
+          <Field label="Status">
+            <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              <option value="">All statuses</option>
+              <option value="draft">Draft</option>
+              <option value="issued">Issued</option>
+              <option value="paid">Paid</option>
+              <option value="void">Void</option>
+            </Select>
+          </Field>
+        </div>
+        <div className="w-52">
+          <Field label="Institution">
+            <Select
+              value={institutionFilter}
+              onChange={(e) => setInstitutionFilter(e.target.value)}
+            >
+              <option value="">All institutions</option>
+              {institutions.map((i) => (
+                <option key={i.id} value={i.id}>
+                  {i.name} ({i.code})
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+        <div className="w-36">
+          <Field label="From">
+            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+          </Field>
+        </div>
+        <div className="w-36">
+          <Field label="To">
+            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+          </Field>
+        </div>
+        <div className="min-w-[12rem] flex-1">
+          <Field label="Search">
+            <Input
+              placeholder="Institution or invoice no…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </Field>
+        </div>
+        <label className="flex h-10 items-center gap-2 text-sm text-muted">
+          <input
+            type="checkbox"
+            checked={overdueOnly}
+            onChange={(e) => setOverdueOnly(e.target.checked)}
+            className="h-4 w-4 rounded border-line"
+          />
+          Overdue only
+        </label>
       </div>
 
       {loading ? (
         <Spinner />
       ) : error ? (
         <ErrorNote message={error} />
-      ) : rows.length === 0 ? (
-        <EmptyState message="No invoices yet" />
+      ) : data.rows.length === 0 ? (
+        <EmptyState message="No invoices match these filters" />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-line bg-surface">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
-              <tr>
-                <th className="px-4 py-3">Number</th>
-                <th className="px-4 py-3">Institution</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Total</th>
-                <th className="px-4 py-3">Created</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line">
-              {rows
-                .filter((r) => {
-                  const q = search.trim().toLowerCase();
-                  if (!q) return true;
-                  return (
-                    r.institutionName.toLowerCase().includes(q) ||
-                    r.institutionCode.toLowerCase().includes(q) ||
-                    (r.number ?? "").toLowerCase().includes(q)
-                  );
-                })
-                .map((r) => (
-                <tr
-                  key={r.id}
-                  className="cursor-pointer hover:bg-surface-2"
-                  onClick={() => router.push(`/super-admin/invoices/${r.id}`)}
-                >
-                  <td className="px-4 py-3 font-medium text-ink">
-                    {r.number ?? <span className="text-faint">draft</span>}
-                  </td>
-                  <td className="px-4 py-3">
-                    {r.institutionName}
-                    <span className="block text-xs text-faint">{r.institutionCode}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge tone={statusTone(r.status)}>{r.status}</Badge>
-                  </td>
-                  <td className="px-4 py-3 text-muted">
-                    {r.currency} {Number(r.total).toFixed(2)}
-                  </td>
-                  <td className="px-4 py-3 text-faint">{r.createdAt.slice(0, 10)}</td>
+        <>
+          <div className="overflow-x-auto rounded-xl border border-line bg-surface">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
+                <tr>
+                  <SortTh label="Number" sortKey="number" />
+                  <th className="px-4 py-3">Institution</th>
+                  <SortTh label="Status" sortKey="status" />
+                  <SortTh label="Due" sortKey="dueDate" />
+                  <SortTh label="Total" sortKey="total" />
+                  <SortTh label="Created" sortKey="createdAt" />
+                  <th className="px-4 py-3 text-right">PDF</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {data.rows.map((r) => (
+                  <tr
+                    key={r.id}
+                    className="cursor-pointer hover:bg-surface-2"
+                    onClick={() => router.push(`/super-admin/invoices/${r.id}`)}
+                  >
+                    <td className="px-4 py-3 font-medium text-ink">
+                      {r.number ?? <span className="text-faint">draft</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      {r.institutionName}
+                      <span className="block text-xs text-faint">{r.institutionCode}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap items-center gap-1">
+                        <Badge tone={statusTone(r.status)}>{r.status}</Badge>
+                        {r.isOverdue && <Badge tone="red">overdue</Badge>}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-muted">
+                      {r.dueDate ? (
+                        <span className={r.isOverdue ? "text-red-600 dark:text-red-400" : ""}>
+                          {formatDate(r.dueDate)}
+                        </span>
+                      ) : (
+                        <span className="text-faint">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-ink">{formatMoney(r.total, r.currency)}</td>
+                    <td className="px-4 py-3 text-faint">{formatDate(r.createdAt)}</td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          downloadPdf(r.id);
+                        }}
+                        className="text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-300"
+                        aria-label="Download PDF"
+                      >
+                        PDF
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
+            <div className="flex items-center gap-2">
+              <span>
+                {data.total} invoice{data.total === 1 ? "" : "s"}
+              </span>
+              <Select
+                value={String(pageSize)}
+                onChange={(e) => setPageSize(Number(e.target.value))}
+                className="w-24"
+              >
+                <option value="10">10 / page</option>
+                <option value="20">20 / page</option>
+                <option value="50">50 / page</option>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+              >
+                ← Prev
+              </Button>
+              <span>
+                Page {data.page} of {totalPages}
+              </span>
+              <Button
+                variant="secondary"
+                onClick={() => setPage((p) => p + 1)}
+                disabled={page >= totalPages}
+              >
+                Next →
+              </Button>
+            </div>
+          </div>
+        </>
       )}
 
       <Modal title="New invoice (draft)" open={open} onClose={() => setOpen(false)}>
@@ -283,6 +545,23 @@ export default function InvoicesPage() {
                 type="number"
                 value={form.taxPercent}
                 onChange={(e) => setForm({ ...form, taxPercent: e.target.value })}
+              />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Payment terms (days, optional)">
+              <Input
+                type="number"
+                placeholder="e.g. 15"
+                value={form.paymentTermsDays}
+                onChange={(e) => setForm({ ...form, paymentTermsDays: e.target.value })}
+              />
+            </Field>
+            <Field label="Due date (optional)">
+              <Input
+                type="date"
+                value={form.dueDate}
+                onChange={(e) => setForm({ ...form, dueDate: e.target.value })}
               />
             </Field>
           </div>
@@ -355,9 +634,7 @@ export default function InvoicesPage() {
                   <div className="col-span-1 flex items-center">
                     <button
                       type="button"
-                      onClick={() =>
-                        setLines((p) => p.filter((_, idx) => idx !== i))
-                      }
+                      onClick={() => setLines((p) => p.filter((_, idx) => idx !== i))}
                       className="text-xs text-red-600 hover:text-red-700"
                       aria-label="Remove line"
                     >
