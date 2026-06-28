@@ -125,6 +125,21 @@ export default function InvoicesPage() {
   const [sort, setSort] = useState<SortKey>("createdAt");
   const [order, setOrder] = useState<"asc" | "desc">("desc");
 
+  // Advanced filters (backend-supported).
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [adv, setAdv] = useState({
+    dueFrom: "",
+    dueTo: "",
+    amountMin: "",
+    amountMax: "",
+    sacCode: "",
+    gstin: "",
+    placeOfSupply: "",
+    recipientState: "",
+    reverseCharge: "", // "", "true", "false"
+  });
+  const setAdvField = (k: keyof typeof adv, v: string) => setAdv((a) => ({ ...a, [k]: v }));
+
   // Create-modal state.
   const [open, setOpen] = useState(false);
   const [institutions, setInstitutions] = useState<InstitutionBrief[]>([]);
@@ -160,22 +175,37 @@ export default function InvoicesPage() {
     return () => clearTimeout(t);
   }, [search]);
 
+  // Shared filter → query params (used by the list load AND the export).
+  const buildFilterParams = useCallback(() => {
+    const p = new URLSearchParams();
+    if (statusFilter) p.set("status", statusFilter);
+    if (institutionFilter) p.set("institutionId", institutionFilter);
+    if (overdueOnly) p.set("overdue", "true");
+    if (from) p.set("from", from);
+    if (to) p.set("to", to);
+    if (debouncedSearch.trim()) p.set("q", debouncedSearch.trim());
+    if (adv.dueFrom) p.set("dueFrom", adv.dueFrom);
+    if (adv.dueTo) p.set("dueTo", adv.dueTo);
+    if (adv.amountMin) p.set("amountMin", adv.amountMin);
+    if (adv.amountMax) p.set("amountMax", adv.amountMax);
+    if (adv.sacCode.trim()) p.set("sacCode", adv.sacCode.trim());
+    if (adv.gstin.trim()) p.set("gstin", adv.gstin.trim());
+    if (adv.placeOfSupply.trim()) p.set("placeOfSupply", adv.placeOfSupply.trim());
+    if (adv.recipientState.trim()) p.set("recipientState", adv.recipientState.trim());
+    if (adv.reverseCharge) p.set("reverseCharge", adv.reverseCharge);
+    return p;
+  }, [statusFilter, institutionFilter, overdueOnly, from, to, debouncedSearch, adv]);
+
   // Any filter change resets to page 1.
   useEffect(() => {
     setPage(1);
-  }, [statusFilter, institutionFilter, overdueOnly, from, to, debouncedSearch, pageSize]);
+  }, [statusFilter, institutionFilter, overdueOnly, from, to, debouncedSearch, pageSize, adv]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams();
-      if (statusFilter) params.set("status", statusFilter);
-      if (institutionFilter) params.set("institutionId", institutionFilter);
-      if (overdueOnly) params.set("overdue", "true");
-      if (from) params.set("from", from);
-      if (to) params.set("to", to);
-      if (debouncedSearch.trim()) params.set("q", debouncedSearch.trim());
+      const params = buildFilterParams();
       params.set("page", String(page));
       params.set("pageSize", String(pageSize));
       params.set("sort", sort);
@@ -191,18 +221,28 @@ export default function InvoicesPage() {
     } finally {
       setLoading(false);
     }
-  }, [
-    statusFilter,
-    institutionFilter,
-    overdueOnly,
-    from,
-    to,
-    debouncedSearch,
-    page,
-    pageSize,
-    sort,
-    order,
-  ]);
+  }, [buildFilterParams, page, pageSize, sort, order]);
+
+  const exportList = async (format: "csv" | "xlsx") => {
+    const params = buildFilterParams();
+    params.set("sort", sort);
+    params.set("order", order);
+    params.set("format", format);
+    const token = useAuthStore.getState().accessToken;
+    const res = await fetch(`${API_URL}/platform/invoices/export?${params.toString()}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      setError("Export failed");
+      return;
+    }
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `invoices.${format}`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60_000);
+  };
 
   useEffect(() => {
     load();
@@ -325,6 +365,9 @@ export default function InvoicesPage() {
         subtitle="SaaS subscription invoices (gateway-free, offline payment) — super-admin"
         action={
           <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => router.push("/super-admin/invoices/reports")}>
+              Reports
+            </Button>
             <Button variant="secondary" onClick={() => router.push("/super-admin/invoices/settings")}>
               Settings
             </Button>
@@ -412,7 +455,52 @@ export default function InvoicesPage() {
           />
           Overdue only
         </label>
+        <Button variant="secondary" onClick={() => setShowAdvanced((s) => !s)}>
+          {showAdvanced ? "Hide filters" : "Advanced filters"}
+        </Button>
+        <Button variant="secondary" onClick={() => exportList("csv")}>
+          Export CSV
+        </Button>
+        <Button variant="secondary" onClick={() => exportList("xlsx")}>
+          Export Excel
+        </Button>
       </div>
+
+      {showAdvanced && (
+        <div className="mb-4 grid grid-cols-2 gap-3 rounded-xl border border-line bg-surface p-4 md:grid-cols-4">
+          <Field label="Due from">
+            <Input type="date" value={adv.dueFrom} onChange={(e) => setAdvField("dueFrom", e.target.value)} />
+          </Field>
+          <Field label="Due to">
+            <Input type="date" value={adv.dueTo} onChange={(e) => setAdvField("dueTo", e.target.value)} />
+          </Field>
+          <Field label="Amount min">
+            <Input type="number" value={adv.amountMin} onChange={(e) => setAdvField("amountMin", e.target.value)} />
+          </Field>
+          <Field label="Amount max">
+            <Input type="number" value={adv.amountMax} onChange={(e) => setAdvField("amountMax", e.target.value)} />
+          </Field>
+          <Field label="SAC/HSN">
+            <Input value={adv.sacCode} onChange={(e) => setAdvField("sacCode", e.target.value)} />
+          </Field>
+          <Field label="GSTIN">
+            <Input value={adv.gstin} onChange={(e) => setAdvField("gstin", e.target.value)} />
+          </Field>
+          <Field label="Place of supply">
+            <Input value={adv.placeOfSupply} onChange={(e) => setAdvField("placeOfSupply", e.target.value)} />
+          </Field>
+          <Field label="Recipient state">
+            <Input value={adv.recipientState} onChange={(e) => setAdvField("recipientState", e.target.value)} />
+          </Field>
+          <Field label="Reverse charge">
+            <Select value={adv.reverseCharge} onChange={(e) => setAdvField("reverseCharge", e.target.value)}>
+              <option value="">Any</option>
+              <option value="true">Yes</option>
+              <option value="false">No</option>
+            </Select>
+          </Field>
+        </div>
+      )}
 
       {loading ? (
         <Spinner />
