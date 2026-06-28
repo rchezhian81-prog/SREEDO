@@ -20,14 +20,17 @@ import {
 import * as service from "./platform.service";
 import * as billing from "../billing/billing.service";
 import * as invoices from "../billing/invoices.service";
+import * as invoiceSettings from "../billing/invoice-settings.service";
 import {
   createInvoiceSchema,
   institutionInvoicesQuerySchema,
   invoiceLineSchema,
+  invoiceSettingsSchema,
   listInvoicesQuerySchema,
   markPaidSchema,
   updateInvoiceSchema,
   updateLineSchema,
+  voidInvoiceSchema,
 } from "../billing/invoices.schema";
 
 // The platform console sits ABOVE any tenant: super-admin-only (actor
@@ -42,6 +45,32 @@ const actor = (req: Request) => ({
   role: req.user!.role,
   ip: req.ip ?? null,
 });
+
+/**
+ * Record a money-action audit row for an invoice (or invoice settings) into the
+ * shared platform_audit_log. Best-effort (never throws); user-agent rides in the
+ * detail. Awaited so the timeline reflects the action immediately.
+ */
+async function invoiceAudit(
+  req: Request,
+  action: string,
+  targetId: string | null,
+  institutionId: string | null,
+  detail: Record<string, unknown> = {},
+  targetType = "saas_invoice"
+): Promise<void> {
+  await recordSecurityEvent({
+    action,
+    targetType,
+    targetId,
+    institutionId,
+    actorId: req.user!.id,
+    actorEmail: req.user!.email,
+    actorRole: req.user!.role,
+    detail: { ...detail, userAgent: req.get("user-agent") ?? null },
+    ip: clientIp(req),
+  });
+}
 
 /**
  * @openapi
@@ -299,12 +328,22 @@ platformRouter.get("/invoices/:id", requirePermission("platform:read"), async (r
 
 /**
  * @openapi
+ * /platform/invoices/{id}/audit:
+ *   get: { tags: [Platform], summary: Money-action audit timeline for an invoice, security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Audit events, newest first } } }
+ */
+platformRouter.get("/invoices/:id/audit", requirePermission("platform:read"), async (req, res) => {
+  res.json(await invoices.getAudit(uuidParam(req)));
+});
+
+/**
+ * @openapi
  * /platform/invoices/{id}/pdf:
  *   get: { tags: [Platform], summary: Download the invoice as a PDF, security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: "application/pdf" }, 404: { description: Not found } } }
  */
 platformRouter.get("/invoices/:id/pdf", requirePermission("platform:read"), async (req, res) => {
   const id = uuidParam(req);
   const buffer = await invoices.invoicePdfBuffer(id);
+  await invoiceAudit(req, "invoice.pdf_downloaded", id, null);
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `inline; filename="invoice-${id}.pdf"`);
   res.send(buffer);
@@ -316,7 +355,9 @@ platformRouter.get("/invoices/:id/pdf", requirePermission("platform:read"), asyn
  *   post: { tags: [Platform], summary: Add a line item to a draft invoice, security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Updated invoice }, 400: { description: Not a draft } } }
  */
 platformRouter.post("/invoices/:id/lines", requirePermission("platform:manage_subscriptions"), async (req, res) => {
-  res.json(await invoices.addLine(uuidParam(req), invoiceLineSchema.parse(req.body)));
+  const inv = await invoices.addLine(uuidParam(req), invoiceLineSchema.parse(req.body));
+  await invoiceAudit(req, "invoice.line_added", inv.id, inv.institutionId);
+  res.json(inv);
 });
 
 /**
@@ -325,9 +366,10 @@ platformRouter.post("/invoices/:id/lines", requirePermission("platform:manage_su
  *   patch: { tags: [Platform], summary: Edit a line item on a draft invoice (draft only), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }, { in: path, name: lineId, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Updated invoice }, 400: { description: Not a draft }, 404: { description: Line not found } } }
  */
 platformRouter.patch("/invoices/:id/lines/:lineId", requirePermission("platform:manage_subscriptions"), async (req, res) => {
-  res.json(
-    await invoices.updateLine(uuidParam(req), uuidParam(req, "lineId"), updateLineSchema.parse(req.body))
-  );
+  const lineId = uuidParam(req, "lineId");
+  const inv = await invoices.updateLine(uuidParam(req), lineId, updateLineSchema.parse(req.body));
+  await invoiceAudit(req, "invoice.line_edited", inv.id, inv.institutionId, { lineId });
+  res.json(inv);
 });
 
 /**
@@ -337,10 +379,18 @@ platformRouter.patch("/invoices/:id/lines/:lineId", requirePermission("platform:
  *   delete: { tags: [Platform], summary: Delete a draft invoice permanently (draft only), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Deleted }, 400: { description: Not a draft } } }
  */
 platformRouter.patch("/invoices/:id", requirePermission("platform:manage_subscriptions"), async (req, res) => {
-  res.json(await invoices.updateDraft(uuidParam(req), updateInvoiceSchema.parse(req.body)));
+  const body = updateInvoiceSchema.parse(req.body);
+  const inv = await invoices.updateDraft(uuidParam(req), body);
+  await invoiceAudit(req, "invoice.draft_edited", inv.id, inv.institutionId, {
+    fields: Object.keys(body),
+  });
+  res.json(inv);
 });
 platformRouter.delete("/invoices/:id", requirePermission("platform:manage_subscriptions"), async (req, res) => {
-  res.json(await invoices.deleteDraft(uuidParam(req)));
+  const id = uuidParam(req);
+  const result = await invoices.deleteDraft(id);
+  await invoiceAudit(req, "invoice.deleted", id, null);
+  res.json(result);
 });
 
 /**
@@ -349,7 +399,10 @@ platformRouter.delete("/invoices/:id", requirePermission("platform:manage_subscr
  *   delete: { tags: [Platform], summary: Remove a line item from a draft invoice (draft only), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }, { in: path, name: lineId, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Updated invoice }, 400: { description: Not a draft }, 404: { description: Line not found } } }
  */
 platformRouter.delete("/invoices/:id/lines/:lineId", requirePermission("platform:manage_subscriptions"), async (req, res) => {
-  res.json(await invoices.removeLine(uuidParam(req), uuidParam(req, "lineId")));
+  const lineId = uuidParam(req, "lineId");
+  const inv = await invoices.removeLine(uuidParam(req), lineId);
+  await invoiceAudit(req, "invoice.line_removed", inv.id, inv.institutionId, { lineId });
+  res.json(inv);
 });
 
 /**
@@ -358,7 +411,12 @@ platformRouter.delete("/invoices/:id/lines/:lineId", requirePermission("platform
  *   post: { tags: [Platform], summary: Issue a draft invoice (assigns a sequential number), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Issued invoice }, 400: { description: Not a draft } } }
  */
 platformRouter.post("/invoices/:id/issue", requirePermission("platform:manage_subscriptions"), async (req, res) => {
-  res.json(await invoices.issueInvoice(uuidParam(req)));
+  const inv = await invoices.issueInvoice(uuidParam(req), req.user!.id);
+  await invoiceAudit(req, "invoice.issued", inv.id, inv.institutionId, {
+    number: inv.number,
+    total: inv.total,
+  });
+  res.json(inv);
 });
 
 /**
@@ -367,16 +425,26 @@ platformRouter.post("/invoices/:id/issue", requirePermission("platform:manage_su
  *   post: { tags: [Platform], summary: Record OFFLINE payment for an issued invoice (no gateway), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Paid invoice }, 400: { description: Not issued } } }
  */
 platformRouter.post("/invoices/:id/mark-paid", requirePermission("platform:manage_subscriptions"), async (req, res) => {
-  res.json(await invoices.markPaid(uuidParam(req), markPaidSchema.parse(req.body)));
+  const body = markPaidSchema.parse(req.body);
+  const inv = await invoices.markPaid(uuidParam(req), body, req.user!.id);
+  await invoiceAudit(req, "invoice.paid", inv.id, inv.institutionId, {
+    method: body.paymentMethod,
+    reference: body.reference ?? null,
+    total: inv.total,
+  });
+  res.json(inv);
 });
 
 /**
  * @openapi
  * /platform/invoices/{id}/void:
- *   post: { tags: [Platform], summary: Void a draft or issued invoice (a paid invoice cannot be voided), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Voided invoice }, 400: { description: Paid invoice } } }
+ *   post: { tags: [Platform], summary: Void a draft or issued invoice with a required reason (a paid invoice cannot be voided), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], requestBody: { required: true, content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string } } } } } }, responses: { 200: { description: Voided invoice }, 400: { description: Paid invoice or missing reason } } }
  */
 platformRouter.post("/invoices/:id/void", requirePermission("platform:manage_subscriptions"), async (req, res) => {
-  res.json(await invoices.voidInvoice(uuidParam(req)));
+  const { reason } = voidInvoiceSchema.parse(req.body);
+  const inv = await invoices.voidInvoice(uuidParam(req), reason, req.user!.id);
+  await invoiceAudit(req, "invoice.voided", inv.id, inv.institutionId, { reason });
+  res.json(inv);
 });
 
 /**
@@ -385,7 +453,11 @@ platformRouter.post("/invoices/:id/void", requirePermission("platform:manage_sub
  *   post: { tags: [Platform], summary: Clone an invoice into a fresh draft (header + lines), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 201: { description: New draft invoice }, 404: { description: Not found } } }
  */
 platformRouter.post("/invoices/:id/duplicate", requirePermission("platform:manage_subscriptions"), async (req, res) => {
-  res.status(201).json(await invoices.duplicateInvoice(uuidParam(req), req.user!.id));
+  const inv = await invoices.duplicateInvoice(uuidParam(req), req.user!.id);
+  await invoiceAudit(req, "invoice.duplicated", inv.id, inv.institutionId, {
+    sourceId: uuidParam(req),
+  });
+  res.status(201).json(inv);
 });
 
 /**
@@ -394,7 +466,28 @@ platformRouter.post("/invoices/:id/duplicate", requirePermission("platform:manag
  *   post: { tags: [Platform], summary: Re-send the invoice email to the tenant's admins (issued or paid), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: "{ recipients } emailed (best-effort)" }, 400: { description: Not issued or paid } } }
  */
 platformRouter.post("/invoices/:id/resend", requirePermission("platform:manage_subscriptions"), async (req, res) => {
-  res.json(await invoices.resendInvoice(uuidParam(req)));
+  const id = uuidParam(req);
+  const result = await invoices.resendInvoice(id, req.user!.id);
+  await invoiceAudit(req, "invoice.resent", id, null, { recipients: result.recipients });
+  res.json(result);
+});
+
+/**
+ * @openapi
+ * /platform/invoice-settings:
+ *   get: { tags: [Platform], summary: Get platform invoice settings (supplier profile, numbering, defaults, bank/PDF), security: [{ bearerAuth: [] }], responses: { 200: { description: Settings } } }
+ *   patch: { tags: [Platform], summary: Update platform invoice settings, security: [{ bearerAuth: [] }], responses: { 200: { description: Updated settings } } }
+ */
+platformRouter.get("/invoice-settings", requirePermission("platform:read"), async (_req, res) => {
+  res.json(await invoiceSettings.getSettings());
+});
+platformRouter.patch("/invoice-settings", requirePermission("platform:manage_subscriptions"), async (req, res) => {
+  const body = invoiceSettingsSchema.parse(req.body);
+  const updated = await invoiceSettings.updateSettings(body, req.user!.id);
+  await invoiceAudit(req, "invoice.settings_changed", null, null, {
+    fields: Object.keys(body),
+  }, "invoice_settings");
+  res.json(updated);
 });
 
 /**
@@ -408,7 +501,13 @@ platformRouter.get("/institutions/:id/invoices", requirePermission("platform:rea
   res.json(await invoices.listForInstitution(uuidParam(req), status));
 });
 platformRouter.post("/institutions/:id/invoices", requirePermission("platform:manage_subscriptions"), async (req, res) => {
-  res.status(201).json(
-    await invoices.createDraft(uuidParam(req), createInvoiceSchema.parse(req.body), req.user!.id)
+  const inv = await invoices.createDraft(
+    uuidParam(req),
+    createInvoiceSchema.parse(req.body),
+    req.user!.id
   );
+  await invoiceAudit(req, "invoice.created", inv.id, inv.institutionId, {
+    total: inv.total,
+  });
+  res.status(201).json(inv);
 });

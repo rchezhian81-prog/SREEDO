@@ -77,6 +77,13 @@ JS float drift.
 - **`0074_saas_invoice_due_dates.sql`** — adds `payment_terms_days` (checked ≥ 0)
   and `due_date` to `saas_invoices` + a partial index on `due_date` for issued
   rows. New columns/index only; no existing column changed, no data deleted.
+- **`0075_saas_invoice_settings_audit_gst.sql`** (P0) — `invoice_settings`
+  (singleton, seeded) + `invoice_emails` (delivery log); adds audit metadata
+  (`issued_by`/`recorded_by`/`voided_by`/`voided_at`/`void_reason`), `round_off`,
+  and GST-readiness fields (`sac_code`, `place_of_supply`, `reverse_charge`,
+  supplier/recipient `state`/`state_code`) to `saas_invoices`, and `sac_code` to
+  lines. Money-action **audit reuses `platform_audit_log`** (target_type
+  `saas_invoice`) — no new audit table.
 
 ## Endpoints (super-admin)
 | Method | Path | Permission |
@@ -97,6 +104,11 @@ JS float drift.
 | POST | `/platform/invoices/:id/void` | `platform:manage_subscriptions` |
 | POST | `/platform/invoices/:id/duplicate` | `platform:manage_subscriptions` |
 | POST | `/platform/invoices/:id/resend` | `platform:manage_subscriptions` |
+| GET | `/platform/invoices/:id/audit` | `platform:read` |
+| GET | `/platform/invoice-settings` | `platform:read` |
+| PATCH | `/platform/invoice-settings` | `platform:manage_subscriptions` |
+
+`POST /platform/invoices/:id/void` now requires a JSON body `{ reason }`.
 
 `GET /platform/invoices` returns `{ rows, total, page, pageSize }`.
 `GET /platform/invoices/summary` returns counts by status plus
@@ -112,9 +124,37 @@ JS float drift.
 - **Detail** (`/super-admin/invoices/[id]`): toolbar (Download PDF, Duplicate,
   Resend on issued/paid, Delete on draft) + status/due/overdue summary; line
   items with **inline editing** + remove on drafts; draft: edit header (incl.
-  payment terms / due date) / add line / **issue** / void; issued: **mark paid** /
-  void. Destructive actions (delete, void, remove line) go through a confirm
-  dialog. Money is formatted with `Intl.NumberFormat`.
+  payment terms / due date / SAC / place of supply / reverse charge / recipient
+  state) / add line / **issue** / void; issued: **mark paid** / void. Void opens
+  a **reason-required** modal; delete/remove-line use a confirm dialog. The page
+  also shows the **email-delivery log** and the **audit timeline**. Money is
+  formatted with `Intl.NumberFormat`.
+- **Settings** (`/super-admin/invoices/settings`): supplier profile, numbering,
+  billing defaults, bank/UPI and PDF presentation.
+
+## Audit, settings, email log & GST readiness (P0)
+- **Audit** — every money action (create, draft edit, line add/edit/remove,
+  issue, mark-paid, void, delete, duplicate, resend, PDF download, settings
+  change) writes a `platform_audit_log` row (`target_type = 'saas_invoice'`,
+  actor + IP + user-agent in `detail`). `GET /platform/invoices/:id/audit`
+  returns the timeline; it's shown on the detail page.
+- **Invoice settings** (`/platform/invoice-settings`, singleton) — supplier
+  profile (legal/trade name, GSTIN, PAN, state/code, email, phone), numbering
+  (prefix, FY start month, padding), billing defaults (currency, tax %, SAC,
+  due days), bank/UPI, and PDF presentation (footer, terms, signatory, logo).
+  **Numbering and new-draft defaults read from settings** (env is the fallback).
+  Edited on the super-admin **Settings** page.
+- **Email delivery log** (`invoice_emails`) — each issue/resend attempt records
+  recipient, template, status (`sent`/`failed`/`skipped`) and error; shown on the
+  detail page. Issue still never fails on email problems.
+- **Void reason** — voiding requires a reason; `voided_by`/`voided_at`/
+  `void_reason` are stored and surfaced. A paid invoice still can't be voided.
+- **GST readiness** — `sac_code` (invoice + line), `place_of_supply`,
+  `reverse_charge`, and supplier/recipient `state`/`state_code` are stored and
+  printed. Supplier state is snapshotted from settings on issue. Tax stays flat
+  `tax_percent` (full CGST/SGST/IGST engine deferred to B2.1, post-CA review).
+- **PDF** also gains the supplier block, SAC column, place of supply, reverse
+  charge, **amount in words**, bank/UPI, signatory and page-numbered footer.
 
 ## Configuration (env)
 | Var | Default | Meaning |
@@ -126,6 +166,9 @@ JS float drift.
 | `SAAS_COMPANY_EMAIL` | — | seller email (optional) |
 | `SAAS_COMPANY_GSTIN` | — | seller GSTIN (optional) |
 | `SAAS_COMPANY_LOGO_PATH` | — | absolute path to a logo image for the PDF (optional) |
+
+Since P0, the **invoice settings** row supersedes these env vars for the PDF
+supplier block and numbering; env remains the fallback when a setting is blank.
 
 ## Deployment notes
 - Migrations auto-apply on boot (`runMigrations()` in `server.ts`).
@@ -141,7 +184,9 @@ guards, **paged list** (empty/populated/filtered), edit header + edit/remove
 **line** (recompute + 404 + guards), **delete draft** (+ issued guard),
 **duplicate**, **resend** (issued/paid only), **due date on issue + overdue
 flag**, **summary** aggregates, pagination + institution/search filters, tenant
-scoping, and non-super-admin → 403.
+scoping, and non-super-admin → 403. `invoices-p0.int.test.ts` covers settings →
+numbering/defaults, void-reason, GST fields, the audit timeline, the email log,
+and the richer PDF.
 
 ## Rollback
 Additive only. Revert the PR to remove endpoints/UI. The tables/columns are inert

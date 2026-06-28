@@ -5,14 +5,25 @@ export interface InvoicePdfLine {
   description: string;
   quantity: string | number;
   unitPrice: string | number;
+  sacCode?: string | null;
   amount: string | number;
 }
 
 export interface InvoiceCompany {
   name: string;
+  tradeName?: string | null;
   address?: string | null;
   email?: string | null;
+  phone?: string | null;
   gstin?: string | null;
+  pan?: string | null;
+  state?: string | null;
+  stateCode?: string | null;
+  bankDetails?: string | null;
+  upiId?: string | null;
+  signatoryName?: string | null;
+  footer?: string | null;
+  terms?: string | null;
   logoPath?: string | null;
 }
 
@@ -35,7 +46,13 @@ export interface InvoicePdfData {
   subtotal: string | number;
   taxPercent: string | number;
   taxAmount: string | number;
+  roundOff?: string | number;
   total: string | number;
+  sacCode?: string | null;
+  placeOfSupply?: string | null;
+  reverseCharge?: boolean;
+  recipientState?: string | null;
+  recipientStateCode?: string | null;
   notes: string | null;
   taxNotes: string | null;
   lines: InvoicePdfLine[];
@@ -47,7 +64,55 @@ function money(currency: string, value: string | number): string {
   return `${currency} ${Number.isFinite(n) ? n.toFixed(2) : "0.00"}`;
 }
 
-// A faint diagonal watermark stamp for non-plain states (PAID/VOID/OVERDUE/DRAFT).
+const ONES = [
+  "", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
+  "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen",
+  "Seventeen", "Eighteen", "Nineteen",
+];
+const TENS = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+
+function below100(n: number): string {
+  if (n < 20) return ONES[n];
+  return (TENS[Math.floor(n / 10)] + (n % 10 ? " " + ONES[n % 10] : "")).trim();
+}
+
+// Indian numbering system (crore/lakh/thousand/hundred).
+function wordsIndian(n: number): string {
+  if (n === 0) return "Zero";
+  const parts: string[] = [];
+  const crore = Math.floor(n / 10000000);
+  n %= 10000000;
+  const lakh = Math.floor(n / 100000);
+  n %= 100000;
+  const thousand = Math.floor(n / 1000);
+  n %= 1000;
+  const hundred = Math.floor(n / 100);
+  n %= 100;
+  if (crore) parts.push(below100(crore) + " Crore");
+  if (lakh) parts.push(below100(lakh) + " Lakh");
+  if (thousand) parts.push(below100(thousand) + " Thousand");
+  if (hundred) parts.push(ONES[hundred] + " Hundred");
+  if (n) parts.push(below100(n));
+  return parts.join(" ");
+}
+
+const FRACTION_LABEL: Record<string, [string, string]> = {
+  INR: ["Rupees", "Paise"],
+  USD: ["Dollars", "Cents"],
+  EUR: ["Euros", "Cents"],
+  GBP: ["Pounds", "Pence"],
+};
+
+function amountInWords(value: string | number, currency: string): string {
+  const n = Number(value) || 0;
+  const whole = Math.floor(n);
+  const frac = Math.round((n - whole) * 100);
+  const [major, minor] = FRACTION_LABEL[currency.toUpperCase()] ?? [currency.toUpperCase(), "Cents"];
+  let s = `${wordsIndian(whole)} ${major}`;
+  if (frac > 0) s += ` and ${below100(frac)} ${minor}`;
+  return s + " Only";
+}
+
 const STAMP: Record<string, { label: string; color: string }> = {
   paid: { label: "PAID", color: "#15803d" },
   void: { label: "VOID", color: "#6b7280" },
@@ -55,13 +120,15 @@ const STAMP: Record<string, { label: string; color: string }> = {
   draft: { label: "DRAFT", color: "#b45309" },
 };
 
-/** Renders a self-contained invoice PDF (no external template). */
+/** Renders a self-contained, GST-ready invoice PDF (no external template). */
 export function invoicePdf(data: InvoicePdfData): Promise<Buffer> {
-  const company = data.company ?? { name: "SRE EDU OS" };
+  const c = data.company ?? { name: "SRE EDU OS" };
+  const cur = data.currency;
   const stampKey = data.isOverdue ? "overdue" : data.status;
+  const title = c.gstin ? "TAX INVOICE" : "INVOICE";
 
-  return renderPdf({ size: "A4", margin: 50 }, (doc) => {
-    // Diagonal status watermark drawn first so content sits on top of it.
+  return renderPdf({ size: "A4", margin: 50, bufferPages: true }, (doc) => {
+    // Diagonal status watermark behind the content.
     const stamp = STAMP[stampKey];
     if (stamp) {
       const x0 = doc.x;
@@ -82,17 +149,17 @@ export function invoicePdf(data: InvoicePdfData): Promise<Buffer> {
       doc.y = y0;
     }
 
-    // Optional logo (top-left), guarded — a bad path must never break issuance.
-    if (company.logoPath && existsSync(company.logoPath)) {
+    // Optional logo (top-left), guarded.
+    if (c.logoPath && existsSync(c.logoPath)) {
       try {
-        doc.image(company.logoPath, 50, 45, { fit: [150, 50] });
+        doc.image(c.logoPath, 50, 45, { fit: [150, 50] });
       } catch {
-        /* unreadable image — skip silently */
+        /* unreadable image — skip */
       }
     }
 
     // Title block (top-right)
-    doc.fontSize(22).text("INVOICE", { align: "right" });
+    doc.fontSize(22).text(title, { align: "right" });
     doc
       .fontSize(10)
       .fillColor("#555")
@@ -104,12 +171,19 @@ export function invoicePdf(data: InvoicePdfData): Promise<Buffer> {
 
     doc.moveDown(1.5);
 
-    // From (operator / seller)
-    doc.font("Helvetica-Bold").fontSize(11).text(company.name, 50);
+    // Supplier (from)
+    doc.font("Helvetica-Bold").fontSize(12).text(c.name, 50);
     doc.font("Helvetica").fontSize(9).fillColor("#555");
-    if (company.address) doc.text(company.address, { width: 260 });
-    if (company.email) doc.text(company.email);
-    if (company.gstin) doc.text(`GSTIN: ${company.gstin}`);
+    if (c.tradeName) doc.text(c.tradeName);
+    if (c.address) doc.text(c.address, { width: 280 });
+    const sLine = [
+      c.gstin ? `GSTIN: ${c.gstin}` : null,
+      c.pan ? `PAN: ${c.pan}` : null,
+    ].filter(Boolean).join("    ");
+    if (sLine) doc.text(sLine);
+    if (c.state) doc.text(`State: ${c.state}${c.stateCode ? ` (${c.stateCode})` : ""}`);
+    const sContact = [c.email, c.phone].filter(Boolean).join("    ");
+    if (sContact) doc.text(sContact);
     doc.fillColor("#000");
 
     doc.moveDown(1);
@@ -117,8 +191,12 @@ export function invoicePdf(data: InvoicePdfData): Promise<Buffer> {
     // Bill-to
     doc.font("Helvetica-Bold").fontSize(10).text("BILL TO");
     doc.font("Helvetica").fontSize(12).text(data.billingName || data.institutionName);
-    if (data.billingAddress) doc.fontSize(10).fillColor("#555").text(data.billingAddress, { width: 260 }).fillColor("#000");
-    if (data.gstin) doc.fontSize(10).fillColor("#555").text(`GSTIN: ${data.gstin}`).fillColor("#000");
+    doc.fontSize(10).fillColor("#555");
+    if (data.billingAddress) doc.text(data.billingAddress, { width: 280 });
+    if (data.gstin) doc.text(`GSTIN: ${data.gstin}`);
+    if (data.recipientState)
+      doc.text(`State: ${data.recipientState}${data.recipientStateCode ? ` (${data.recipientStateCode})` : ""}`);
+    doc.fillColor("#000");
 
     doc.moveDown(1);
     const meta: string[] = [];
@@ -126,31 +204,34 @@ export function invoicePdf(data: InvoicePdfData): Promise<Buffer> {
     if (data.dueDate) meta.push(`Due date: ${data.dueDate}`);
     if (data.periodStart || data.periodEnd)
       meta.push(`Period: ${data.periodStart ?? "?"} → ${data.periodEnd ?? "?"}`);
-    if (meta.length)
-      doc.fontSize(10).fillColor("#555").text(meta.join("    ")).fillColor("#000");
+    if (data.placeOfSupply) meta.push(`Place of supply: ${data.placeOfSupply}`);
+    meta.push(`Reverse charge: ${data.reverseCharge ? "Yes" : "No"}`);
+    doc.fontSize(9).fillColor("#555").text(meta.join("    "), { width: 495 }).fillColor("#000");
 
-    doc.moveDown(1.5);
+    doc.moveDown(1.2);
 
-    // Line items
-    const headerY = doc.y;
-    doc.font("Helvetica-Bold").fontSize(10);
-    doc.text("Description", 50, headerY, { width: 250, continued: true });
-    doc.text("Qty", 300, headerY, { width: 60, continued: true });
-    doc.text("Unit", 360, headerY, { width: 90, continued: true });
-    doc.text("Amount", 450, headerY, { width: 95, align: "right" });
+    // Line items header
+    const hy = doc.y;
+    doc.font("Helvetica-Bold").fontSize(9);
+    doc.text("Description", 50, hy, { width: 195, continued: true });
+    doc.text("SAC/HSN", 248, hy, { width: 60, continued: true });
+    doc.text("Qty", 310, hy, { width: 40, continued: true });
+    doc.text("Unit", 358, hy, { width: 90, continued: true });
+    doc.text("Amount", 450, hy, { width: 95, align: "right" });
     doc.font("Helvetica");
     doc.moveTo(50, doc.y + 2).lineTo(545, doc.y + 2).stroke();
     doc.moveDown(0.5);
 
     for (const line of data.lines) {
       const y = doc.y;
-      doc.fontSize(10).text(line.description, 50, y, { width: 250, continued: true });
-      doc.text(String(Number(line.quantity)), 300, y, { width: 60, continued: true });
-      doc.text(money(data.currency, line.unitPrice), 360, y, { width: 90, continued: true });
-      doc.text(money(data.currency, line.amount), 450, y, { width: 95, align: "right" });
+      doc.fontSize(9).text(line.description, 50, y, { width: 195, continued: true });
+      doc.text(line.sacCode || data.sacCode || "-", 248, y, { width: 60, continued: true });
+      doc.text(String(Number(line.quantity)), 310, y, { width: 40, continued: true });
+      doc.text(money(cur, line.unitPrice), 358, y, { width: 90, continued: true });
+      doc.text(money(cur, line.amount), 450, y, { width: 95, align: "right" });
     }
     if (data.lines.length === 0) {
-      doc.fontSize(10).fillColor("#999").text("(no line items)", 50).fillColor("#000");
+      doc.fontSize(9).fillColor("#999").text("(no line items)", 50).fillColor("#000");
     }
 
     doc.moveDown(1);
@@ -164,24 +245,66 @@ export function invoicePdf(data: InvoicePdfData): Promise<Buffer> {
       doc.text(value, 450, y, { width: 95, align: "right" });
       doc.font("Helvetica");
     };
-    totalsRow("Subtotal", money(data.currency, data.subtotal));
-    totalsRow(`Tax (${Number(data.taxPercent).toFixed(2)}%)`, money(data.currency, data.taxAmount));
-    totalsRow("Total", money(data.currency, data.total), true);
+    totalsRow("Subtotal", money(cur, data.subtotal));
+    totalsRow(`Tax (${Number(data.taxPercent).toFixed(2)}%)`, money(cur, data.taxAmount));
+    if (Number(data.roundOff) !== 0) totalsRow("Round off", money(cur, data.roundOff ?? 0));
+    totalsRow("Total", money(cur, data.total), true);
 
-    // Payment details (offline, single payment).
+    // Amount in words
+    doc.moveDown(0.8);
+    doc.fontSize(9).fillColor("#333").text(`Amount in words: ${amountInWords(data.total, cur)}`, 50, doc.y, { width: 495 }).fillColor("#000");
+
+    // Payment / bank block
     if (data.status === "paid" && data.paidAt) {
-      doc.moveDown(1.2);
+      doc.moveDown(0.8);
       const parts = [`Paid on ${data.paidAt.slice(0, 10)}`];
       if (data.paymentMethod) parts.push(`via ${data.paymentMethod}`);
       if (data.paymentReference) parts.push(`ref ${data.paymentReference}`);
       doc.fontSize(10).fillColor("#15803d").text(parts.join("  ·  "), 50).fillColor("#000");
+    } else if (c.bankDetails || c.upiId) {
+      doc.moveDown(0.8);
+      doc.font("Helvetica-Bold").fontSize(9).text("Payment details", 50);
+      doc.font("Helvetica").fontSize(9).fillColor("#555");
+      if (c.bankDetails) doc.text(c.bankDetails, { width: 350 });
+      if (c.upiId) doc.text(`UPI: ${c.upiId}`);
+      doc.fillColor("#000");
     }
 
     if (data.taxNotes) {
-      doc.moveDown(1.2).fontSize(9).fillColor("#555").text(data.taxNotes, 50).fillColor("#000");
+      doc.moveDown(0.8).fontSize(9).fillColor("#555").text(data.taxNotes, 50, doc.y, { width: 495 }).fillColor("#000");
     }
     if (data.notes) {
-      doc.moveDown(0.8).fontSize(10).text(`Notes: ${data.notes}`, 50);
+      doc.moveDown(0.6).fontSize(9).text(`Notes: ${data.notes}`, 50, doc.y, { width: 495 });
+    }
+    if (c.terms) {
+      doc.moveDown(0.6).fontSize(8).fillColor("#777").text(`Terms: ${c.terms}`, 50, doc.y, { width: 495 }).fillColor("#000");
+    }
+
+    // Signatory
+    doc.moveDown(1.5);
+    doc.fontSize(9).text(`For ${c.name}`, 380, doc.y, { width: 165, align: "right" });
+    doc.moveDown(2);
+    doc.fontSize(9).fillColor("#555")
+      .text(c.signatoryName ? `${c.signatoryName} — Authorized Signatory` : "Authorized Signatory", 330, doc.y, { width: 215, align: "right" })
+      .fillColor("#000");
+
+    // Footer + page numbers on every page.
+    const range = doc.bufferedPageRange();
+    for (let i = range.start; i < range.start + range.count; i++) {
+      doc.switchToPage(i);
+      const footer = [c.footer, c.email ? `Support: ${c.email}` : null]
+        .filter(Boolean)
+        .join("  ·  ");
+      doc
+        .fontSize(8)
+        .fillColor("#999")
+        .text(
+          `${footer ? footer + "  ·  " : ""}Page ${i + 1} of ${range.count}`,
+          50,
+          doc.page.height - 40,
+          { width: 495, align: "center", lineBreak: false }
+        )
+        .fillColor("#000");
     }
   });
 }

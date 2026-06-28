@@ -1,7 +1,8 @@
 import { query, withTransaction } from "../../db/postgres";
 import { env } from "../../config/env";
 import { ApiError } from "../../utils/api-error";
-import { sendMail } from "../../utils/mailer";
+import { sendMail, mailerConfigured } from "../../utils/mailer";
+import { getSettings } from "./invoice-settings.service";
 import { invoicePdf, type InvoicePdfData } from "./invoices.pdf";
 import type { z } from "zod";
 import type {
@@ -14,19 +15,16 @@ import type {
 } from "./invoices.schema";
 
 /**
- * Gateway-free SaaS invoicing (Billing Phase B2 / B2.2).
+ * Gateway-free SaaS invoicing (Billing Phase B2 / B2.2 / P0).
  *
- * Draft → issue (assigns a financial-year-segmented number, freezes totals,
- * computes the due date) → mark-paid (OFFLINE, single full payment) / void.
- * No payment gateway and no auto-charging — markPaid is a manual super-admin
- * action. Amounts are NUMERIC(12,2) and all totals are computed in SQL to avoid
- * floating-point drift. "Overdue" is computed at read time (issued + past due),
- * never stored.
+ * Draft → issue (FY number, freeze totals, due date, supplier snapshot) →
+ * mark-paid (OFFLINE, single full payment) / void (reason required). No payment
+ * gateway and no auto-charging. Amounts are NUMERIC(12,2) computed in SQL.
+ * "Overdue" is computed at read time. Settings (supplier profile, numbering,
+ * defaults) come from the singleton invoice_settings row. Money actions are
+ * audited via platform_audit_log at the route layer.
  */
 
-// Columns are qualified with the `i` alias because listAll() joins institutions
-// (which also has id/created_at) — unqualified names would be ambiguous. Every
-// query using INVOICE_COLS aliases saas_invoices AS i.
 const INVOICE_COLS = `
   i.id, i.institution_id AS "institutionId", i.package_id AS "packageId",
   i.number, i.status, i.currency,
@@ -35,16 +33,35 @@ const INVOICE_COLS = `
   i.payment_terms_days AS "paymentTermsDays",
   to_char(i.due_date, 'YYYY-MM-DD') AS "dueDate",
   (i.status = 'issued' AND i.due_date IS NOT NULL AND i.due_date < CURRENT_DATE) AS "isOverdue",
-  i.subtotal, i.tax_percent AS "taxPercent", i.tax_amount AS "taxAmount", i.total,
+  i.subtotal, i.tax_percent AS "taxPercent", i.tax_amount AS "taxAmount",
+  i.round_off AS "roundOff", i.total,
   i.gstin, i.billing_name AS "billingName", i.billing_address AS "billingAddress",
   i.tax_notes AS "taxNotes", i.notes,
+  i.sac_code AS "sacCode", i.place_of_supply AS "placeOfSupply",
+  i.reverse_charge AS "reverseCharge",
+  i.supplier_state AS "supplierState", i.supplier_state_code AS "supplierStateCode",
+  i.recipient_state AS "recipientState", i.recipient_state_code AS "recipientStateCode",
   i.issued_at AS "issuedAt", i.paid_at AS "paidAt",
   i.payment_method AS "paymentMethod", i.payment_reference AS "paymentReference",
+  i.void_reason AS "voidReason", i.voided_at AS "voidedAt",
   i.created_at AS "createdAt"`;
 
 const LINE_COLS = `
   id, invoice_id AS "invoiceId", description, quantity,
-  unit_price AS "unitPrice", amount, created_at AS "createdAt"`;
+  unit_price AS "unitPrice", sac_code AS "sacCode", amount, created_at AS "createdAt"`;
+
+const EMAIL_COLS = `
+  id, recipient, template, status, error,
+  triggered_by AS "triggeredBy", created_at AS "createdAt"`;
+
+// Shape the route layer relies on (audit needs id/institutionId; UI uses the rest).
+interface InvoiceRecord {
+  id: string;
+  institutionId: string;
+  number: string | null;
+  total: string;
+  [key: string]: unknown;
+}
 
 type CreateInvoice = z.infer<typeof createInvoiceSchema>;
 type InvoiceLine = z.infer<typeof invoiceLineSchema>;
@@ -69,7 +86,6 @@ async function invoiceStatus(invoiceId: string): Promise<string> {
   return rows[0].status;
 }
 
-/** Throw unless the invoice exists and is still a draft (mutations are draft-only). */
 async function assertDraft(invoiceId: string, action: string): Promise<void> {
   if ((await invoiceStatus(invoiceId)) !== "draft") {
     throw ApiError.badRequest(`Only a draft invoice can ${action}`);
@@ -82,7 +98,7 @@ async function recomputeTotals(invoiceId: string): Promise<void> {
     `UPDATE saas_invoices i SET
        subtotal = c.subtotal,
        tax_amount = round(c.subtotal * i.tax_percent / 100, 2),
-       total = c.subtotal + round(c.subtotal * i.tax_percent / 100, 2)
+       total = c.subtotal + round(c.subtotal * i.tax_percent / 100, 2) + i.round_off
      FROM (
        SELECT coalesce(sum(amount), 0)::numeric(12,2) AS subtotal
        FROM saas_invoice_lines WHERE invoice_id = $1
@@ -93,7 +109,7 @@ async function recomputeTotals(invoiceId: string): Promise<void> {
 }
 
 export async function getInvoice(invoiceId: string) {
-  const { rows } = await query(
+  const { rows } = await query<InvoiceRecord>(
     `SELECT ${INVOICE_COLS} FROM saas_invoices i WHERE i.id = $1`,
     [invoiceId]
   );
@@ -102,7 +118,25 @@ export async function getInvoice(invoiceId: string) {
     `SELECT ${LINE_COLS} FROM saas_invoice_lines WHERE invoice_id = $1 ORDER BY created_at`,
     [invoiceId]
   );
-  return { ...rows[0], lines: lines.rows };
+  const emails = await query(
+    `SELECT ${EMAIL_COLS} FROM invoice_emails WHERE invoice_id = $1 ORDER BY created_at DESC`,
+    [invoiceId]
+  );
+  return { ...rows[0], lines: lines.rows, emails: emails.rows };
+}
+
+/** Invoice money-action audit timeline (reads the shared platform_audit_log). */
+export async function getAudit(invoiceId: string) {
+  const { rows } = await query(
+    `SELECT action, actor_email AS "actorEmail", actor_role AS "actorRole",
+            detail, ip, created_at AS "createdAt"
+     FROM platform_audit_log
+     WHERE target_type = 'saas_invoice' AND target_id = $1
+     ORDER BY created_at DESC
+     LIMIT 200`,
+    [invoiceId]
+  );
+  return rows;
 }
 
 export async function listForInstitution(
@@ -132,11 +166,6 @@ const SORT_COLUMNS: Record<string, string> = {
   status: "i.status",
 };
 
-/**
- * Global, paginated invoice list across all tenants with status/institution/
- * overdue/date/search filters and sorting. Returns the page plus the total count
- * so the UI can render pagination. Joins institutions, hence the `i` alias.
- */
 export async function listAll(q: ListQuery) {
   const where: string[] = [];
   const params: unknown[] = [];
@@ -155,7 +184,8 @@ export async function listAll(q: ListQuery) {
   if (q.to) add((n) => `i.created_at < ($${n}::date + 1)`, q.to);
   if (q.q) {
     add(
-      (n) => `(i.number ILIKE $${n} OR inst.name ILIKE $${n} OR inst.code ILIKE $${n})`,
+      (n) =>
+        `(i.number ILIKE $${n} OR inst.name ILIKE $${n} OR inst.code ILIKE $${n} OR i.gstin ILIKE $${n} OR i.payment_reference ILIKE $${n})`,
       `%${q.q}%`
     );
   }
@@ -181,7 +211,6 @@ export async function listAll(q: ListQuery) {
   return { rows, total: count.rows[0].n, page: q.page, pageSize: q.pageSize };
 }
 
-/** Aggregate counters for the super-admin dashboard cards (all tenants). */
 export async function summary() {
   const overdue =
     "status = 'issued' AND due_date IS NOT NULL AND due_date < CURRENT_DATE";
@@ -206,9 +235,9 @@ async function insertLine(
   line: InvoiceLine
 ): Promise<void> {
   await exec(
-    `INSERT INTO saas_invoice_lines (invoice_id, description, quantity, unit_price, amount)
-     VALUES ($1,$2,$3,$4, round($3::numeric * $4::numeric, 2))`,
-    [invoiceId, line.description, line.quantity ?? 1, line.unitPrice ?? 0]
+    `INSERT INTO saas_invoice_lines (invoice_id, description, quantity, unit_price, sac_code, amount)
+     VALUES ($1,$2,$3,$4,$5, round($3::numeric * $4::numeric, 2))`,
+    [invoiceId, line.description, line.quantity ?? 1, line.unitPrice ?? 0, line.sacCode ?? null]
   );
 }
 
@@ -218,27 +247,34 @@ export async function createDraft(
   createdBy: string
 ) {
   await assertInstitution(institutionId);
+  const settings = await getSettings();
   const id = await withTransaction(async (client) => {
     const { rows } = await client.query<{ id: string }>(
       `INSERT INTO saas_invoices
          (institution_id, package_id, currency, period_start, period_end,
           payment_terms_days, due_date, tax_percent, gstin, billing_name,
-          billing_address, tax_notes, notes, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
+          billing_address, tax_notes, notes, sac_code, place_of_supply,
+          reverse_charge, recipient_state, recipient_state_code, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
       [
         institutionId,
         input.packageId ?? null,
-        input.currency ?? env.saasInvoiceCurrency,
+        input.currency ?? settings.defaultCurrency ?? env.saasInvoiceCurrency,
         input.periodStart ?? null,
         input.periodEnd ?? null,
-        input.paymentTermsDays ?? null,
+        input.paymentTermsDays ?? settings.defaultDueDays ?? null,
         input.dueDate ?? null,
-        input.taxPercent ?? 0,
+        input.taxPercent ?? Number(settings.defaultTaxPercent) ?? 0,
         input.gstin ?? null,
         input.billingName ?? null,
         input.billingAddress ?? null,
         input.taxNotes ?? null,
         input.notes ?? null,
+        input.sacCode ?? settings.defaultSac ?? null,
+        input.placeOfSupply ?? null,
+        input.reverseCharge ?? false,
+        input.recipientState ?? null,
+        input.recipientStateCode ?? null,
         createdBy,
       ]
     );
@@ -272,9 +308,13 @@ const UPDATE_COLUMN_MAP: Record<string, string> = {
   billingAddress: "billing_address",
   taxNotes: "tax_notes",
   notes: "notes",
+  sacCode: "sac_code",
+  placeOfSupply: "place_of_supply",
+  reverseCharge: "reverse_charge",
+  recipientState: "recipient_state",
+  recipientStateCode: "recipient_state_code",
 };
 
-/** Edit a draft's header fields, then recompute totals (tax % may have changed). */
 export async function updateDraft(invoiceId: string, input: UpdateInvoice) {
   await assertDraft(invoiceId, "be edited");
   const data = input as Record<string, unknown>;
@@ -297,7 +337,6 @@ export async function updateDraft(invoiceId: string, input: UpdateInvoice) {
   return getInvoice(invoiceId);
 }
 
-/** Edit a single line of a draft (description/qty/price), then recompute. */
 export async function updateLine(
   invoiceId: string,
   lineId: string,
@@ -309,6 +348,7 @@ export async function updateLine(
     description: "description",
     quantity: "quantity",
     unitPrice: "unit_price",
+    sacCode: "sac_code",
   };
   const sets: string[] = [];
   const params: unknown[] = [];
@@ -327,7 +367,6 @@ export async function updateLine(
     );
     if (!rowCount) throw ApiError.notFound("Line not found");
   }
-  // Recompute the line amount from its (now-updated) quantity * unit price.
   await query(
     `UPDATE saas_invoice_lines SET amount = round(quantity * unit_price, 2)
      WHERE id = $1 AND invoice_id = $2`,
@@ -337,7 +376,6 @@ export async function updateLine(
   return getInvoice(invoiceId);
 }
 
-/** Remove a line item from a draft, then recompute totals. */
 export async function removeLine(invoiceId: string, lineId: string) {
   await assertDraft(invoiceId, "have lines removed");
   const { rowCount } = await query(
@@ -349,17 +387,12 @@ export async function removeLine(invoiceId: string, lineId: string) {
   return getInvoice(invoiceId);
 }
 
-/** Permanently delete a DRAFT invoice (lines cascade). Issued+ are immutable. */
 export async function deleteDraft(invoiceId: string) {
   await assertDraft(invoiceId, "be deleted");
   await query("DELETE FROM saas_invoices WHERE id = $1", [invoiceId]);
   return { id: invoiceId, deleted: true };
 }
 
-/**
- * Clone any invoice into a fresh DRAFT (header + lines copied; number, status,
- * dates and payment cleared). Lets the operator re-bill next period in one click.
- */
 export async function duplicateInvoice(invoiceId: string, createdBy: string) {
   const exists = await query("SELECT 1 FROM saas_invoices WHERE id = $1", [
     invoiceId,
@@ -370,18 +403,20 @@ export async function duplicateInvoice(invoiceId: string, createdBy: string) {
       `INSERT INTO saas_invoices
          (institution_id, package_id, currency, period_start, period_end,
           payment_terms_days, due_date, tax_percent, gstin, billing_name,
-          billing_address, tax_notes, notes, created_by)
+          billing_address, tax_notes, notes, sac_code, place_of_supply,
+          reverse_charge, recipient_state, recipient_state_code, created_by)
        SELECT institution_id, package_id, currency, period_start, period_end,
               payment_terms_days, NULL, tax_percent, gstin, billing_name,
-              billing_address, tax_notes, notes, $2
+              billing_address, tax_notes, notes, sac_code, place_of_supply,
+              reverse_charge, recipient_state, recipient_state_code, $2
        FROM saas_invoices WHERE id = $1
        RETURNING id`,
       [invoiceId, createdBy]
     );
     const nid = ins.rows[0].id;
     await client.query(
-      `INSERT INTO saas_invoice_lines (invoice_id, description, quantity, unit_price, amount)
-       SELECT $2, description, quantity, unit_price, amount
+      `INSERT INTO saas_invoice_lines (invoice_id, description, quantity, unit_price, sac_code, amount)
+       SELECT $2, description, quantity, unit_price, sac_code, amount
        FROM saas_invoice_lines WHERE invoice_id = $1`,
       [invoiceId, nid]
     );
@@ -391,62 +426,98 @@ export async function duplicateInvoice(invoiceId: string, createdBy: string) {
   return getInvoice(newId);
 }
 
-/** Current financial year label (India FY: Apr–Mar), e.g. 'FY2026-27'. */
+/** Financial year label honouring a configurable start month, e.g. 'FY2026-27'. */
 async function currentFyLabel(
-  client: { query: (t: string, p?: unknown[]) => Promise<{ rows: { label: string }[] }> }
+  client: { query: (t: string, p?: unknown[]) => Promise<{ rows: { label: string }[] }> },
+  fyStartMonth: number
 ): Promise<string> {
   const { rows } = await client.query(
     `SELECT 'FY' || fy_start || '-' || lpad(((fy_start + 1) % 100)::text, 2, '0') AS label
      FROM (
-       SELECT CASE WHEN extract(month FROM CURRENT_DATE) >= 4
+       SELECT CASE WHEN extract(month FROM CURRENT_DATE) >= $1
                    THEN extract(year FROM CURRENT_DATE)::int
                    ELSE extract(year FROM CURRENT_DATE)::int - 1 END AS fy_start
-     ) s`
+     ) s`,
+    [fyStartMonth]
   );
   return rows[0].label;
 }
 
 /**
- * Issue a draft: assign the next FY-segmented number (immutable), freeze totals,
- * set the due date (explicit dueDate wins; else issue date + paymentTermsDays),
- * then best-effort email the institution's admins. Email failure NEVER fails the
- * issue (the whole notify step is guarded).
+ * Issue a draft: assign the next FY-segmented number (from settings: prefix /
+ * padding / FY start), freeze totals, set the due date, snapshot the supplier
+ * state, record the issuer, then best-effort email + log delivery.
  */
-export async function issueInvoice(invoiceId: string) {
+export async function issueInvoice(invoiceId: string, issuedBy?: string) {
   await assertDraft(invoiceId, "be issued");
   await recomputeTotals(invoiceId);
+  const settings = await getSettings();
+  const prefix = settings.prefix || env.saasInvoicePrefix;
+  const padding = settings.numberPadding || 6;
+  const fyStartMonth = settings.fyStartMonth || 4;
   await withTransaction(async (client) => {
-    const label = await currentFyLabel(client as never);
+    const label = await currentFyLabel(client as never, fyStartMonth);
     const ctr = await client.query<{ last_value: number }>(
       `INSERT INTO saas_invoice_counters (fy, last_value) VALUES ($1, 1)
        ON CONFLICT (fy) DO UPDATE SET last_value = saas_invoice_counters.last_value + 1
        RETURNING last_value`,
       [label]
     );
-    const number = `${env.saasInvoicePrefix}${label}-${String(
-      ctr.rows[0].last_value
-    ).padStart(6, "0")}`;
+    const number = `${prefix}${label}-${String(ctr.rows[0].last_value).padStart(
+      padding,
+      "0"
+    )}`;
     await client.query(
       `UPDATE saas_invoices SET
-         status = 'issued', number = $2, issued_at = now(),
+         status = 'issued', number = $2, issued_at = now(), issued_by = $3,
+         supplier_state = $4, supplier_state_code = $5,
          due_date = COALESCE(
            due_date,
            CASE WHEN payment_terms_days IS NOT NULL
                 THEN (CURRENT_DATE + payment_terms_days) ELSE NULL END
          )
        WHERE id = $1`,
-      [invoiceId, number]
+      [
+        invoiceId,
+        number,
+        issuedBy ?? null,
+        settings.supplierState ?? null,
+        settings.supplierStateCode ?? null,
+      ]
     );
   });
-  await notifyInvoiceIssued(invoiceId);
+  await notifyInvoiceIssued(invoiceId, issuedBy ?? null);
   return getInvoice(invoiceId);
+}
+
+/** Record one email delivery attempt (never throws into the caller). */
+async function logEmail(
+  invoiceId: string,
+  recipient: string,
+  status: "sent" | "failed" | "skipped",
+  error: string | null,
+  triggeredBy: string | null
+): Promise<void> {
+  try {
+    await query(
+      `INSERT INTO invoice_emails (invoice_id, recipient, template, status, error, triggered_by)
+       VALUES ($1,$2,'invoice_issued',$3,$4,$5)`,
+      [invoiceId, recipient, status, error, triggeredBy]
+    );
+  } catch (err) {
+    console.error("invoice_emails log failed (continuing):", err);
+  }
 }
 
 /**
  * Best-effort "invoice issued" email to the institution's admins. Never throws;
- * returns the number of recipients emailed (0 if none / on error / SMTP off).
+ * each recipient attempt is recorded in invoice_emails. Returns the number sent.
  */
-async function notifyInvoiceIssued(invoiceId: string): Promise<number> {
+async function notifyInvoiceIssued(
+  invoiceId: string,
+  triggeredBy: string | null
+): Promise<number> {
+  let sent = 0;
   try {
     const { rows } = await query<{
       number: string;
@@ -465,62 +536,88 @@ async function notifyInvoiceIssued(invoiceId: string): Promise<number> {
        WHERE institution_id = $1 AND role = 'admin' AND is_active = true`,
       [inv.institution_id]
     );
+    const configured = mailerConfigured();
     for (const a of admins.rows) {
-      await sendMail({
-        to: a.email,
-        subject: `Invoice ${inv.number} from ${env.saasCompanyName}`,
-        text:
-          `A new subscription invoice (${inv.number}) for ${inv.currency} ${inv.total} ` +
-          `has been issued to your institution. Please contact your ${env.saasCompanyName} ` +
-          `administrator for the PDF and payment details.`,
-      });
+      if (!configured) {
+        await logEmail(invoiceId, a.email, "skipped", "SMTP not configured", triggeredBy);
+        continue;
+      }
+      try {
+        await sendMail({
+          to: a.email,
+          subject: `Invoice ${inv.number} from ${env.saasCompanyName}`,
+          text:
+            `A new subscription invoice (${inv.number}) for ${inv.currency} ${inv.total} ` +
+            `has been issued to your institution. Please contact your ${env.saasCompanyName} ` +
+            `administrator for the PDF and payment details.`,
+        });
+        await logEmail(invoiceId, a.email, "sent", null, triggeredBy);
+        sent++;
+      } catch (err) {
+        await logEmail(
+          invoiceId,
+          a.email,
+          "failed",
+          err instanceof Error ? err.message : String(err),
+          triggeredBy
+        );
+      }
     }
-    return admins.rows.length;
+    return sent;
   } catch (err) {
     console.error("invoice issued email failed (continuing):", err);
-    return 0;
+    return sent;
   }
 }
 
-/** Re-send the "invoice issued" email for an issued or paid invoice. */
-export async function resendInvoice(invoiceId: string) {
+export async function resendInvoice(invoiceId: string, triggeredBy?: string) {
   const status = await invoiceStatus(invoiceId);
   if (status !== "issued" && status !== "paid") {
     throw ApiError.badRequest("Only an issued or paid invoice can be re-sent");
   }
-  const recipients = await notifyInvoiceIssued(invoiceId);
+  const recipients = await notifyInvoiceIssued(invoiceId, triggeredBy ?? null);
   return { recipients };
 }
 
-/** Record OFFLINE payment (no gateway). Single full payment marks it paid. */
-export async function markPaid(invoiceId: string, input: MarkPaid) {
+export async function markPaid(invoiceId: string, input: MarkPaid, recordedBy?: string) {
   if ((await invoiceStatus(invoiceId)) !== "issued") {
     throw ApiError.badRequest("Only an issued invoice can be marked paid");
   }
   await query(
     `UPDATE saas_invoices
        SET status = 'paid', payment_method = $2, payment_reference = $3,
-           paid_at = COALESCE($4::timestamptz, now())
+           paid_at = COALESCE($4::timestamptz, now()), recorded_by = $5
      WHERE id = $1`,
-    [invoiceId, input.paymentMethod, input.reference ?? null, input.paidAt ?? null]
+    [
+      invoiceId,
+      input.paymentMethod,
+      input.reference ?? null,
+      input.paidAt ?? null,
+      recordedBy ?? null,
+    ]
   );
   return getInvoice(invoiceId);
 }
 
-export async function voidInvoice(invoiceId: string) {
+/** Void a draft or issued invoice with a required reason. Paid cannot be voided. */
+export async function voidInvoice(invoiceId: string, reason: string, voidedBy?: string) {
   const status = await invoiceStatus(invoiceId);
   if (status === "paid") {
     throw ApiError.badRequest("A paid invoice cannot be voided");
   }
   if (status === "void") return getInvoice(invoiceId);
-  await query("UPDATE saas_invoices SET status = 'void' WHERE id = $1", [
-    invoiceId,
-  ]);
+  await query(
+    `UPDATE saas_invoices
+       SET status = 'void', void_reason = $2, voided_by = $3, voided_at = now()
+     WHERE id = $1`,
+    [invoiceId, reason, voidedBy ?? null]
+  );
   return getInvoice(invoiceId);
 }
 
 /** Render the invoice as a PDF (super-admin download). */
 export async function invoicePdfBuffer(invoiceId: string): Promise<Buffer> {
+  const settings = await getSettings();
   const { rows } = await query<InvoicePdfData & { institutionName: string }>(
     `SELECT i.number, i.status, i.currency,
             inst.name AS "institutionName",
@@ -533,7 +630,11 @@ export async function invoicePdfBuffer(invoiceId: string): Promise<Buffer> {
             i.issued_at::text AS "issuedAt", i.paid_at::text AS "paidAt",
             i.payment_method AS "paymentMethod", i.payment_reference AS "paymentReference",
             i.subtotal::text AS subtotal, i.tax_percent::text AS "taxPercent",
-            i.tax_amount::text AS "taxAmount", i.total::text AS total,
+            i.tax_amount::text AS "taxAmount", i.round_off::text AS "roundOff",
+            i.total::text AS total,
+            i.sac_code AS "sacCode", i.place_of_supply AS "placeOfSupply",
+            i.reverse_charge AS "reverseCharge",
+            i.recipient_state AS "recipientState", i.recipient_state_code AS "recipientStateCode",
             i.notes, i.tax_notes AS "taxNotes"
      FROM saas_invoices i
      JOIN institutions inst ON inst.id = i.institution_id
@@ -543,7 +644,7 @@ export async function invoicePdfBuffer(invoiceId: string): Promise<Buffer> {
   if (!rows[0]) throw ApiError.notFound("Invoice not found");
   const lines = await query<InvoicePdfData["lines"][number]>(
     `SELECT description, quantity::text AS quantity,
-            unit_price::text AS "unitPrice", amount::text AS amount
+            unit_price::text AS "unitPrice", sac_code AS "sacCode", amount::text AS amount
      FROM saas_invoice_lines WHERE invoice_id = $1 ORDER BY created_at`,
     [invoiceId]
   );
@@ -551,11 +652,21 @@ export async function invoicePdfBuffer(invoiceId: string): Promise<Buffer> {
     ...rows[0],
     lines: lines.rows,
     company: {
-      name: env.saasCompanyName,
-      address: env.saasCompanyAddress,
-      email: env.saasCompanyEmail,
-      gstin: env.saasCompanyGstin,
-      logoPath: env.saasCompanyLogoPath,
+      name: settings.supplierLegalName || env.saasCompanyName,
+      tradeName: settings.supplierTradeName,
+      address: settings.supplierAddress || env.saasCompanyAddress,
+      email: settings.supplierEmail || env.saasCompanyEmail,
+      phone: settings.supplierPhone,
+      gstin: settings.supplierGstin || env.saasCompanyGstin,
+      pan: settings.supplierPan,
+      state: settings.supplierState,
+      stateCode: settings.supplierStateCode,
+      bankDetails: settings.bankDetails,
+      upiId: settings.upiId,
+      signatoryName: settings.signatoryName,
+      footer: settings.pdfFooter,
+      terms: settings.pdfTerms,
+      logoPath: settings.logoPath || env.saasCompanyLogoPath,
     },
   });
 }
