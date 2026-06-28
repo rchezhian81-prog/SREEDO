@@ -1,7 +1,14 @@
 import { existsSync } from "node:fs";
 import { renderPdf } from "../../utils/pdf";
+import { amountInWords, money, type InvoiceCompany } from "./invoices.pdf";
 
-export interface InvoicePdfLine {
+/**
+ * Credit / Debit note PDF (Billing P2). A self-contained, GST-ready document
+ * that references the original invoice. Reuses the invoice PDF's money/words
+ * helpers and the shared InvoiceCompany supplier block for a consistent look.
+ */
+
+export interface NotePdfLine {
   description: string;
   quantity: string | number;
   unitPrice: string | number;
@@ -9,40 +16,22 @@ export interface InvoicePdfLine {
   amount: string | number;
 }
 
-export interface InvoiceCompany {
-  name: string;
-  tradeName?: string | null;
-  address?: string | null;
-  email?: string | null;
-  phone?: string | null;
-  gstin?: string | null;
-  pan?: string | null;
-  state?: string | null;
-  stateCode?: string | null;
-  bankDetails?: string | null;
-  upiId?: string | null;
-  signatoryName?: string | null;
-  footer?: string | null;
-  terms?: string | null;
-  logoPath?: string | null;
-}
-
-export interface InvoicePdfData {
+export interface NotePdfData {
+  kind: "credit" | "debit";
   number: string | null;
   status: string;
   currency: string;
   institutionName: string;
+  // Recipient (billing) details snapshotted from the linked invoice.
   billingName: string | null;
   billingAddress: string | null;
   gstin: string | null;
-  periodStart: string | null;
-  periodEnd: string | null;
-  dueDate: string | null;
-  isOverdue?: boolean;
+  recipientState?: string | null;
+  recipientStateCode?: string | null;
+  // The invoice this note adjusts.
+  againstInvoiceNumber: string | null;
+  reason: string | null;
   issuedAt: string | null;
-  paidAt: string | null;
-  paymentMethod: string | null;
-  paymentReference: string | null;
   subtotal: string | number;
   taxPercent: string | number;
   taxAmount: string | number;
@@ -51,85 +40,25 @@ export interface InvoicePdfData {
   sacCode?: string | null;
   placeOfSupply?: string | null;
   reverseCharge?: boolean;
-  recipientState?: string | null;
-  recipientStateCode?: string | null;
   notes: string | null;
-  taxNotes: string | null;
-  lines: InvoicePdfLine[];
+  lines: NotePdfLine[];
   company?: InvoiceCompany;
 }
 
-export function money(currency: string, value: string | number): string {
-  const n = Number(value);
-  return `${currency} ${Number.isFinite(n) ? n.toFixed(2) : "0.00"}`;
-}
-
-const ONES = [
-  "", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
-  "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen",
-  "Seventeen", "Eighteen", "Nineteen",
-];
-const TENS = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
-
-function below100(n: number): string {
-  if (n < 20) return ONES[n];
-  return (TENS[Math.floor(n / 10)] + (n % 10 ? " " + ONES[n % 10] : "")).trim();
-}
-
-// Indian numbering system (crore/lakh/thousand/hundred).
-function wordsIndian(n: number): string {
-  if (n === 0) return "Zero";
-  const parts: string[] = [];
-  const crore = Math.floor(n / 10000000);
-  n %= 10000000;
-  const lakh = Math.floor(n / 100000);
-  n %= 100000;
-  const thousand = Math.floor(n / 1000);
-  n %= 1000;
-  const hundred = Math.floor(n / 100);
-  n %= 100;
-  if (crore) parts.push(below100(crore) + " Crore");
-  if (lakh) parts.push(below100(lakh) + " Lakh");
-  if (thousand) parts.push(below100(thousand) + " Thousand");
-  if (hundred) parts.push(ONES[hundred] + " Hundred");
-  if (n) parts.push(below100(n));
-  return parts.join(" ");
-}
-
-const FRACTION_LABEL: Record<string, [string, string]> = {
-  INR: ["Rupees", "Paise"],
-  USD: ["Dollars", "Cents"],
-  EUR: ["Euros", "Cents"],
-  GBP: ["Pounds", "Pence"],
-};
-
-export function amountInWords(value: string | number, currency: string): string {
-  const n = Number(value) || 0;
-  const whole = Math.floor(n);
-  const frac = Math.round((n - whole) * 100);
-  const [major, minor] = FRACTION_LABEL[currency.toUpperCase()] ?? [currency.toUpperCase(), "Cents"];
-  let s = `${wordsIndian(whole)} ${major}`;
-  if (frac > 0) s += ` and ${below100(frac)} ${minor}`;
-  return s + " Only";
-}
-
 const STAMP: Record<string, { label: string; color: string }> = {
-  paid: { label: "PAID", color: "#15803d" },
   void: { label: "VOID", color: "#6b7280" },
-  overdue: { label: "OVERDUE", color: "#b91c1c" },
   draft: { label: "DRAFT", color: "#b45309" },
 };
 
-/** Renders a self-contained, GST-ready invoice PDF (no external template). */
-export function invoicePdf(data: InvoicePdfData): Promise<Buffer> {
+/** Renders a self-contained credit/debit note PDF (no external template). */
+export function notePdf(data: NotePdfData): Promise<Buffer> {
   const c = data.company ?? { name: "SRE EDU OS" };
   const cur = data.currency;
-  const stampKey = data.isOverdue ? "overdue" : data.status;
-  const title = c.gstin ? "TAX INVOICE" : "INVOICE";
+  const title = data.kind === "credit" ? "CREDIT NOTE" : "DEBIT NOTE";
 
   return renderPdf({ size: "A4", margin: 50, bufferPages: true }, (doc) => {
-    // Diagonal status watermark behind the content.
-    const stamp = STAMP[stampKey];
+    // Diagonal status watermark (draft / void) behind the content.
+    const stamp = STAMP[data.status];
     if (stamp) {
       const x0 = doc.x;
       const y0 = doc.y;
@@ -164,10 +93,10 @@ export function invoicePdf(data: InvoicePdfData): Promise<Buffer> {
       .fontSize(10)
       .fillColor("#555")
       .text(data.number ?? "(draft — not yet issued)", { align: "right" })
-      .text(`Status: ${(data.isOverdue ? "OVERDUE" : data.status).toUpperCase()}`, {
-        align: "right",
-      })
-      .fillColor("#000");
+      .text(`Status: ${data.status.toUpperCase()}`, { align: "right" });
+    if (data.againstInvoiceNumber)
+      doc.text(`Against invoice: ${data.againstInvoiceNumber}`, { align: "right" });
+    doc.fillColor("#000");
 
     doc.moveDown(1.5);
 
@@ -200,13 +129,15 @@ export function invoicePdf(data: InvoicePdfData): Promise<Buffer> {
 
     doc.moveDown(1);
     const meta: string[] = [];
-    if (data.issuedAt) meta.push(`Issue date: ${data.issuedAt.slice(0, 10)}`);
-    if (data.dueDate) meta.push(`Due date: ${data.dueDate}`);
-    if (data.periodStart || data.periodEnd)
-      meta.push(`Period: ${data.periodStart ?? "?"} → ${data.periodEnd ?? "?"}`);
+    if (data.issuedAt) meta.push(`Date: ${data.issuedAt.slice(0, 10)}`);
     if (data.placeOfSupply) meta.push(`Place of supply: ${data.placeOfSupply}`);
     meta.push(`Reverse charge: ${data.reverseCharge ? "Yes" : "No"}`);
     doc.fontSize(9).fillColor("#555").text(meta.join("    "), { width: 495 }).fillColor("#000");
+
+    if (data.reason) {
+      doc.moveDown(0.5);
+      doc.fontSize(9).fillColor("#555").text(`Reason: ${data.reason}`, 50, doc.y, { width: 495 }).fillColor("#000");
+    }
 
     doc.moveDown(1.2);
 
@@ -248,31 +179,12 @@ export function invoicePdf(data: InvoicePdfData): Promise<Buffer> {
     totalsRow("Subtotal", money(cur, data.subtotal));
     totalsRow(`Tax (${Number(data.taxPercent).toFixed(2)}%)`, money(cur, data.taxAmount));
     if (Number(data.roundOff) !== 0) totalsRow("Round off", money(cur, data.roundOff ?? 0));
-    totalsRow("Total", money(cur, data.total), true);
+    totalsRow(data.kind === "credit" ? "Credit total" : "Debit total", money(cur, data.total), true);
 
     // Amount in words
     doc.moveDown(0.8);
     doc.fontSize(9).fillColor("#333").text(`Amount in words: ${amountInWords(data.total, cur)}`, 50, doc.y, { width: 495 }).fillColor("#000");
 
-    // Payment / bank block
-    if (data.status === "paid" && data.paidAt) {
-      doc.moveDown(0.8);
-      const parts = [`Paid on ${data.paidAt.slice(0, 10)}`];
-      if (data.paymentMethod) parts.push(`via ${data.paymentMethod}`);
-      if (data.paymentReference) parts.push(`ref ${data.paymentReference}`);
-      doc.fontSize(10).fillColor("#15803d").text(parts.join("  ·  "), 50).fillColor("#000");
-    } else if (c.bankDetails || c.upiId) {
-      doc.moveDown(0.8);
-      doc.font("Helvetica-Bold").fontSize(9).text("Payment details", 50);
-      doc.font("Helvetica").fontSize(9).fillColor("#555");
-      if (c.bankDetails) doc.text(c.bankDetails, { width: 350 });
-      if (c.upiId) doc.text(`UPI: ${c.upiId}`);
-      doc.fillColor("#000");
-    }
-
-    if (data.taxNotes) {
-      doc.moveDown(0.8).fontSize(9).fillColor("#555").text(data.taxNotes, 50, doc.y, { width: 495 }).fillColor("#000");
-    }
     if (data.notes) {
       doc.moveDown(0.6).fontSize(9).text(`Notes: ${data.notes}`, 50, doc.y, { width: 495 });
     }

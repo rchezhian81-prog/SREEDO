@@ -93,6 +93,13 @@ JS float drift.
   supplier/recipient `state`/`state_code`) to `saas_invoices`, and `sac_code` to
   lines. Money-action **audit reuses `platform_audit_log`** (target_type
   `saas_invoice`) — no new audit table.
+- **`0076_saas_invoice_running_number.sql`** — adds `next_invoice_number` to
+  `invoice_settings` (settable continuous series; see numbering above).
+- **`0077_saas_credit_debit_notes.sql`** (P2) — `saas_invoice_notes` +
+  `saas_invoice_note_lines` (credit/debit documents linked to an invoice); adds
+  `credit_note_prefix`/`debit_note_prefix` + `next_credit_note_number`/
+  `next_debit_note_number` to `invoice_settings`. Additive; note audit reuses
+  `platform_audit_log` (target_type `saas_invoice_note`).
 
 ## Endpoints (super-admin)
 | Method | Path | Permission |
@@ -116,8 +123,21 @@ JS float drift.
 | GET | `/platform/invoices/:id/audit` | `platform:read` |
 | GET | `/platform/invoice-settings` | `platform:read` |
 | PATCH | `/platform/invoice-settings` | `platform:manage_subscriptions` |
+| GET | `/platform/invoices/:id/notes` (`?kind=&status=`) | `platform:read` |
+| POST | `/platform/invoices/:id/notes` (create draft note) | `platform:manage_subscriptions` |
+| GET | `/platform/notes/:id` | `platform:read` |
+| PATCH | `/platform/notes/:id` (edit draft) | `platform:manage_subscriptions` |
+| DELETE | `/platform/notes/:id` (delete draft) | `platform:manage_subscriptions` |
+| POST | `/platform/notes/:id/lines` | `platform:manage_subscriptions` |
+| PATCH | `/platform/notes/:id/lines/:lineId` | `platform:manage_subscriptions` |
+| DELETE | `/platform/notes/:id/lines/:lineId` | `platform:manage_subscriptions` |
+| POST | `/platform/notes/:id/issue` | `platform:manage_subscriptions` |
+| POST | `/platform/notes/:id/void` | `platform:manage_subscriptions` |
+| GET | `/platform/notes/:id/pdf` | `platform:read` |
+| GET | `/platform/notes/:id/audit` | `platform:read` |
 
 `POST /platform/invoices/:id/void` now requires a JSON body `{ reason }`.
+`POST /platform/notes/:id/void` likewise requires `{ reason }`.
 
 `GET /platform/invoices` returns `{ rows, total, page, pageSize }`.
 `GET /platform/invoices/summary` returns counts by status plus
@@ -185,8 +205,48 @@ JS float drift.
   (`/super-admin/invoices/reports`) and an advanced-filter section + export
   buttons on the list.
 - **Out of scope (by product decision):** partial payments, discounts, payment
-  gateway, full CGST/SGST/IGST engine, e-invoice/IRN/QR, and credit/debit notes
-  (credit/debit = P2).
+  gateway, full CGST/SGST/IGST engine, e-invoice/IRN/QR. (Credit/debit notes were
+  P1's deferred item — now delivered as **P2**, below.)
+
+## Credit & Debit notes (P2)
+A **note** is a **standalone document linked to an issued/paid invoice** — it
+**never modifies the original**. Two kinds in one table (`saas_invoice_notes`,
+`kind ∈ {credit, debit}`):
+- **credit note** — reduces what the institution owes (refund / adjustment).
+- **debit note** — an additional charge against the same invoice.
+
+**Lifecycle mirrors invoices:** `draft → issue → void(reason)` (no mark-paid —
+a note is an adjustment document, not a payable). Drafts are fully editable
+(header + add/edit/remove lines, or delete the draft); **issue** assigns the
+number and freezes the note; **void** needs a reason. A note can only be created
+against an invoice that is already **issued or paid** (`400` otherwise). On
+create, GST/billing defaults (currency, tax %, SAC, place of supply, reverse
+charge, recipient state) are **copied from the invoice** unless overridden.
+
+**Numbering** — each kind is its **own** settable, continuous series (mirrors the
+invoice running number, migration `0076`): `credit_note_prefix` / `next_credit_note_number`
+and `debit_note_prefix` / `next_debit_note_number` on `invoice_settings`, sharing
+the invoice **FY label + padding**. Issued notes read e.g. **`CN-FY2026-27-000001`**
+/ **`DN-FY2026-27-000001`**. Each issue atomically increments the per-kind counter
+under a row lock (unique, gap-free); a "next" value can only be set **at/above the
+highest already-issued number for that series** (enforced, `400` otherwise).
+
+**Flat tax** only (same model as invoices). Amounts are `NUMERIC(12,2)` computed
+in SQL. **PDF**: `GET /platform/notes/:id/pdf` renders a self-contained
+CREDIT/DEBIT NOTE titled per kind, referencing the original invoice ("Against
+invoice: …"), reusing the invoice PDF's supplier block + money/words helpers.
+**Audit**: every note money-action writes `platform_audit_log`
+(`target_type = 'saas_invoice_note'`); `GET /platform/notes/:id/audit` returns
+the timeline (shown on the note page).
+
+**UI** — the invoice detail page shows a **Credit & debit notes** card (list +
+"New credit/debit note" on issued/paid invoices); each note opens a dedicated
+**note detail page** (`/super-admin/invoices/notes/[id]`) with the same
+draft-editing / issue / void / PDF / audit experience as invoices. Settings gains
+**Credit & debit note numbering** fields (prefixes + next numbers).
+
+**Out of scope (P2):** note-level reporting/exports (the invoice reports/exports
+are unchanged), partial payments, discounts — unchanged from the product decision.
 
 ## Configuration (env)
 | Var | Default | Meaning |
@@ -218,7 +278,11 @@ guards, **paged list** (empty/populated/filtered), edit header + edit/remove
 flag**, **summary** aggregates, pagination + institution/search filters, tenant
 scoping, and non-super-admin → 403. `invoices-p0.int.test.ts` covers settings →
 numbering/defaults, void-reason, GST fields, the audit timeline, the email log,
-and the richer PDF.
+and the richer PDF. `invoices-numbering.int.test.ts` covers the settable
+continuous invoice counter. `notes.int.test.ts` (P2) covers credit/debit drafts +
+tax math, edit/remove lines, the **issued/paid-only** linkage guard, the two
+independent continuous note series, issue-then-freeze, void(reason) + audit, list/
+filter, settable note numbering + reject-too-low, RBAC, and the note PDF.
 
 ## Rollback
 Additive only. Revert the PR to remove endpoints/UI. The tables/columns are inert
@@ -228,5 +292,6 @@ existing data is touched by any rollback.
 
 ## Not in B2 (follow-ups)
 Full GST (CGST/SGST/IGST, HSN) = **B2.1** after accountant review · recurring /
-gateway charging + dunning = **B4** (gated on credentials) · credit notes /
-partial payments (single full payment is intentional for now).
+gateway charging + dunning = **B4** (gated on credentials) · partial payments
+(single full payment is intentional for now). **Credit/debit notes shipped in P2**
+(see above); note-level reporting/exports remain a possible follow-up.

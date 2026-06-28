@@ -91,6 +91,13 @@ export const invoiceSettingsSchema = z
     // The next invoice number to assign on issue (continuous series). Must stay
     // at/above the highest already-issued number — enforced in the service.
     nextInvoiceNumber: z.number().int().min(1).optional(),
+    // Credit/Debit note numbering (P2) — independent settable continuous series,
+    // each with its own prefix; the "next" values are validated the same way as
+    // nextInvoiceNumber (at/above the highest already-issued note number).
+    creditNotePrefix: z.string().min(1).max(16).optional(),
+    debitNotePrefix: z.string().min(1).max(16).optional(),
+    nextCreditNoteNumber: z.number().int().min(1).optional(),
+    nextDebitNoteNumber: z.number().int().min(1).optional(),
     defaultCurrency: z.string().min(1).max(8).optional(),
     defaultTaxPercent: z.number().min(0).max(100).optional(),
     defaultSac: z.string().max(20).nullable().optional(),

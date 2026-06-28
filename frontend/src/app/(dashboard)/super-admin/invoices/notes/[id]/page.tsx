@@ -16,7 +16,6 @@ import {
   Input,
   Modal,
   PageHeader,
-  Select,
   Spinner,
   Textarea,
 } from "@/components/ui";
@@ -32,14 +31,6 @@ interface Line {
   sacCode: string | null;
   amount: string;
 }
-interface EmailLog {
-  id: string;
-  recipient: string;
-  template: string;
-  status: string;
-  error: string | null;
-  createdAt: string;
-}
 interface AuditEvent {
   action: string;
   actorEmail: string | null;
@@ -48,99 +39,67 @@ interface AuditEvent {
   ip: string | null;
   createdAt: string;
 }
-interface Invoice {
+interface LinkedInvoice {
   id: string;
-  institutionId: string;
   number: string | null;
   status: string;
+  institutionName: string | null;
+  institutionCode: string | null;
+}
+interface Note {
+  id: string;
+  invoiceId: string;
+  institutionId: string;
+  kind: "credit" | "debit";
+  number: string | null;
+  status: string;
+  reason: string | null;
   currency: string;
-  periodStart: string | null;
-  periodEnd: string | null;
-  paymentTermsDays: number | null;
-  dueDate: string | null;
-  isOverdue: boolean;
   subtotal: string;
   taxPercent: string;
   taxAmount: string;
   total: string;
-  gstin: string | null;
-  billingName: string | null;
-  billingAddress: string | null;
-  taxNotes: string | null;
-  notes: string | null;
   sacCode: string | null;
   placeOfSupply: string | null;
   reverseCharge: boolean;
   recipientState: string | null;
   recipientStateCode: string | null;
-  roundOff: string;
+  notes: string | null;
   voidReason: string | null;
   voidedAt: string | null;
   issuedAt: string | null;
-  paidAt: string | null;
-  paymentMethod: string | null;
-  paymentReference: string | null;
   lines: Line[];
-  emails: EmailLog[];
-}
-interface Note {
-  id: string;
-  kind: "credit" | "debit";
-  number: string | null;
-  status: string;
-  currency: string;
-  total: string;
-  reason: string | null;
-  createdAt: string;
+  invoice: LinkedInvoice | null;
 }
 
 type Tone = "slate" | "green" | "amber" | "red" | "blue";
 const statusTone = (s: string): Tone =>
-  s === "paid" ? "green" : s === "issued" ? "blue" : s === "void" ? "slate" : "amber";
-
-type ConfirmState = {
-  title: string;
-  message: string;
-  confirmLabel: string;
-  run: () => Promise<unknown>;
-  reloadAfter?: boolean;
-};
+  s === "issued" ? "blue" : s === "void" ? "slate" : "amber";
 
 type LineDraft = { id: string; description: string; quantity: string; unitPrice: string };
 
-export default function InvoiceDetailPage() {
+export default function NoteDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const [inv, setInv] = useState<Invoice | null>(null);
+  const [note, setNote] = useState<Note | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const [newLine, setNewLine] = useState({ description: "", quantity: "1", unitPrice: "0" });
   const [editingLine, setEditingLine] = useState<LineDraft | null>(null);
-  const [payMethod, setPayMethod] = useState("bank_transfer");
-  const [payRef, setPayRef] = useState("");
 
-  const [confirm, setConfirm] = useState<ConfirmState | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
-  const [notes, setNotes] = useState<Note[]>([]);
   const [voidOpen, setVoidOpen] = useState(false);
   const [voidReason, setVoidReason] = useState("");
 
-  // Edit-draft header form (prefilled from the loaded invoice).
+  // Edit-draft header form (prefilled from the loaded note).
   const [edit, setEdit] = useState({
     currency: "",
     taxPercent: "0",
-    paymentTermsDays: "",
-    dueDate: "",
-    billingName: "",
-    gstin: "",
-    billingAddress: "",
-    periodStart: "",
-    periodEnd: "",
-    taxNotes: "",
+    reason: "",
     notes: "",
     sacCode: "",
     placeOfSupply: "",
@@ -149,32 +108,22 @@ export default function InvoiceDetailPage() {
     reverseCharge: false,
   });
 
-  const money = (v: string | number) => formatMoney(v, inv?.currency ?? "INR");
+  const money = (v: string | number) => formatMoney(v, note?.currency ?? "INR");
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [data, auditRows, noteRows] = await Promise.all([
-        api.get<Invoice>(`/platform/invoices/${id}`),
-        api.get<AuditEvent[]>(`/platform/invoices/${id}/audit`).catch(() => []),
-        api.get<Note[]>(`/platform/invoices/${id}/notes`).catch(() => []),
+      const [data, auditRows] = await Promise.all([
+        api.get<Note>(`/platform/notes/${id}`),
+        api.get<AuditEvent[]>(`/platform/notes/${id}/audit`).catch(() => []),
       ]);
-      setInv(data);
+      setNote(data);
       setAudit(auditRows);
-      setNotes(noteRows);
       setEdit({
         currency: data.currency ?? "",
         taxPercent: String(Number(data.taxPercent) || 0),
-        paymentTermsDays:
-          data.paymentTermsDays != null ? String(data.paymentTermsDays) : "",
-        dueDate: data.dueDate ?? "",
-        billingName: data.billingName ?? "",
-        gstin: data.gstin ?? "",
-        billingAddress: data.billingAddress ?? "",
-        periodStart: data.periodStart ?? "",
-        periodEnd: data.periodEnd ?? "",
-        taxNotes: data.taxNotes ?? "",
+        reason: data.reason ?? "",
         notes: data.notes ?? "",
         sacCode: data.sacCode ?? "",
         placeOfSupply: data.placeOfSupply ?? "",
@@ -183,7 +132,7 @@ export default function InvoiceDetailPage() {
         reverseCharge: data.reverseCharge ?? false,
       });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load invoice");
+      setError(err instanceof ApiError ? err.message : "Failed to load note");
     } finally {
       setLoading(false);
     }
@@ -196,7 +145,6 @@ export default function InvoiceDetailPage() {
   const act = async (fn: () => Promise<unknown>) => {
     setBusy(true);
     setError(null);
-    setNotice(null);
     try {
       await fn();
       await load();
@@ -207,26 +155,9 @@ export default function InvoiceDetailPage() {
     }
   };
 
-  const runConfirm = async () => {
-    if (!confirm) return;
-    setConfirmBusy(true);
-    setError(null);
-    setNotice(null);
-    try {
-      await confirm.run();
-      const reload = confirm.reloadAfter !== false;
-      setConfirm(null);
-      if (reload) await load();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Action failed");
-    } finally {
-      setConfirmBusy(false);
-    }
-  };
-
   const addLine = () =>
     act(async () => {
-      await api.post(`/platform/invoices/${id}/lines`, {
+      await api.post(`/platform/notes/${id}/lines`, {
         description: newLine.description,
         quantity: Number(newLine.quantity) || 0,
         unitPrice: Number(newLine.unitPrice) || 0,
@@ -245,7 +176,7 @@ export default function InvoiceDetailPage() {
   const saveLine = () =>
     act(async () => {
       if (!editingLine) return;
-      await api.patch(`/platform/invoices/${id}/lines/${editingLine.id}`, {
+      await api.patch(`/platform/notes/${id}/lines/${editingLine.id}`, {
         description: editingLine.description,
         quantity: Number(editingLine.quantity) || 0,
         unitPrice: Number(editingLine.unitPrice) || 0,
@@ -255,17 +186,10 @@ export default function InvoiceDetailPage() {
 
   const saveEdit = () =>
     act(() =>
-      api.patch(`/platform/invoices/${id}`, {
+      api.patch(`/platform/notes/${id}`, {
         currency: edit.currency || undefined,
         taxPercent: Number(edit.taxPercent) || 0,
-        paymentTermsDays: edit.paymentTermsDays ? Number(edit.paymentTermsDays) : null,
-        dueDate: edit.dueDate || null,
-        billingName: edit.billingName || null,
-        gstin: edit.gstin || null,
-        billingAddress: edit.billingAddress || null,
-        periodStart: edit.periodStart || null,
-        periodEnd: edit.periodEnd || null,
-        taxNotes: edit.taxNotes || null,
+        reason: edit.reason || null,
         notes: edit.notes || null,
         sacCode: edit.sacCode || null,
         placeOfSupply: edit.placeOfSupply || null,
@@ -275,87 +199,39 @@ export default function InvoiceDetailPage() {
       })
     );
 
-  const issue = () => act(() => api.post(`/platform/invoices/${id}/issue`));
-
-  const markPaid = () =>
-    act(() =>
-      api.post(`/platform/invoices/${id}/mark-paid`, {
-        paymentMethod: payMethod,
-        reference: payRef || undefined,
-      })
-    );
-
-  const resend = () =>
-    act(async () => {
-      const r = await api.post<{ recipients: number }>(
-        `/platform/invoices/${id}/resend`
-      );
-      setNotice(
-        r.recipients > 0
-          ? `Invoice email sent to ${r.recipients} admin recipient(s).`
-          : "No active admin emails found (or email is not configured)."
-      );
-    });
-
-  const duplicate = async () => {
-    setBusy(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const created = await api.post<{ id: string }>(
-        `/platform/invoices/${id}/duplicate`
-      );
-      router.push(`/super-admin/invoices/${created.id}`);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to duplicate invoice");
-      setBusy(false);
-    }
-  };
+  const issue = () => act(() => api.post(`/platform/notes/${id}/issue`));
 
   const doVoid = () =>
     act(async () => {
-      await api.post(`/platform/invoices/${id}/void`, { reason: voidReason.trim() });
+      await api.post(`/platform/notes/${id}/void`, { reason: voidReason.trim() });
       setVoidOpen(false);
       setVoidReason("");
     });
 
-  const createNote = async (kind: "credit" | "debit") => {
-    setBusy(true);
+  const runRemove = async () => {
+    if (!confirmRemove) return;
+    setConfirmBusy(true);
     setError(null);
-    setNotice(null);
     try {
-      const created = await api.post<{ id: string }>(`/platform/invoices/${id}/notes`, { kind });
-      router.push(`/super-admin/invoices/notes/${created.id}`);
+      await api.delete(`/platform/notes/${id}/lines/${confirmRemove}`);
+      setConfirmRemove(null);
+      await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to create note");
-      setBusy(false);
+      setError(err instanceof ApiError ? err.message : "Action failed");
+    } finally {
+      setConfirmBusy(false);
     }
   };
 
-  const askRemoveLine = (lineId: string) =>
-    setConfirm({
-      title: "Remove line",
-      message: "Remove this line item from the draft?",
-      confirmLabel: "Remove",
-      run: () => api.delete(`/platform/invoices/${id}/lines/${lineId}`),
-    });
-
   const askDelete = () =>
-    setConfirm({
-      title: "Delete draft",
-      message:
-        "Permanently delete this draft invoice and its line items? This can't be undone.",
-      confirmLabel: "Delete",
-      reloadAfter: false,
-      run: async () => {
-        await api.delete(`/platform/invoices/${id}`);
-        router.push("/super-admin/invoices");
-      },
+    act(async () => {
+      await api.delete(`/platform/notes/${id}`);
+      router.push(note ? `/super-admin/invoices/${note.invoiceId}` : "/super-admin/invoices");
     });
 
   const downloadPdf = async () => {
     const token = useAuthStore.getState().accessToken;
-    const res = await fetch(`${API_URL}/platform/invoices/${id}/pdf`, {
+    const res = await fetch(`${API_URL}/platform/notes/${id}/pdf`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     if (!res.ok) {
@@ -368,43 +244,33 @@ export default function InvoiceDetailPage() {
   };
 
   if (loading) return <Spinner />;
-  if (error && !inv) return <ErrorNote message={error} />;
-  if (!inv) return <ErrorNote message="Invoice not found" />;
+  if (error && !note) return <ErrorNote message={error} />;
+  if (!note) return <ErrorNote message="Note not found" />;
 
-  const isDraft = inv.status === "draft";
+  const isDraft = note.status === "draft";
+  const kindLabel = note.kind === "credit" ? "Credit note" : "Debit note";
 
   return (
     <>
       <PageHeader
-        title={inv.number ?? "Draft invoice"}
-        subtitle="SaaS subscription invoice"
+        title={note.number ?? `Draft ${kindLabel.toLowerCase()}`}
+        subtitle={kindLabel}
         action={
-          <Button variant="secondary" onClick={() => router.push("/super-admin/invoices")}>
-            ← Back
+          <Button
+            variant="secondary"
+            onClick={() => router.push(`/super-admin/invoices/${note.invoiceId}`)}
+          >
+            ← Back to invoice
           </Button>
         }
       />
 
       {error && <ErrorNote message={error} />}
-      {notice && (
-        <div className="mb-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300">
-          {notice}
-        </div>
-      )}
 
-      {/* Toolbar: actions available regardless of edit state */}
       <div className="mb-4 flex flex-wrap gap-2">
         <Button variant="secondary" onClick={downloadPdf}>
           Download PDF
         </Button>
-        <Button variant="secondary" onClick={duplicate} disabled={busy}>
-          Duplicate
-        </Button>
-        {(inv.status === "issued" || inv.status === "paid") && (
-          <Button variant="secondary" onClick={resend} disabled={busy}>
-            Resend email
-          </Button>
-        )}
         {isDraft && (
           <Button variant="danger" onClick={askDelete} disabled={busy}>
             Delete draft
@@ -414,49 +280,37 @@ export default function InvoiceDetailPage() {
 
       <Card className="mb-4">
         <div className="flex flex-wrap items-center gap-3">
-          <Badge tone={statusTone(inv.status)}>{inv.status}</Badge>
-          {inv.isOverdue && <Badge tone="red">overdue</Badge>}
-          <span className="text-xs text-muted">Currency {inv.currency}</span>
-          {(inv.periodStart || inv.periodEnd) && (
-            <span className="text-xs text-muted">
-              Period {inv.periodStart ?? "?"} → {inv.periodEnd ?? "?"}
-            </span>
+          <Badge tone={note.kind === "credit" ? "green" : "amber"}>{note.kind}</Badge>
+          <Badge tone={statusTone(note.status)}>{note.status}</Badge>
+          <span className="text-xs text-muted">Currency {note.currency}</span>
+          {note.issuedAt && (
+            <span className="text-xs text-muted">Issued {formatDate(note.issuedAt)}</span>
           )}
-          {inv.issuedAt && (
-            <span className="text-xs text-muted">Issued {formatDate(inv.issuedAt)}</span>
+          {note.sacCode && <span className="text-xs text-muted">SAC/HSN {note.sacCode}</span>}
+          {note.placeOfSupply && (
+            <span className="text-xs text-muted">Place of supply: {note.placeOfSupply}</span>
           )}
-          {inv.dueDate && (
-            <span
-              className={`text-xs ${
-                inv.isOverdue ? "font-medium text-red-600 dark:text-red-400" : "text-muted"
-              }`}
-            >
-              Due {formatDate(inv.dueDate)}
-            </span>
-          )}
-          {inv.status === "paid" && inv.paidAt && (
-            <span className="text-xs text-muted">
-              Paid {formatDate(inv.paidAt)}
-              {inv.paymentMethod ? ` · ${inv.paymentMethod}` : ""}
-              {inv.paymentReference ? ` · ${inv.paymentReference}` : ""}
-            </span>
-          )}
-          {inv.sacCode && <span className="text-xs text-muted">SAC/HSN {inv.sacCode}</span>}
-          {inv.placeOfSupply && (
-            <span className="text-xs text-muted">Place of supply: {inv.placeOfSupply}</span>
-          )}
-          {inv.reverseCharge && <span className="text-xs text-muted">Reverse charge</span>}
+          {note.reverseCharge && <span className="text-xs text-muted">Reverse charge</span>}
         </div>
-        {inv.status === "void" && inv.voidReason && (
-          <div className="mt-2 text-xs text-red-600 dark:text-red-400">
-            Void reason: {inv.voidReason}
+        {note.invoice && (
+          <div className="mt-3 text-sm text-muted">
+            Against invoice{" "}
+            <Link
+              href={`/super-admin/invoices/${note.invoice.id}`}
+              className="font-medium text-brand-600 hover:text-brand-700 dark:text-brand-300"
+            >
+              {note.invoice.number ?? "(draft)"}
+            </Link>
+            {note.invoice.institutionName ? ` · ${note.invoice.institutionName}` : ""}
+            <span className="ml-2 inline-block align-middle">
+              <Badge tone="slate">{note.invoice.status}</Badge>
+            </span>
           </div>
         )}
-        {(inv.billingName || inv.billingAddress || inv.gstin) && (
-          <div className="mt-3 text-sm text-muted">
-            {inv.billingName && <div className="text-ink">{inv.billingName}</div>}
-            {inv.billingAddress && <div>{inv.billingAddress}</div>}
-            {inv.gstin && <div>GSTIN: {inv.gstin}</div>}
+        {note.reason && <p className="mt-2 text-sm text-muted">Reason: {note.reason}</p>}
+        {note.status === "void" && note.voidReason && (
+          <div className="mt-2 text-xs text-red-600 dark:text-red-400">
+            Void reason: {note.voidReason}
           </div>
         )}
       </Card>
@@ -473,7 +327,7 @@ export default function InvoiceDetailPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {inv.lines.map((l) => {
+            {note.lines.map((l) => {
               const editing = editingLine?.id === l.id;
               if (editing && editingLine) {
                 return (
@@ -544,7 +398,7 @@ export default function InvoiceDetailPage() {
                           ✎
                         </button>
                         <button
-                          onClick={() => askRemoveLine(l.id)}
+                          onClick={() => setConfirmRemove(l.id)}
                           disabled={busy}
                           className="text-xs text-red-600 hover:text-red-700"
                           aria-label="Remove line"
@@ -557,7 +411,7 @@ export default function InvoiceDetailPage() {
                 </tr>
               );
             })}
-            {inv.lines.length === 0 && (
+            {note.lines.length === 0 && (
               <tr>
                 <td colSpan={isDraft ? 5 : 4} className="py-3 text-faint">
                   No line items yet
@@ -570,21 +424,20 @@ export default function InvoiceDetailPage() {
         <div className="mt-4 ml-auto w-64 space-y-1 text-sm">
           <div className="flex justify-between text-muted">
             <span>Subtotal</span>
-            <span>{money(inv.subtotal)}</span>
+            <span>{money(note.subtotal)}</span>
           </div>
           <div className="flex justify-between text-muted">
-            <span>Tax ({Number(inv.taxPercent).toFixed(2)}%)</span>
-            <span>{money(inv.taxAmount)}</span>
+            <span>Tax ({Number(note.taxPercent).toFixed(2)}%)</span>
+            <span>{money(note.taxAmount)}</span>
           </div>
           <div className="flex justify-between border-t border-line pt-1 font-semibold text-ink">
-            <span>Total</span>
-            <span>{money(inv.total)}</span>
+            <span>{note.kind === "credit" ? "Credit total" : "Debit total"}</span>
+            <span>{money(note.total)}</span>
           </div>
         </div>
-        {inv.notes && <p className="mt-3 text-sm text-muted">Notes: {inv.notes}</p>}
+        {note.notes && <p className="mt-3 text-sm text-muted">Notes: {note.notes}</p>}
       </Card>
 
-      {/* Draft: edit header, add/edit/remove lines, issue, void */}
       {isDraft && (
         <>
           <Card className="mb-4">
@@ -603,58 +456,6 @@ export default function InvoiceDetailPage() {
                   onChange={(e) => setEdit({ ...edit, taxPercent: e.target.value })}
                 />
               </Field>
-              <Field label="Payment terms (days)">
-                <Input
-                  type="number"
-                  placeholder="e.g. 15"
-                  value={edit.paymentTermsDays}
-                  onChange={(e) => setEdit({ ...edit, paymentTermsDays: e.target.value })}
-                />
-              </Field>
-              <Field label="Due date">
-                <Input
-                  type="date"
-                  value={edit.dueDate}
-                  onChange={(e) => setEdit({ ...edit, dueDate: e.target.value })}
-                />
-              </Field>
-              <Field label="Period start">
-                <Input
-                  type="date"
-                  value={edit.periodStart}
-                  onChange={(e) => setEdit({ ...edit, periodStart: e.target.value })}
-                />
-              </Field>
-              <Field label="Period end">
-                <Input
-                  type="date"
-                  value={edit.periodEnd}
-                  onChange={(e) => setEdit({ ...edit, periodEnd: e.target.value })}
-                />
-              </Field>
-              <Field label="Billing name">
-                <Input
-                  value={edit.billingName}
-                  onChange={(e) => setEdit({ ...edit, billingName: e.target.value })}
-                />
-              </Field>
-              <Field label="GSTIN">
-                <Input
-                  value={edit.gstin}
-                  onChange={(e) => setEdit({ ...edit, gstin: e.target.value })}
-                />
-              </Field>
-            </div>
-            <div className="mt-3">
-              <Field label="Billing address">
-                <Textarea
-                  rows={2}
-                  value={edit.billingAddress}
-                  onChange={(e) => setEdit({ ...edit, billingAddress: e.target.value })}
-                />
-              </Field>
-            </div>
-            <div className="mt-3 grid grid-cols-2 gap-3">
               <Field label="SAC/HSN">
                 <Input
                   value={edit.sacCode}
@@ -690,11 +491,11 @@ export default function InvoiceDetailPage() {
               Reverse charge applicable
             </label>
             <div className="mt-3 grid grid-cols-2 gap-3">
-              <Field label="Tax notes">
+              <Field label="Reason">
                 <Textarea
                   rows={2}
-                  value={edit.taxNotes}
-                  onChange={(e) => setEdit({ ...edit, taxNotes: e.target.value })}
+                  value={edit.reason}
+                  onChange={(e) => setEdit({ ...edit, reason: e.target.value })}
                 />
               </Field>
               <Field label="Notes">
@@ -747,8 +548,8 @@ export default function InvoiceDetailPage() {
               </div>
             </div>
             <div className="mt-4 flex gap-2">
-              <Button onClick={issue} disabled={busy || inv.lines.length === 0}>
-                Issue invoice
+              <Button onClick={issue} disabled={busy || note.lines.length === 0}>
+                Issue {kindLabel.toLowerCase()}
               </Button>
               <Button variant="danger" onClick={() => setVoidOpen(true)} disabled={busy}>
                 Void
@@ -758,113 +559,12 @@ export default function InvoiceDetailPage() {
         </>
       )}
 
-      {/* Issued: mark paid, void */}
-      {inv.status === "issued" && (
+      {note.status === "issued" && (
         <Card className="mb-4">
-          <p className="mb-2 text-sm font-medium text-ink">Record offline payment</p>
-          <div className="grid grid-cols-12 gap-2">
-            <div className="col-span-4">
-              <Select value={payMethod} onChange={(e) => setPayMethod(e.target.value)}>
-                <option value="bank_transfer">Bank transfer</option>
-                <option value="cheque">Cheque</option>
-                <option value="upi">UPI</option>
-                <option value="cash">Cash</option>
-                <option value="other">Other</option>
-              </Select>
-            </div>
-            <div className="col-span-6">
-              <Input
-                placeholder="Reference (optional)"
-                value={payRef}
-                onChange={(e) => setPayRef(e.target.value)}
-              />
-            </div>
-            <div className="col-span-2">
-              <Button onClick={markPaid} disabled={busy}>
-                Mark paid
-              </Button>
-            </div>
-          </div>
-          <div className="mt-4 flex gap-2">
+          <div className="flex gap-2">
             <Button variant="danger" onClick={() => setVoidOpen(true)} disabled={busy}>
               Void
             </Button>
-          </div>
-        </Card>
-      )}
-
-      {(inv.status === "issued" || inv.status === "paid" || notes.length > 0) && (
-        <Card className="mb-4">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm font-medium text-ink">Credit &amp; debit notes</p>
-            {(inv.status === "issued" || inv.status === "paid") && (
-              <div className="flex gap-2">
-                <Button variant="secondary" onClick={() => createNote("credit")} disabled={busy}>
-                  New credit note
-                </Button>
-                <Button variant="secondary" onClick={() => createNote("debit")} disabled={busy}>
-                  New debit note
-                </Button>
-              </div>
-            )}
-          </div>
-          {notes.length === 0 ? (
-            <p className="text-sm text-faint">
-              No credit or debit notes yet. Create one to adjust this invoice without
-              modifying the original.
-            </p>
-          ) : (
-            <table className="w-full text-left text-sm">
-              <thead className="text-xs uppercase text-muted">
-                <tr>
-                  <th className="py-2">Type</th>
-                  <th className="py-2">Number</th>
-                  <th className="py-2">Status</th>
-                  <th className="py-2 text-right">Total</th>
-                  <th className="py-2" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {notes.map((n) => (
-                  <tr key={n.id}>
-                    <td className="py-2">
-                      <Badge tone={n.kind === "credit" ? "green" : "amber"}>{n.kind}</Badge>
-                    </td>
-                    <td className="py-2 text-ink">{n.number ?? "(draft)"}</td>
-                    <td className="py-2">
-                      <Badge tone={statusTone(n.status)}>{n.status}</Badge>
-                    </td>
-                    <td className="py-2 text-right text-ink">{formatMoney(n.total, n.currency)}</td>
-                    <td className="py-2 text-right">
-                      <Link
-                        href={`/super-admin/invoices/notes/${n.id}`}
-                        className="text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-300"
-                      >
-                        Open →
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </Card>
-      )}
-
-      {inv.emails.length > 0 && (
-        <Card className="mb-4">
-          <p className="mb-2 text-sm font-medium text-ink">Email delivery log</p>
-          <div className="space-y-1.5 text-sm">
-            {inv.emails.map((e) => (
-              <div key={e.id} className="flex flex-wrap items-center gap-2">
-                <Badge tone={e.status === "sent" ? "green" : e.status === "failed" ? "red" : "slate"}>
-                  {e.status}
-                </Badge>
-                <span className="text-ink">{e.recipient}</span>
-                <span className="text-faint">{formatDate(e.createdAt)}</span>
-                {e.error && <span className="text-xs text-red-600">{e.error}</span>}
-              </div>
-            ))}
           </div>
         </Card>
       )}
@@ -879,7 +579,7 @@ export default function InvoiceDetailPage() {
                 className="flex flex-wrap items-center gap-2 border-b border-line py-1.5 last:border-0"
               >
                 <span className="font-medium capitalize text-ink">
-                  {a.action.replace(/^invoice\./, "").replace(/_/g, " ")}
+                  {a.action.replace(/^note\./, "").replace(/_/g, " ")}
                 </span>
                 <span className="text-faint">{formatDate(a.createdAt)}</span>
                 {a.actorEmail && <span className="text-muted">· {a.actorEmail}</span>}
@@ -890,11 +590,10 @@ export default function InvoiceDetailPage() {
         </Card>
       )}
 
-      <Modal title="Void invoice" open={voidOpen} onClose={() => setVoidOpen(false)}>
+      <Modal title={`Void ${kindLabel.toLowerCase()}`} open={voidOpen} onClose={() => setVoidOpen(false)}>
         <div className="space-y-4">
           <p className="text-sm text-muted">
-            Voiding keeps the invoice in the records but marks it void. A paid invoice
-            can&apos;t be voided. This can&apos;t be undone.
+            Voiding keeps the note in the records but marks it void. This can&apos;t be undone.
           </p>
           <Field label="Reason (required)">
             <Textarea rows={3} value={voidReason} onChange={(e) => setVoidReason(e.target.value)} />
@@ -904,20 +603,20 @@ export default function InvoiceDetailPage() {
               Cancel
             </Button>
             <Button variant="danger" onClick={doVoid} disabled={busy || !voidReason.trim()}>
-              {busy ? "Voiding…" : "Void invoice"}
+              {busy ? "Voiding…" : "Void note"}
             </Button>
           </div>
         </div>
       </Modal>
 
       <ConfirmDialog
-        open={confirm !== null}
-        title={confirm?.title ?? ""}
-        message={confirm?.message ?? ""}
-        confirmLabel={confirm?.confirmLabel ?? "Confirm"}
+        open={confirmRemove !== null}
+        title="Remove line"
+        message="Remove this line item from the draft?"
+        confirmLabel="Remove"
         busy={confirmBusy}
-        onConfirm={runConfirm}
-        onClose={() => setConfirm(null)}
+        onConfirm={runRemove}
+        onClose={() => setConfirmRemove(null)}
       />
     </>
   );

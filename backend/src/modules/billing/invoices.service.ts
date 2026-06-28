@@ -707,7 +707,7 @@ export async function duplicateInvoice(invoiceId: string, createdBy: string) {
 }
 
 /** Financial year label honouring a configurable start month, e.g. 'FY2026-27'. */
-async function currentFyLabel(
+export async function currentFyLabel(
   client: { query: (t: string, p?: unknown[]) => Promise<{ rows: { label: string }[] }> },
   fyStartMonth: number
 ): Promise<string> {

@@ -21,6 +21,7 @@ import * as service from "./platform.service";
 import * as billing from "../billing/billing.service";
 import * as invoices from "../billing/invoices.service";
 import * as invoiceSettings from "../billing/invoice-settings.service";
+import * as notes from "../billing/notes.service";
 import {
   createInvoiceSchema,
   institutionInvoicesQuerySchema,
@@ -34,6 +35,14 @@ import {
   updateLineSchema,
   voidInvoiceSchema,
 } from "../billing/invoices.schema";
+import {
+  createNoteSchema,
+  noteLineSchema,
+  noteListQuerySchema,
+  updateNoteLineSchema,
+  updateNoteSchema,
+  voidNoteSchema,
+} from "../billing/notes.schema";
 import { toCsv, toXlsx, type Cell } from "../../utils/spreadsheet";
 
 // The platform console sits ABOVE any tenant: super-admin-only (actor
@@ -578,4 +587,137 @@ platformRouter.post("/institutions/:id/invoices", requirePermission("platform:ma
     total: inv.total,
   });
   res.status(201).json(inv);
+});
+
+// ---- P2: Credit & Debit notes (standalone documents linked to an invoice) ----
+
+const noteAudit = (
+  req: Request,
+  action: string,
+  targetId: string | null,
+  institutionId: string | null,
+  detail: Record<string, unknown> = {}
+) => invoiceAudit(req, action, targetId, institutionId, detail, "saas_invoice_note");
+
+/**
+ * @openapi
+ * /platform/invoices/{id}/notes:
+ *   get: { tags: [Platform], summary: List credit/debit notes for an invoice, security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }, { in: query, name: kind, schema: { type: string, enum: [credit, debit] } }, { in: query, name: status, schema: { type: string, enum: [draft, issued, void] } }], responses: { 200: { description: Notes, newest first } } }
+ *   post: { tags: [Platform], summary: "Create a draft credit/debit note against an issued/paid invoice", security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], requestBody: { required: true, content: { application/json: { schema: { type: object, required: [kind], properties: { kind: { type: string, enum: [credit, debit] } } } } } }, responses: { 201: { description: Draft note }, 400: { description: Invoice not issued/paid }, 404: { description: Invoice not found } } }
+ */
+platformRouter.get("/invoices/:id/notes", requirePermission("platform:read"), async (req, res) => {
+  res.json(await notes.listForInvoice(uuidParam(req), noteListQuerySchema.parse(req.query)));
+});
+platformRouter.post("/invoices/:id/notes", requirePermission("platform:manage_subscriptions"), async (req, res) => {
+  const note = await notes.createNote(uuidParam(req), createNoteSchema.parse(req.body), req.user!.id);
+  await noteAudit(req, "note.created", note.id, note.institutionId, {
+    kind: note.kind,
+    invoiceId: note.invoiceId,
+  });
+  res.status(201).json(note);
+});
+
+/**
+ * @openapi
+ * /platform/notes/{id}:
+ *   get: { tags: [Platform], summary: Get a credit/debit note with its line items and linked invoice, security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Note }, 404: { description: Not found } } }
+ *   patch: { tags: [Platform], summary: Edit a draft note's header (draft only), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Updated note }, 400: { description: Not a draft } } }
+ *   delete: { tags: [Platform], summary: Delete a draft note permanently (draft only), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Deleted }, 400: { description: Not a draft } } }
+ */
+platformRouter.get("/notes/:id", requirePermission("platform:read"), async (req, res) => {
+  res.json(await notes.getNote(uuidParam(req)));
+});
+platformRouter.patch("/notes/:id", requirePermission("platform:manage_subscriptions"), async (req, res) => {
+  const body = updateNoteSchema.parse(req.body);
+  const note = await notes.updateNote(uuidParam(req), body);
+  await noteAudit(req, "note.draft_edited", note.id, note.institutionId, {
+    fields: Object.keys(body),
+  });
+  res.json(note);
+});
+platformRouter.delete("/notes/:id", requirePermission("platform:manage_subscriptions"), async (req, res) => {
+  const id = uuidParam(req);
+  const result = await notes.deleteNote(id);
+  await noteAudit(req, "note.deleted", id, null);
+  res.json(result);
+});
+
+/**
+ * @openapi
+ * /platform/notes/{id}/audit:
+ *   get: { tags: [Platform], summary: Money-action audit timeline for a note, security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Audit events, newest first } } }
+ */
+platformRouter.get("/notes/:id/audit", requirePermission("platform:read"), async (req, res) => {
+  res.json(await notes.getNoteAudit(uuidParam(req)));
+});
+
+/**
+ * @openapi
+ * /platform/notes/{id}/pdf:
+ *   get: { tags: [Platform], summary: Download the credit/debit note as a PDF, security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: "application/pdf" }, 404: { description: Not found } } }
+ */
+platformRouter.get("/notes/:id/pdf", requirePermission("platform:read"), async (req, res) => {
+  const id = uuidParam(req);
+  const buffer = await notes.notePdfBuffer(id);
+  await noteAudit(req, "note.pdf_downloaded", id, null);
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `inline; filename="note-${id}.pdf"`);
+  res.send(buffer);
+});
+
+/**
+ * @openapi
+ * /platform/notes/{id}/lines:
+ *   post: { tags: [Platform], summary: Add a line item to a draft note, security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Updated note }, 400: { description: Not a draft } } }
+ */
+platformRouter.post("/notes/:id/lines", requirePermission("platform:manage_subscriptions"), async (req, res) => {
+  const note = await notes.addNoteLine(uuidParam(req), noteLineSchema.parse(req.body));
+  await noteAudit(req, "note.line_added", note.id, note.institutionId);
+  res.json(note);
+});
+
+/**
+ * @openapi
+ * /platform/notes/{id}/lines/{lineId}:
+ *   patch: { tags: [Platform], summary: Edit a line item on a draft note (draft only), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }, { in: path, name: lineId, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Updated note }, 400: { description: Not a draft }, 404: { description: Line not found } } }
+ *   delete: { tags: [Platform], summary: Remove a line item from a draft note (draft only), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }, { in: path, name: lineId, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Updated note }, 400: { description: Not a draft }, 404: { description: Line not found } } }
+ */
+platformRouter.patch("/notes/:id/lines/:lineId", requirePermission("platform:manage_subscriptions"), async (req, res) => {
+  const lineId = uuidParam(req, "lineId");
+  const note = await notes.updateNoteLine(uuidParam(req), lineId, updateNoteLineSchema.parse(req.body));
+  await noteAudit(req, "note.line_edited", note.id, note.institutionId, { lineId });
+  res.json(note);
+});
+platformRouter.delete("/notes/:id/lines/:lineId", requirePermission("platform:manage_subscriptions"), async (req, res) => {
+  const lineId = uuidParam(req, "lineId");
+  const note = await notes.removeNoteLine(uuidParam(req), lineId);
+  await noteAudit(req, "note.line_removed", note.id, note.institutionId, { lineId });
+  res.json(note);
+});
+
+/**
+ * @openapi
+ * /platform/notes/{id}/issue:
+ *   post: { tags: [Platform], summary: "Issue a draft note (assigns a continuous, per-kind number)", security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Issued note }, 400: { description: Not a draft } } }
+ */
+platformRouter.post("/notes/:id/issue", requirePermission("platform:manage_subscriptions"), async (req, res) => {
+  const note = await notes.issueNote(uuidParam(req), req.user!.id);
+  await noteAudit(req, "note.issued", note.id, note.institutionId, {
+    number: note.number,
+    kind: note.kind,
+    total: note.total,
+  });
+  res.json(note);
+});
+
+/**
+ * @openapi
+ * /platform/notes/{id}/void:
+ *   post: { tags: [Platform], summary: Void a draft or issued note with a required reason, security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], requestBody: { required: true, content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string } } } } } }, responses: { 200: { description: Voided note }, 400: { description: Missing reason } } }
+ */
+platformRouter.post("/notes/:id/void", requirePermission("platform:manage_subscriptions"), async (req, res) => {
+  const { reason } = voidNoteSchema.parse(req.body);
+  const note = await notes.voidNote(uuidParam(req), reason, req.user!.id);
+  await noteAudit(req, "note.voided", note.id, note.institutionId, { reason });
+  res.json(note);
 });
