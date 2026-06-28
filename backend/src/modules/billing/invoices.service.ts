@@ -8,6 +8,7 @@ import type {
   createInvoiceSchema,
   invoiceLineSchema,
   markPaidSchema,
+  updateInvoiceSchema,
 } from "./invoices.schema";
 
 /**
@@ -178,6 +179,60 @@ export async function addLine(invoiceId: string, line: InvoiceLine) {
     throw ApiError.badRequest("Lines can only be added to a draft invoice");
   }
   await insertLine((t, p) => query(t, p as unknown[]), invoiceId, line);
+  await recomputeTotals(invoiceId);
+  return getInvoice(invoiceId);
+}
+
+type UpdateInvoice = z.infer<typeof updateInvoiceSchema>;
+
+const UPDATE_COLUMN_MAP: Record<string, string> = {
+  packageId: "package_id",
+  currency: "currency",
+  periodStart: "period_start",
+  periodEnd: "period_end",
+  taxPercent: "tax_percent",
+  gstin: "gstin",
+  billingName: "billing_name",
+  billingAddress: "billing_address",
+  taxNotes: "tax_notes",
+  notes: "notes",
+};
+
+/** Edit a draft's header fields, then recompute totals (tax % may have changed). */
+export async function updateDraft(invoiceId: string, input: UpdateInvoice) {
+  if ((await invoiceStatus(invoiceId)) !== "draft") {
+    throw ApiError.badRequest("Only a draft invoice can be edited");
+  }
+  const data = input as Record<string, unknown>;
+  const sets: string[] = [];
+  const params: unknown[] = [];
+  for (const [field, col] of Object.entries(UPDATE_COLUMN_MAP)) {
+    if (field in data) {
+      params.push(data[field]);
+      sets.push(`${col} = $${params.length}`);
+    }
+  }
+  if (sets.length) {
+    params.push(invoiceId);
+    await query(
+      `UPDATE saas_invoices SET ${sets.join(", ")} WHERE id = $${params.length}`,
+      params
+    );
+  }
+  await recomputeTotals(invoiceId);
+  return getInvoice(invoiceId);
+}
+
+/** Remove a line item from a draft, then recompute totals. */
+export async function removeLine(invoiceId: string, lineId: string) {
+  if ((await invoiceStatus(invoiceId)) !== "draft") {
+    throw ApiError.badRequest("Lines can only be removed from a draft invoice");
+  }
+  const { rowCount } = await query(
+    "DELETE FROM saas_invoice_lines WHERE id = $1 AND invoice_id = $2",
+    [lineId, invoiceId]
+  );
+  if (!rowCount) throw ApiError.notFound("Line not found");
   await recomputeTotals(invoiceId);
   return getInvoice(invoiceId);
 }

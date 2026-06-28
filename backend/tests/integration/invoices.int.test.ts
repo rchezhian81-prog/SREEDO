@@ -168,4 +168,115 @@ describe("billing B2: gateway-free SaaS invoicing", () => {
       .set(auth(adminToken));
     expect(denied.status).toBe(403);
   });
+
+  it("edits a draft's header and recomputes tax, then removes a line", async () => {
+    const draft = await request(app)
+      .post(`/api/v1/platform/institutions/${instId}/invoices`)
+      .set(auth(superToken))
+      .send({
+        taxPercent: 0,
+        lines: [
+          { description: "Pro plan", quantity: 1, unitPrice: 1000 },
+          { description: "Extra seats", quantity: 2, unitPrice: 250 },
+        ],
+      });
+    const invoiceId = draft.body.id;
+    const lineId = draft.body.lines[1].id; // "Extra seats"
+    expect(Number(draft.body.subtotal)).toBe(1500);
+    expect(Number(draft.body.taxAmount)).toBe(0);
+
+    // Edit header: set tax %, currency and billing details — totals recompute.
+    const edited = await request(app)
+      .patch(`/api/v1/platform/invoices/${invoiceId}`)
+      .set(auth(superToken))
+      .send({
+        taxPercent: 10,
+        currency: "USD",
+        billingName: "Acme School",
+        gstin: "29ABCDE1234F1Z5",
+      });
+    expect(edited.status).toBe(200);
+    expect(edited.body.currency).toBe("USD");
+    expect(edited.body.billingName).toBe("Acme School");
+    expect(edited.body.gstin).toBe("29ABCDE1234F1Z5");
+    expect(Number(edited.body.taxAmount)).toBe(150); // 10% of 1500
+    expect(Number(edited.body.total)).toBe(1650);
+
+    // Clearing a nullable field with null works.
+    const cleared = await request(app)
+      .patch(`/api/v1/platform/invoices/${invoiceId}`)
+      .set(auth(superToken))
+      .send({ gstin: null });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.gstin).toBeNull();
+
+    // Empty body is rejected by the schema.
+    const empty = await request(app)
+      .patch(`/api/v1/platform/invoices/${invoiceId}`)
+      .set(auth(superToken))
+      .send({});
+    expect(empty.status).toBe(400);
+
+    // Remove the "Extra seats" line -> subtotal/tax recompute.
+    const removed = await request(app)
+      .delete(`/api/v1/platform/invoices/${invoiceId}/lines/${lineId}`)
+      .set(auth(superToken));
+    expect(removed.status).toBe(200);
+    expect(removed.body.lines).toHaveLength(1);
+    expect(Number(removed.body.subtotal)).toBe(1000);
+    expect(Number(removed.body.taxAmount)).toBe(100); // 10% of 1000
+    expect(Number(removed.body.total)).toBe(1100);
+
+    // Removing an unknown line is a 404.
+    const ghost = await request(app)
+      .delete(
+        `/api/v1/platform/invoices/${invoiceId}/lines/${invoiceId}` // valid uuid, not a line
+      )
+      .set(auth(superToken));
+    expect(ghost.status).toBe(404);
+  });
+
+  it("cannot edit or remove lines after a draft is issued", async () => {
+    const draft = await request(app)
+      .post(`/api/v1/platform/institutions/${instId}/invoices`)
+      .set(auth(superToken))
+      .send({ lines: [{ description: "Plan", unitPrice: 500 }] });
+    const invoiceId = draft.body.id;
+    const lineId = draft.body.lines[0].id;
+
+    await request(app)
+      .post(`/api/v1/platform/invoices/${invoiceId}/issue`)
+      .set(auth(superToken));
+
+    const editAfter = await request(app)
+      .patch(`/api/v1/platform/invoices/${invoiceId}`)
+      .set(auth(superToken))
+      .send({ taxPercent: 5 });
+    expect(editAfter.status).toBe(400);
+
+    const removeAfter = await request(app)
+      .delete(`/api/v1/platform/invoices/${invoiceId}/lines/${lineId}`)
+      .set(auth(superToken));
+    expect(removeAfter.status).toBe(400);
+  });
+
+  it("blocks non-super-admins from editing drafts and removing lines", async () => {
+    const draft = await request(app)
+      .post(`/api/v1/platform/institutions/${instId}/invoices`)
+      .set(auth(superToken))
+      .send({ lines: [{ description: "Plan", unitPrice: 500 }] });
+    const invoiceId = draft.body.id;
+    const lineId = draft.body.lines[0].id;
+
+    const edit = await request(app)
+      .patch(`/api/v1/platform/invoices/${invoiceId}`)
+      .set(auth(adminToken))
+      .send({ taxPercent: 5 });
+    expect(edit.status).toBe(403);
+
+    const remove = await request(app)
+      .delete(`/api/v1/platform/invoices/${invoiceId}/lines/${lineId}`)
+      .set(auth(adminToken));
+    expect(remove.status).toBe(403);
+  });
 });

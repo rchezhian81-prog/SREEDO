@@ -14,6 +14,7 @@ import {
   PageHeader,
   Select,
   Spinner,
+  Textarea,
 } from "@/components/ui";
 
 const API_URL =
@@ -66,13 +67,38 @@ export default function InvoiceDetailPage() {
   const [payMethod, setPayMethod] = useState("bank_transfer");
   const [payRef, setPayRef] = useState("");
 
+  // Edit-draft header form (prefilled from the loaded invoice).
+  const [edit, setEdit] = useState({
+    currency: "",
+    taxPercent: "0",
+    billingName: "",
+    gstin: "",
+    billingAddress: "",
+    periodStart: "",
+    periodEnd: "",
+    taxNotes: "",
+    notes: "",
+  });
+
   const money = (v: string | number) => `${inv?.currency ?? ""} ${Number(v).toFixed(2)}`;
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      setInv(await api.get<Invoice>(`/platform/invoices/${id}`));
+      const data = await api.get<Invoice>(`/platform/invoices/${id}`);
+      setInv(data);
+      setEdit({
+        currency: data.currency ?? "",
+        taxPercent: String(Number(data.taxPercent) || 0),
+        billingName: data.billingName ?? "",
+        gstin: data.gstin ?? "",
+        billingAddress: data.billingAddress ?? "",
+        periodStart: data.periodStart ?? "",
+        periodEnd: data.periodEnd ?? "",
+        taxNotes: data.taxNotes ?? "",
+        notes: data.notes ?? "",
+      });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load invoice");
     } finally {
@@ -107,6 +133,24 @@ export default function InvoiceDetailPage() {
       setNewLine({ description: "", quantity: "1", unitPrice: "0" });
     });
 
+  const removeLine = (lineId: string) =>
+    act(() => api.delete(`/platform/invoices/${id}/lines/${lineId}`));
+
+  const saveEdit = () =>
+    act(() =>
+      api.patch(`/platform/invoices/${id}`, {
+        currency: edit.currency || undefined,
+        taxPercent: Number(edit.taxPercent) || 0,
+        billingName: edit.billingName || null,
+        gstin: edit.gstin || null,
+        billingAddress: edit.billingAddress || null,
+        periodStart: edit.periodStart || null,
+        periodEnd: edit.periodEnd || null,
+        taxNotes: edit.taxNotes || null,
+        notes: edit.notes || null,
+      })
+    );
+
   const issue = () => act(() => api.post(`/platform/invoices/${id}/issue`));
   const markPaid = () =>
     act(() =>
@@ -115,8 +159,7 @@ export default function InvoiceDetailPage() {
         reference: payRef || undefined,
       })
     );
-  const voidInvoice = () =>
-    act(() => api.post(`/platform/invoices/${id}/void`));
+  const voidInvoice = () => act(() => api.post(`/platform/invoices/${id}/void`));
 
   const downloadPdf = async () => {
     const token = useAuthStore.getState().accessToken;
@@ -136,6 +179,8 @@ export default function InvoiceDetailPage() {
   if (error && !inv) return <ErrorNote message={error} />;
   if (!inv) return <ErrorNote message="Invoice not found" />;
 
+  const isDraft = inv.status === "draft";
+
   return (
     <>
       <PageHeader
@@ -153,6 +198,12 @@ export default function InvoiceDetailPage() {
       <Card className="mb-4">
         <div className="flex flex-wrap items-center gap-3">
           <Badge tone={statusTone(inv.status)}>{inv.status}</Badge>
+          <span className="text-xs text-muted">Currency {inv.currency}</span>
+          {(inv.periodStart || inv.periodEnd) && (
+            <span className="text-xs text-muted">
+              Period {inv.periodStart ?? "?"} → {inv.periodEnd ?? "?"}
+            </span>
+          )}
           {inv.issuedAt && (
             <span className="text-xs text-muted">Issued {inv.issuedAt.slice(0, 10)}</span>
           )}
@@ -181,6 +232,7 @@ export default function InvoiceDetailPage() {
               <th className="py-2">Qty</th>
               <th className="py-2">Unit</th>
               <th className="py-2 text-right">Amount</th>
+              {isDraft && <th className="py-2" />}
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
@@ -190,11 +242,23 @@ export default function InvoiceDetailPage() {
                 <td className="py-2 text-muted">{Number(l.quantity)}</td>
                 <td className="py-2 text-muted">{money(l.unitPrice)}</td>
                 <td className="py-2 text-right text-ink">{money(l.amount)}</td>
+                {isDraft && (
+                  <td className="py-2 text-right">
+                    <button
+                      onClick={() => removeLine(l.id)}
+                      disabled={busy}
+                      className="text-xs text-red-600 hover:text-red-700"
+                      aria-label="Remove line"
+                    >
+                      ✕
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
             {inv.lines.length === 0 && (
               <tr>
-                <td colSpan={4} className="py-3 text-faint">
+                <td colSpan={isDraft ? 5 : 4} className="py-3 text-faint">
                   No line items yet
                 </td>
               </tr>
@@ -219,50 +283,127 @@ export default function InvoiceDetailPage() {
         {inv.notes && <p className="mt-3 text-sm text-muted">Notes: {inv.notes}</p>}
       </Card>
 
-      {/* Draft actions: add lines, issue, void */}
-      {inv.status === "draft" && (
-        <Card className="mb-4">
-          <p className="mb-2 text-sm font-medium text-ink">Add a line</p>
-          <div className="grid grid-cols-12 gap-2">
-            <div className="col-span-6">
-              <Input
-                placeholder="Description"
-                value={newLine.description}
-                onChange={(e) => setNewLine({ ...newLine, description: e.target.value })}
-              />
+      {/* Draft: edit header, add/remove lines, issue, void */}
+      {isDraft && (
+        <>
+          <Card className="mb-4">
+            <p className="mb-3 text-sm font-medium text-ink">Edit draft details</p>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Currency">
+                <Input
+                  value={edit.currency}
+                  onChange={(e) => setEdit({ ...edit, currency: e.target.value })}
+                />
+              </Field>
+              <Field label="Tax %">
+                <Input
+                  type="number"
+                  value={edit.taxPercent}
+                  onChange={(e) => setEdit({ ...edit, taxPercent: e.target.value })}
+                />
+              </Field>
+              <Field label="Period start">
+                <Input
+                  type="date"
+                  value={edit.periodStart}
+                  onChange={(e) => setEdit({ ...edit, periodStart: e.target.value })}
+                />
+              </Field>
+              <Field label="Period end">
+                <Input
+                  type="date"
+                  value={edit.periodEnd}
+                  onChange={(e) => setEdit({ ...edit, periodEnd: e.target.value })}
+                />
+              </Field>
+              <Field label="Billing name">
+                <Input
+                  value={edit.billingName}
+                  onChange={(e) => setEdit({ ...edit, billingName: e.target.value })}
+                />
+              </Field>
+              <Field label="GSTIN">
+                <Input
+                  value={edit.gstin}
+                  onChange={(e) => setEdit({ ...edit, gstin: e.target.value })}
+                />
+              </Field>
             </div>
-            <div className="col-span-2">
-              <Input
-                type="number"
-                value={newLine.quantity}
-                onChange={(e) => setNewLine({ ...newLine, quantity: e.target.value })}
-              />
+            <div className="mt-3">
+              <Field label="Billing address">
+                <Textarea
+                  rows={2}
+                  value={edit.billingAddress}
+                  onChange={(e) => setEdit({ ...edit, billingAddress: e.target.value })}
+                />
+              </Field>
             </div>
-            <div className="col-span-3">
-              <Input
-                type="number"
-                value={newLine.unitPrice}
-                onChange={(e) => setNewLine({ ...newLine, unitPrice: e.target.value })}
-              />
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <Field label="Tax notes">
+                <Textarea
+                  rows={2}
+                  value={edit.taxNotes}
+                  onChange={(e) => setEdit({ ...edit, taxNotes: e.target.value })}
+                />
+              </Field>
+              <Field label="Notes">
+                <Textarea
+                  rows={2}
+                  value={edit.notes}
+                  onChange={(e) => setEdit({ ...edit, notes: e.target.value })}
+                />
+              </Field>
             </div>
-            <div className="col-span-1 flex items-center">
-              <Button variant="secondary" onClick={addLine} disabled={busy || !newLine.description}>
-                +
+            <div className="mt-3">
+              <Button variant="secondary" onClick={saveEdit} disabled={busy}>
+                Save details
               </Button>
             </div>
-          </div>
-          <div className="mt-4 flex gap-2">
-            <Button onClick={issue} disabled={busy || inv.lines.length === 0}>
-              Issue invoice
-            </Button>
-            <Button variant="danger" onClick={voidInvoice} disabled={busy}>
-              Void
-            </Button>
-          </div>
-        </Card>
+          </Card>
+
+          <Card className="mb-4">
+            <p className="mb-2 text-sm font-medium text-ink">Add a line</p>
+            <div className="grid grid-cols-12 gap-2">
+              <div className="col-span-6">
+                <Input
+                  placeholder="Description"
+                  value={newLine.description}
+                  onChange={(e) => setNewLine({ ...newLine, description: e.target.value })}
+                />
+              </div>
+              <div className="col-span-2">
+                <Input
+                  type="number"
+                  value={newLine.quantity}
+                  onChange={(e) => setNewLine({ ...newLine, quantity: e.target.value })}
+                />
+              </div>
+              <div className="col-span-3">
+                <Input
+                  type="number"
+                  value={newLine.unitPrice}
+                  onChange={(e) => setNewLine({ ...newLine, unitPrice: e.target.value })}
+                />
+              </div>
+              <div className="col-span-1 flex items-center">
+                <Button variant="secondary" onClick={addLine} disabled={busy || !newLine.description}>
+                  +
+                </Button>
+              </div>
+            </div>
+            <div className="mt-4 flex gap-2">
+              <Button onClick={issue} disabled={busy || inv.lines.length === 0}>
+                Issue invoice
+              </Button>
+              <Button variant="danger" onClick={voidInvoice} disabled={busy}>
+                Void
+              </Button>
+            </div>
+          </Card>
+        </>
       )}
 
-      {/* Issued actions: mark paid, download PDF, void */}
+      {/* Issued: mark paid, download PDF, void */}
       {inv.status === "issued" && (
         <Card className="mb-4">
           <p className="mb-2 text-sm font-medium text-ink">Record offline payment</p>

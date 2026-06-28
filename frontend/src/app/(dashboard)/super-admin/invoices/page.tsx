@@ -34,6 +34,11 @@ interface InstitutionBrief {
   code: string;
 }
 
+interface PackageBrief {
+  id: string;
+  name: string;
+}
+
 interface DraftLine {
   description: string;
   quantity: string;
@@ -50,16 +55,21 @@ export default function InvoicesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("");
+  const [search, setSearch] = useState("");
 
   const [open, setOpen] = useState(false);
   const [institutions, setInstitutions] = useState<InstitutionBrief[]>([]);
+  const [packages, setPackages] = useState<PackageBrief[]>([]);
   const [form, setForm] = useState({
     institutionId: "",
+    packageId: "",
     currency: "INR",
     taxPercent: "0",
     billingName: "",
     gstin: "",
     billingAddress: "",
+    periodStart: "",
+    periodEnd: "",
     notes: "",
   });
   const [lines, setLines] = useState<DraftLine[]>([
@@ -97,6 +107,13 @@ export default function InvoicesPage() {
         /* institution list is best-effort for the picker */
       }
     }
+    if (packages.length === 0) {
+      try {
+        setPackages(await api.get<PackageBrief[]>("/packages"));
+      } catch {
+        /* package list is optional for the picker */
+      }
+    }
   };
 
   const setLine = (i: number, key: keyof DraftLine, value: string) =>
@@ -111,11 +128,14 @@ export default function InvoicesPage() {
     setSaving(true);
     try {
       const payload = {
+        packageId: form.packageId || undefined,
         currency: form.currency || undefined,
         taxPercent: Number(form.taxPercent) || 0,
         gstin: form.gstin || undefined,
         billingName: form.billingName || undefined,
         billingAddress: form.billingAddress || undefined,
+        periodStart: form.periodStart || undefined,
+        periodEnd: form.periodEnd || undefined,
         notes: form.notes || undefined,
         lines: lines
           .filter((l) => l.description.trim())
@@ -148,14 +168,23 @@ export default function InvoicesPage() {
         action={<Button onClick={openCreate}>+ New invoice</Button>}
       />
 
-      <div className="mb-4 w-44">
-        <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-          <option value="">All statuses</option>
-          <option value="draft">Draft</option>
-          <option value="issued">Issued</option>
-          <option value="paid">Paid</option>
-          <option value="void">Void</option>
-        </Select>
+      <div className="mb-4 flex flex-wrap gap-3">
+        <div className="w-44">
+          <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            <option value="">All statuses</option>
+            <option value="draft">Draft</option>
+            <option value="issued">Issued</option>
+            <option value="paid">Paid</option>
+            <option value="void">Void</option>
+          </Select>
+        </div>
+        <div className="max-w-xs flex-1">
+          <Input
+            placeholder="Search institution or invoice no…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
       </div>
 
       {loading ? (
@@ -177,7 +206,17 @@ export default function InvoicesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
-              {rows.map((r) => (
+              {rows
+                .filter((r) => {
+                  const q = search.trim().toLowerCase();
+                  if (!q) return true;
+                  return (
+                    r.institutionName.toLowerCase().includes(q) ||
+                    r.institutionCode.toLowerCase().includes(q) ||
+                    (r.number ?? "").toLowerCase().includes(q)
+                  );
+                })
+                .map((r) => (
                 <tr
                   key={r.id}
                   className="cursor-pointer hover:bg-surface-2"
@@ -219,6 +258,19 @@ export default function InvoicesPage() {
               ))}
             </Select>
           </Field>
+          <Field label="Package (optional)">
+            <Select
+              value={form.packageId}
+              onChange={(e) => setForm({ ...form, packageId: e.target.value })}
+            >
+              <option value="">No package</option>
+              {packages.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Currency">
               <Input
@@ -231,6 +283,22 @@ export default function InvoicesPage() {
                 type="number"
                 value={form.taxPercent}
                 onChange={(e) => setForm({ ...form, taxPercent: e.target.value })}
+              />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Period start (optional)">
+              <Input
+                type="date"
+                value={form.periodStart}
+                onChange={(e) => setForm({ ...form, periodStart: e.target.value })}
+              />
+            </Field>
+            <Field label="Period end (optional)">
+              <Input
+                type="date"
+                value={form.periodEnd}
+                onChange={(e) => setForm({ ...form, periodEnd: e.target.value })}
               />
             </Field>
           </div>

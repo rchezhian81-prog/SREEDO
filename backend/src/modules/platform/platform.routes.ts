@@ -25,6 +25,7 @@ import {
   invoiceLineSchema,
   listInvoicesQuerySchema,
   markPaidSchema,
+  updateInvoiceSchema,
 } from "../billing/invoices.schema";
 
 // The platform console sits ABOVE any tenant: super-admin-only (actor
@@ -306,6 +307,24 @@ platformRouter.get("/invoices/:id/pdf", requirePermission("platform:read"), asyn
  */
 platformRouter.post("/invoices/:id/lines", requirePermission("platform:manage_subscriptions"), async (req, res) => {
   res.json(await invoices.addLine(uuidParam(req), invoiceLineSchema.parse(req.body)));
+});
+
+/**
+ * @openapi
+ * /platform/invoices/{id}:
+ *   patch: { tags: [Platform], summary: Edit a draft invoice's header (draft only), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Updated invoice }, 400: { description: Not a draft } } }
+ */
+platformRouter.patch("/invoices/:id", requirePermission("platform:manage_subscriptions"), async (req, res) => {
+  res.json(await invoices.updateDraft(uuidParam(req), updateInvoiceSchema.parse(req.body)));
+});
+
+/**
+ * @openapi
+ * /platform/invoices/{id}/lines/{lineId}:
+ *   delete: { tags: [Platform], summary: Remove a line item from a draft invoice (draft only), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }, { in: path, name: lineId, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Updated invoice }, 400: { description: Not a draft }, 404: { description: Line not found } } }
+ */
+platformRouter.delete("/invoices/:id/lines/:lineId", requirePermission("platform:manage_subscriptions"), async (req, res) => {
+  res.json(await invoices.removeLine(uuidParam(req), uuidParam(req, "lineId")));
 });
 
 /**
