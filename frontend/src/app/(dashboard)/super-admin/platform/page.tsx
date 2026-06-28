@@ -8,12 +8,25 @@ import {
   Button,
   Card,
   ErrorNote,
+  Input,
   PageHeader,
   Spinner,
 } from "@/components/ui";
 import type { PlatformHealth, PlatformKpis } from "@/types";
 import { usePlatformGuard } from "./_guard";
 import { formatBytes, formatNumber, formatUptime } from "./_utils";
+
+interface EmailStatus {
+  configured: boolean;
+  ok: boolean;
+  error?: string | null;
+}
+
+type AlertTone = "red" | "amber";
+interface PlatformAlert {
+  tone: AlertTone;
+  text: string;
+}
 
 function KpiCard({
   label,
@@ -61,19 +74,28 @@ export default function PlatformDashboardPage() {
 
   const [kpis, setKpis] = useState<PlatformKpis | null>(null);
   const [health, setHealth] = useState<PlatformHealth | null>(null);
+  const [email, setEmail] = useState<EmailStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshedAt, setRefreshedAt] = useState<Date | null>(null);
+
+  const [testTo, setTestTo] = useState("");
+  const [testBusy, setTestBusy] = useState(false);
+  const [testMsg, setTestMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [k, h] = await Promise.all([
+      const [k, h, e] = await Promise.all([
         api.get<PlatformKpis>("/platform/kpis"),
         api.get<PlatformHealth>("/platform/health").catch(() => null),
+        api.get<EmailStatus>("/platform/email/status").catch(() => null),
       ]);
       setKpis(k);
       setHealth(h);
+      setEmail(e);
+      setRefreshedAt(new Date());
     } catch (err) {
       setKpis(null);
       setError(
@@ -88,6 +110,45 @@ export default function PlatformDashboardPage() {
     if (ready) load();
   }, [ready, load]);
 
+  const sendTestEmail = async () => {
+    if (!testTo.trim()) return;
+    setTestBusy(true);
+    setTestMsg(null);
+    try {
+      const r = await api.post<{ ok: boolean; error?: string }>(
+        "/platform/email/test",
+        { to: testTo.trim() }
+      );
+      setTestMsg(r.ok ? `Test email sent to ${testTo.trim()}.` : `Failed: ${r.error ?? "unknown error"}`);
+    } catch (err) {
+      setTestMsg(err instanceof ApiError ? err.message : "Failed to send test email");
+    } finally {
+      setTestBusy(false);
+    }
+  };
+
+  // Alerts derived ONLY from real data (no fabricated values).
+  const alerts: PlatformAlert[] = [];
+  if (kpis && kpis.suspendedInstitutions > 0)
+    alerts.push({
+      tone: "amber",
+      text: `${formatNumber(kpis.suspendedInstitutions)} institution(s) suspended`,
+    });
+  if (kpis && Number(kpis.feesOutstanding) > 0)
+    alerts.push({
+      tone: "amber",
+      text: `Tenant fees outstanding: ${formatNumber(kpis.feesOutstanding)}`,
+    });
+  if (health) {
+    if (!health.postgres) alerts.push({ tone: "red", text: "PostgreSQL is offline" });
+    if (!health.mongo) alerts.push({ tone: "red", text: "MongoDB is offline" });
+    if (!health.auditLog) alerts.push({ tone: "red", text: "Audit log is unavailable" });
+  }
+  if (email && !email.configured)
+    alerts.push({ tone: "amber", text: "SMTP is not configured — email is disabled" });
+  else if (email && email.configured && !email.ok)
+    alerts.push({ tone: "red", text: `SMTP error: ${email.error ?? "connection failed"}` });
+
   if (!ready) return gate;
 
   return (
@@ -96,10 +157,12 @@ export default function PlatformDashboardPage() {
         title="Platform overview"
         subtitle="Cross-tenant KPIs, module adoption & platform health"
         action={
-          <div className="flex flex-wrap gap-2">
-            <Link href="/super-admin/platform/institutions">
-              <Button variant="secondary">Institutions</Button>
-            </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            {refreshedAt && (
+              <span className="text-xs text-slate-400">
+                Updated {refreshedAt.toLocaleTimeString()}
+              </span>
+            )}
             <Button variant="secondary" onClick={load} disabled={loading}>
               {loading ? "Refreshing…" : "Refresh"}
             </Button>
@@ -107,37 +170,102 @@ export default function PlatformDashboardPage() {
         }
       />
 
+      {/* Quick actions */}
+      <div className="mb-6 flex flex-wrap gap-2">
+        <Link href="/super-admin/platform/institutions/new">
+          <Button>Add institution</Button>
+        </Link>
+        <Link href="/super-admin/platform/institutions">
+          <Button variant="secondary">View institutions</Button>
+        </Link>
+        <Link href="/super-admin/platform/audit">
+          <Button variant="secondary">Audit logs</Button>
+        </Link>
+        <Link href="/super-admin/platform/support">
+          <Button variant="secondary">Support access</Button>
+        </Link>
+      </div>
+
       {loading ? (
         <Spinner />
       ) : error ? (
         <ErrorNote message={error} />
       ) : kpis ? (
         <div className="space-y-8">
-          {health && (
+          {/* Alerts (real data only) */}
+          {alerts.length > 0 && (
             <div>
               <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
-                Platform health
+                Alerts
               </h2>
-              <div className="flex flex-wrap items-center gap-2">
-                <HealthChip label="PostgreSQL" ok={health.postgres} />
-                <HealthChip label="MongoDB" ok={health.mongo} />
-                <HealthChip label="Audit log" ok={health.auditLog} />
-                <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
-                  Uptime{" "}
-                  <span className="font-medium text-slate-900">
-                    {formatUptime(health.uptimeSeconds)}
-                  </span>
-                </div>
-                <Link
-                  href="/super-admin/health"
-                  className="text-sm font-medium text-brand-600 hover:text-brand-700"
-                >
-                  Details →
-                </Link>
+              <div className="space-y-2">
+                {alerts.map((a, i) => (
+                  <div
+                    key={i}
+                    className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
+                      a.tone === "red"
+                        ? "border-red-200 bg-red-50 text-red-700"
+                        : "border-amber-200 bg-amber-50 text-amber-700"
+                    }`}
+                  >
+                    <Badge tone={a.tone}>{a.tone === "red" ? "critical" : "warning"}</Badge>
+                    <span>{a.text}</span>
+                  </div>
+                ))}
               </div>
             </div>
           )}
 
+          {/* Health */}
+          <div>
+            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
+              Platform health
+            </h2>
+            <div className="flex flex-wrap items-center gap-2">
+              {health ? (
+                <>
+                  <HealthChip label="API" ok={true} />
+                  <HealthChip label="PostgreSQL" ok={health.postgres} />
+                  <HealthChip label="MongoDB" ok={health.mongo} />
+                  <HealthChip label="Audit log" ok={health.auditLog} />
+                  <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
+                    Uptime{" "}
+                    <span className="font-medium text-slate-900">
+                      {formatUptime(health.uptimeSeconds)}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <span className="text-sm text-slate-400">Health unavailable</span>
+              )}
+              {email && (
+                <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+                  <span className="text-sm font-medium text-slate-600">SMTP</span>
+                  <Badge tone={!email.configured ? "slate" : email.ok ? "green" : "red"}>
+                    {!email.configured ? "not configured" : email.ok ? "ok" : "error"}
+                  </Badge>
+                </div>
+              )}
+            </div>
+            {/* SMTP test (no secrets shown; audited server-side) */}
+            {email?.configured && (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Input
+                  type="email"
+                  placeholder="you@example.com"
+                  value={testTo}
+                  onChange={(e) => setTestTo(e.target.value)}
+                  className="max-w-xs"
+                />
+                <Button variant="secondary" onClick={sendTestEmail} disabled={testBusy || !testTo.trim()}>
+                  {testBusy ? "Sending…" : "Send test email"}
+                </Button>
+                {testMsg && <span className="text-xs text-slate-500">{testMsg}</span>}
+              </div>
+            )}
+          </div>
+
+          {/* KPI grid */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <KpiCard
               label="Institutions"
@@ -146,37 +274,27 @@ export default function PlatformDashboardPage() {
                 kpis.suspendedInstitutions
               )} suspended`}
             />
+            <KpiCard
+              label="Active subscriptions"
+              value={formatNumber(kpis.activeSubscriptions)}
+            />
             <KpiCard label="Students" value={formatNumber(kpis.totalStudents)} />
             <KpiCard label="Staff" value={formatNumber(kpis.totalStaff)} />
             <KpiCard label="Users" value={formatNumber(kpis.totalUsers)} />
-            <KpiCard
-              label="Fees outstanding"
-              value={formatNumber(kpis.feesOutstanding)}
-            />
-            <KpiCard
-              label="Online payments"
-              value={formatNumber(kpis.onlinePaymentsTotal)}
-            />
+            <KpiCard label="Fees outstanding" value={formatNumber(kpis.feesOutstanding)} />
+            <KpiCard label="Online payments" value={formatNumber(kpis.onlinePaymentsTotal)} />
+            <KpiCard label="Active sessions" value={formatNumber(kpis.activeSessions)} />
             <KpiCard
               label="Documents"
               value={formatNumber(kpis.totalDocuments)}
               hint={`${formatBytes(kpis.storageBytes)} stored`}
             />
-            <KpiCard
-              label="Active sessions"
-              value={formatNumber(kpis.activeSessions)}
-            />
-            <KpiCard
-              label="Scheduled reports"
-              value={formatNumber(kpis.scheduledReports)}
-            />
-            <KpiCard
-              label="Custom reports"
-              value={formatNumber(kpis.customReports)}
-            />
             <KpiCard label="Storage" value={formatBytes(kpis.storageBytes)} />
+            <KpiCard label="Scheduled reports" value={formatNumber(kpis.scheduledReports)} />
+            <KpiCard label="Custom reports" value={formatNumber(kpis.customReports)} />
           </div>
 
+          {/* Module adoption */}
           <div>
             <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
               Module adoption
@@ -188,9 +306,7 @@ export default function PlatformDashboardPage() {
             <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-5">
               {ADOPTION_FIELDS.map((field) => (
                 <Card key={field.key}>
-                  <p className="text-sm font-medium text-slate-500">
-                    {field.label}
-                  </p>
+                  <p className="text-sm font-medium text-slate-500">{field.label}</p>
                   <p className="mt-1 text-2xl font-semibold text-slate-900">
                     {formatNumber(kpis.moduleAdoption[field.key])}
                   </p>

@@ -1542,6 +1542,7 @@ export interface PlatformKpis {
   totalInstitutions: number;
   activeInstitutions: number;
   suspendedInstitutions: number;
+  activeSubscriptions: number;
   totalStudents: number;
   totalStaff: number;
   totalUsers: number;
@@ -1646,6 +1647,7 @@ export interface PlatformAuditEntry {
 export interface ImpersonationResult {
   impersonating: boolean;
   token: string;
+  expiresAt: string | null;
   user: {
     id: string;
     email: string;
@@ -1653,6 +1655,35 @@ export interface ImpersonationResult {
     institutionId: string | null;
     fullName: string;
   };
+}
+
+/** A row from GET /platform/users (support-access selector). */
+export interface PlatformUserSearchRow {
+  id: string;
+  email: string;
+  fullName: string;
+  role: UserRole;
+  isActive: boolean;
+  institutionId: string;
+  institutionName: string;
+  institutionCode: string;
+}
+
+/** A row from GET /platform/audit (paginated cross-tenant audit log). */
+export interface PlatformAuditRow {
+  id: string;
+  action: string;
+  targetType: string | null;
+  targetId: string | null;
+  institutionId: string | null;
+  institutionName: string | null;
+  institutionCode: string | null;
+  actorId: string | null;
+  actorEmail: string | null;
+  actorRole: string | null;
+  detail: Record<string, unknown> | null;
+  ip: string | null;
+  createdAt: string;
 }
 
 // --- Background Job Queue ---

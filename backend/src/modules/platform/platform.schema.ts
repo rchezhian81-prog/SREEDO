@@ -23,19 +23,77 @@ export const suspendSchema = z.object({
   reason: z.string().max(500).optional(),
 });
 
+// Support access (impersonation): a reason is MANDATORY and must be meaningful
+// (audited justification for entering a tenant), enforced server-side.
 export const impersonateSchema = z.object({
   userId: z.string().uuid(),
-  reason: z.string().max(500).optional(),
+  reason: z.string().trim().min(8, "A reason of at least 8 characters is required").max(500),
 });
 
-export const platformAuditQuerySchema = z.object({
+// --- Support user selector (search) ---
+export const userSearchQuerySchema = z.object({
+  q: z.string().trim().max(200).optional(),
+  institutionId: z.string().uuid().optional(),
+  role: z.string().max(40).optional(),
+  status: z.enum(["active", "inactive"]).optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+});
+
+// --- Institution directory (search / filter / paginate / sort) ---
+const institutionFilterFields = {
+  q: z.string().trim().max(200).optional(),
+  status: z.enum(["active", "suspended"]).optional(),
+  type: z.enum(["school", "college"]).optional(),
+  packageId: z.string().uuid().optional(),
+  createdFrom: z.string().date().optional(),
+  createdTo: z.string().date().optional(),
+};
+const institutionSort = z
+  .enum(["name", "code", "status", "createdAt", "students", "staff", "package"])
+  .default("createdAt");
+const sortOrder = z.enum(["asc", "desc"]).default("desc");
+
+export const listInstitutionsQuerySchema = z.object({
+  ...institutionFilterFields,
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  sort: institutionSort,
+  order: sortOrder,
+});
+
+export const institutionExportQuerySchema = z.object({
+  ...institutionFilterFields,
+  sort: institutionSort,
+  order: sortOrder,
+  format: z.enum(["csv", "xlsx"]).default("csv"),
+});
+
+// --- Cross-tenant audit viewer (search / filter / paginate / sort / export) ---
+const auditFilterFields = {
+  q: z.string().trim().max(200).optional(),
   institutionId: z.string().uuid().optional(),
   actorId: z.string().uuid().optional(),
   action: z.string().max(80).optional(),
   targetType: z.string().max(40).optional(),
+  ip: z.string().max(60).optional(),
   dateFrom: z.string().date().optional(),
   dateTo: z.string().date().optional(),
-  limit: z.coerce.number().int().min(1).max(500).optional(),
+};
+const auditSort = z.enum(["createdAt", "action", "actorEmail"]).default("createdAt");
+
+export const platformAuditQuerySchema = z.object({
+  ...auditFilterFields,
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(200).default(50),
+  sort: auditSort,
+  order: sortOrder,
+});
+
+export const auditExportQuerySchema = z.object({
+  ...auditFilterFields,
+  sort: auditSort,
+  order: sortOrder,
+  format: z.enum(["csv", "xlsx"]).default("csv"),
 });
 
 // --- RBAC console ---

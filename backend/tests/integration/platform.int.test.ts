@@ -42,7 +42,8 @@ describe("super admin — platform hardening", () => {
   it("lets the super admin list institutions; denies everyone else", async () => {
     const list = await get("/api/v1/platform/institutions", tok.root);
     expect(list.status).toBe(200);
-    expect(list.body.some((i: { id: string }) => i.id === instA)).toBe(true);
+    expect(list.body.rows.some((i: { id: string }) => i.id === instA)).toBe(true);
+    expect(list.body).toHaveProperty("total");
 
     // Tenant admin + tenant users are all denied the platform routes.
     for (const role of ["admin", "teacher", "student", "parent"] as const) {
@@ -61,7 +62,7 @@ describe("super admin — platform hardening", () => {
     expect(created.body.code).toBe("NEWSCH");
 
     const audit = await get("/api/v1/platform/audit?action=institution.create", tok.root);
-    expect(audit.body.some((r: { targetId: string }) => r.targetId === created.body.id)).toBe(true);
+    expect(audit.body.rows.some((r: { targetId: string }) => r.targetId === created.body.id)).toBe(true);
   });
 
   it("suspends and activates an institution (audited)", async () => {
@@ -74,7 +75,7 @@ describe("super admin — platform hardening", () => {
     expect(act.body.isActive).toBe(true);
 
     const audit = await get(`/api/v1/platform/audit?institutionId=${instA}`, tok.root);
-    const actions = audit.body.map((r: { action: string }) => r.action);
+    const actions = audit.body.rows.map((r: { action: string }) => r.action);
     expect(actions).toEqual(expect.arrayContaining(["institution.suspend", "institution.activate"]));
   });
 
@@ -86,7 +87,7 @@ describe("super admin — platform hardening", () => {
     expect(sub.body.packageId).toBe(packageId);
 
     const audit = await get(`/api/v1/platform/audit?institutionId=${instA}&action=subscription.assign`, tok.root);
-    expect(audit.body.length).toBeGreaterThanOrEqual(1);
+    expect(audit.body.rows.length).toBeGreaterThanOrEqual(1);
   });
 
   it("sets per-institution feature limits (audited)", async () => {
@@ -99,7 +100,7 @@ describe("super admin — platform hardening", () => {
 
     const detail = await get(`/api/v1/platform/institutions/${instA}`, tok.root);
     expect(detail.body.settings.limits.maxStudents).toBe(500);
-    expect((await get(`/api/v1/platform/audit?action=limits.update`, tok.root)).body.length).toBeGreaterThanOrEqual(1);
+    expect((await get(`/api/v1/platform/audit?action=limits.update`, tok.root)).body.rows.length).toBeGreaterThanOrEqual(1);
   });
 
   it("exposes platform-wide KPIs", async () => {
@@ -116,17 +117,19 @@ describe("super admin — platform hardening", () => {
     await post(`/api/v1/platform/institutions/${instA}/suspend`, tok.root, {});
     const all = await get("/api/v1/platform/audit", tok.root);
     expect(all.status).toBe(200);
-    expect(all.body.length).toBeGreaterThanOrEqual(1);
+    expect(all.body.rows.length).toBeGreaterThanOrEqual(1);
+    expect(all.body).toHaveProperty("total");
     // Filter narrows results.
     const filtered = await get("/api/v1/platform/audit?action=institution.suspend", tok.root);
-    expect(filtered.body.every((r: { action: string }) => r.action === "institution.suspend")).toBe(true);
+    expect(filtered.body.rows.every((r: { action: string }) => r.action === "institution.suspend")).toBe(true);
   });
 
   it("starts an audited impersonation session without leaking secrets", async () => {
-    const res = await post("/api/v1/platform/impersonate", tok.root, { userId: adminId, reason: "support" });
+    const res = await post("/api/v1/platform/impersonate", tok.root, { userId: adminId, reason: "support ticket #42" });
     expect(res.status).toBe(200);
     expect(res.body.impersonating).toBe(true);
     expect(typeof res.body.token).toBe("string");
+    expect(res.body).toHaveProperty("expiresAt");
     expect(res.body.user.id).toBe(adminId);
     // No secret fields are ever returned.
     expect(res.body.user.passwordHash).toBeUndefined();
@@ -136,12 +139,12 @@ describe("super admin — platform hardening", () => {
     expect(me.status).toBe(200);
     expect(me.body.email).toBe("admin@plat.dev");
     // Audited.
-    expect((await get("/api/v1/platform/audit?action=impersonate.start", tok.root)).body.length).toBeGreaterThanOrEqual(1);
+    expect((await get("/api/v1/platform/audit?action=impersonate.start", tok.root)).body.rows.length).toBeGreaterThanOrEqual(1);
   });
 
   it("refuses to impersonate a super admin", async () => {
     const root = await query<{ id: string }>("SELECT id FROM users WHERE email='root@platform.dev'", []);
-    expect((await post("/api/v1/platform/impersonate", tok.root, { userId: root.rows[0].id })).status).toBe(400);
+    expect((await post("/api/v1/platform/impersonate", tok.root, { userId: root.rows[0].id, reason: "support ticket #42" })).status).toBe(400);
   });
 
   it("keeps cross-tenant data off the tenant surface and exposes no secrets in detail", async () => {

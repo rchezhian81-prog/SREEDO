@@ -8,14 +8,18 @@ import { mailerConfigured, sendTestEmail, verifyMailer } from "../../utils/maile
 import { clientIp, recordSecurityEvent } from "../../utils/security-audit";
 import {
   assignSubscriptionSchema,
+  auditExportQuerySchema,
   createInstitutionSchema,
   grantPermissionSchema,
   impersonateSchema,
+  institutionExportQuerySchema,
+  listInstitutionsQuerySchema,
   platformAuditQuerySchema,
   roleParamSchema,
   setLimitsSchema,
   suspendSchema,
   updateInstitutionSchema,
+  userSearchQuerySchema,
 } from "./platform.schema";
 import * as service from "./platform.service";
 import * as billing from "../billing/billing.service";
@@ -135,7 +139,7 @@ platformRouter.get("/health", requirePermission("platform:health_read"), async (
 /**
  * @openapi
  * /platform/audit:
- *   get: { tags: [Platform], summary: Cross-tenant platform audit log (read-only; durable), security: [{ bearerAuth: [] }], parameters: [{ in: query, name: institutionId, schema: { type: string, format: uuid } }, { in: query, name: actorId, schema: { type: string, format: uuid } }, { in: query, name: action, schema: { type: string } }, { in: query, name: targetType, schema: { type: string } }, { in: query, name: dateFrom, schema: { type: string } }, { in: query, name: dateTo, schema: { type: string } }], responses: { 200: { description: Audit rows } } }
+ *   get: { tags: [Platform], summary: "Cross-tenant platform audit log (read-only, durable; search/filter/sort/paginate)", security: [{ bearerAuth: [] }], parameters: [{ in: query, name: q, schema: { type: string } }, { in: query, name: institutionId, schema: { type: string, format: uuid } }, { in: query, name: actorId, schema: { type: string, format: uuid } }, { in: query, name: action, schema: { type: string } }, { in: query, name: targetType, schema: { type: string } }, { in: query, name: ip, schema: { type: string } }, { in: query, name: dateFrom, schema: { type: string } }, { in: query, name: dateTo, schema: { type: string } }, { in: query, name: page, schema: { type: integer } }, { in: query, name: pageSize, schema: { type: integer } }, { in: query, name: sort, schema: { type: string, enum: [createdAt, action, actorEmail] } }, { in: query, name: order, schema: { type: string, enum: [asc, desc] } }], responses: { 200: { description: "Paged audit { rows, total, page, pageSize }" } } }
  */
 platformRouter.get("/audit", requirePermission("platform:audit_read"), async (req, res) => {
   res.json(await service.listAudit(platformAuditQuerySchema.parse(req.query)));
@@ -143,8 +147,37 @@ platformRouter.get("/audit", requirePermission("platform:audit_read"), async (re
 
 /**
  * @openapi
+ * /platform/audit/export:
+ *   get: { tags: [Platform], summary: "Export the filtered audit log as CSV/XLSX", security: [{ bearerAuth: [] }], parameters: [{ in: query, name: format, schema: { type: string, enum: [csv, xlsx] } }, { in: query, name: q, schema: { type: string } }, { in: query, name: institutionId, schema: { type: string, format: uuid } }, { in: query, name: action, schema: { type: string } }, { in: query, name: dateFrom, schema: { type: string } }, { in: query, name: dateTo, schema: { type: string } }], responses: { 200: { description: "CSV or XLSX file of the filtered audit log" } } }
+ */
+platformRouter.get("/audit/export", requirePermission("platform:audit_read"), async (req, res) => {
+  const q = auditExportQuerySchema.parse(req.query);
+  const { columns, rows } = await service.exportAudit(q);
+  await recordSecurityEvent({
+    action: "platform.audit_exported",
+    targetType: "platform_audit_log",
+    actorId: req.user!.id,
+    actorEmail: req.user!.email,
+    actorRole: req.user!.role,
+    detail: { format: q.format, rows: rows.length },
+    ip: clientIp(req),
+  });
+  sendSpreadsheet(res, q.format, "platform-audit", columns, rows, null);
+});
+
+/**
+ * @openapi
+ * /platform/users:
+ *   get: { tags: [Platform], summary: "Search impersonatable tenant users for the support selector (excludes super-admins)", security: [{ bearerAuth: [] }], parameters: [{ in: query, name: q, schema: { type: string } }, { in: query, name: institutionId, schema: { type: string, format: uuid } }, { in: query, name: role, schema: { type: string } }, { in: query, name: status, schema: { type: string, enum: [active, inactive] } }, { in: query, name: limit, schema: { type: integer } }], responses: { 200: { description: Matching users (safe identity fields only) } } }
+ */
+platformRouter.get("/users", requirePermission("platform:impersonate"), async (req, res) => {
+  res.json(await service.searchUsers(userSearchQuerySchema.parse(req.query)));
+});
+
+/**
+ * @openapi
  * /platform/impersonate:
- *   post: { tags: [Platform], summary: Start a support impersonation session (audited; returns a scoped token, never secrets), security: [{ bearerAuth: [] }], responses: { 200: { description: "{ impersonating, token, user }" } } }
+ *   post: { tags: [Platform], summary: "Start a support impersonation session (reason required; audited; returns a scoped token + expiry, never secrets)", security: [{ bearerAuth: [] }], responses: { 200: { description: "{ impersonating, token, expiresAt, user }" }, 400: { description: Missing reason or invalid target } } }
  */
 platformRouter.post("/impersonate", requirePermission("platform:impersonate"), async (req, res) => {
   res.json(await service.impersonate(impersonateSchema.parse(req.body), actor(req)));
@@ -153,14 +186,34 @@ platformRouter.post("/impersonate", requirePermission("platform:impersonate"), a
 /**
  * @openapi
  * /platform/institutions:
- *   get: { tags: [Platform], summary: List institutions with status + usage, security: [{ bearerAuth: [] }], responses: { 200: { description: Institutions } } }
+ *   get: { tags: [Platform], summary: "List institutions with status + usage (search/filter/sort/paginate)", security: [{ bearerAuth: [] }], parameters: [{ in: query, name: q, schema: { type: string } }, { in: query, name: status, schema: { type: string, enum: [active, suspended] } }, { in: query, name: type, schema: { type: string, enum: [school, college] } }, { in: query, name: packageId, schema: { type: string, format: uuid } }, { in: query, name: createdFrom, schema: { type: string, format: date } }, { in: query, name: createdTo, schema: { type: string, format: date } }, { in: query, name: page, schema: { type: integer } }, { in: query, name: pageSize, schema: { type: integer } }, { in: query, name: sort, schema: { type: string, enum: [name, code, status, createdAt, students, staff, package] } }, { in: query, name: order, schema: { type: string, enum: [asc, desc] } }], responses: { 200: { description: "Paged institutions { rows, total, page, pageSize }" } } }
  *   post: { tags: [Platform], summary: Create an institution (audited), security: [{ bearerAuth: [] }], responses: { 201: { description: Created } } }
  */
-platformRouter.get("/institutions", requirePermission("platform:read"), async (_req, res) => {
-  res.json(await service.listInstitutions());
+platformRouter.get("/institutions", requirePermission("platform:read"), async (req, res) => {
+  res.json(await service.listInstitutions(listInstitutionsQuerySchema.parse(req.query)));
 });
 platformRouter.post("/institutions", requirePermission("platform:manage_institutions"), async (req, res) => {
   res.status(201).json(await service.createInstitution(createInstitutionSchema.parse(req.body), actor(req)));
+});
+
+/**
+ * @openapi
+ * /platform/institutions/export:
+ *   get: { tags: [Platform], summary: "Export the filtered institution directory as CSV/XLSX", security: [{ bearerAuth: [] }], parameters: [{ in: query, name: format, schema: { type: string, enum: [csv, xlsx] } }, { in: query, name: q, schema: { type: string } }, { in: query, name: status, schema: { type: string, enum: [active, suspended] } }, { in: query, name: type, schema: { type: string, enum: [school, college] } }], responses: { 200: { description: "CSV or XLSX file of the filtered institutions" } } }
+ */
+platformRouter.get("/institutions/export", requirePermission("platform:read"), async (req, res) => {
+  const q = institutionExportQuerySchema.parse(req.query);
+  const { columns, rows } = await service.exportInstitutions(q);
+  await recordSecurityEvent({
+    action: "platform.institutions_exported",
+    targetType: "institution",
+    actorId: req.user!.id,
+    actorEmail: req.user!.email,
+    actorRole: req.user!.role,
+    detail: { format: q.format, rows: rows.length },
+    ip: clientIp(req),
+  });
+  sendSpreadsheet(res, q.format, "institutions", columns, rows, null);
 });
 
 /**
@@ -174,6 +227,15 @@ platformRouter.get("/institutions/:id", requirePermission("platform:read"), asyn
 });
 platformRouter.patch("/institutions/:id", requirePermission("platform:manage_institutions"), async (req, res) => {
   res.json(await service.updateInstitution(uuidParam(req), updateInstitutionSchema.parse(req.body), actor(req)));
+});
+
+/**
+ * @openapi
+ * /platform/institutions/{id}/activity:
+ *   get: { tags: [Platform], summary: "Recent platform audit events for one institution (detail timeline)", security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Audit events, newest first } } }
+ */
+platformRouter.get("/institutions/:id/activity", requirePermission("platform:read"), async (req, res) => {
+  res.json(await service.institutionRecentActivity(uuidParam(req)));
 });
 
 /**

@@ -10,7 +10,6 @@ import type {
   assignSubscriptionSchema,
   createInstitutionSchema,
   impersonateSchema,
-  platformAuditQuerySchema,
   setLimitsSchema,
   suspendSchema,
   updateInstitutionSchema,
@@ -59,6 +58,7 @@ export async function platformKpis() {
        (SELECT count(*)::int FROM institutions) AS "totalInstitutions",
        (SELECT count(*)::int FROM institutions WHERE is_active) AS "activeInstitutions",
        (SELECT count(*)::int FROM institutions WHERE NOT is_active) AS "suspendedInstitutions",
+       (SELECT count(*)::int FROM institution_subscriptions WHERE status IN ('active','trialing')) AS "activeSubscriptions",
        (SELECT count(*)::int FROM students WHERE status <> 'archived') AS "totalStudents",
        (SELECT count(*)::int FROM teachers) AS "totalStaff",
        (SELECT count(*)::int FROM users) AS "totalUsers",
@@ -85,16 +85,160 @@ export async function platformKpis() {
 
 // --- Institutions (list + detail with usage) ---
 
-export async function listInstitutions() {
+type InstitutionFilters = Partial<{
+  q: string;
+  status: "active" | "suspended";
+  type: "school" | "college";
+  packageId: string;
+  createdFrom: string;
+  createdTo: string;
+}>;
+
+/** Parameterized WHERE for the institution directory (no value interpolation). */
+function buildInstitutionFilters(f: InstitutionFilters): {
+  whereSql: string;
+  params: unknown[];
+} {
+  const where: string[] = [];
+  const params: unknown[] = [];
+  const add = (clause: (n: number) => string, value: unknown) => {
+    params.push(value);
+    where.push(clause(params.length));
+  };
+  if (f.q) add((n) => `(i.name ILIKE $${n} OR i.code ILIKE $${n})`, `%${f.q}%`);
+  if (f.status) add((n) => `i.is_active = $${n}`, f.status === "active");
+  if (f.type) add((n) => `i.type = $${n}`, f.type);
+  if (f.packageId)
+    add(
+      (n) =>
+        `(SELECT sub.package_id FROM institution_subscriptions sub
+            WHERE sub.institution_id = i.id ORDER BY sub.created_at DESC LIMIT 1) = $${n}`,
+      f.packageId
+    );
+  if (f.createdFrom) add((n) => `i.created_at >= $${n}::date`, f.createdFrom);
+  if (f.createdTo) add((n) => `i.created_at < ($${n}::date + 1)`, f.createdTo);
+  return { whereSql: where.length ? `WHERE ${where.join(" AND ")}` : "", params };
+}
+
+const INSTITUTION_COLS = `
+  i.id, i.name, i.code, i.type, i.is_active AS "isActive", i.created_at AS "createdAt",
+  (SELECT count(*)::int FROM students s WHERE s.institution_id = i.id AND s.status <> 'archived') AS students,
+  (SELECT count(*)::int FROM teachers t WHERE t.institution_id = i.id) AS staff,
+  (SELECT count(*)::int FROM users u WHERE u.institution_id = i.id) AS users,
+  (SELECT p.name FROM institution_subscriptions sub
+     JOIN subscription_packages p ON p.id = sub.package_id
+     WHERE sub.institution_id = i.id ORDER BY sub.created_at DESC LIMIT 1) AS "packageName"`;
+
+const INSTITUTION_SORT: Record<string, string> = {
+  name: "i.name",
+  code: "i.code",
+  status: "i.is_active",
+  createdAt: "i.created_at",
+  students: "students",
+  staff: "staff",
+  package: '"packageName"',
+};
+
+interface ListInstitutionsQuery extends InstitutionFilters {
+  page: number;
+  pageSize: number;
+  sort: string;
+  order: "asc" | "desc";
+}
+
+export async function listInstitutions(q: ListInstitutionsQuery) {
+  const { whereSql, params } = buildInstitutionFilters(q);
+  const count = await query<{ n: number }>(
+    `SELECT count(*)::int AS n FROM institutions i ${whereSql}`,
+    params
+  );
+  const sortCol = INSTITUTION_SORT[q.sort] ?? "i.created_at";
+  const order = q.order === "asc" ? "ASC" : "DESC";
   const { rows } = await query(
-    `SELECT i.id, i.name, i.code, i.type, i.is_active AS "isActive", i.created_at AS "createdAt",
-            (SELECT count(*)::int FROM students s WHERE s.institution_id = i.id AND s.status <> 'archived') AS students,
-            (SELECT count(*)::int FROM teachers t WHERE t.institution_id = i.id) AS staff,
-            (SELECT count(*)::int FROM users u WHERE u.institution_id = i.id) AS users,
-            (SELECT p.name FROM institution_subscriptions sub
-               JOIN subscription_packages p ON p.id = sub.package_id
-               WHERE sub.institution_id = i.id ORDER BY sub.created_at DESC LIMIT 1) AS "packageName"
-     FROM institutions i ORDER BY i.created_at DESC`
+    `SELECT ${INSTITUTION_COLS} FROM institutions i
+     ${whereSql}
+     ORDER BY ${sortCol} ${order} NULLS LAST, i.created_at DESC
+     LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+    [...params, q.pageSize, (q.page - 1) * q.pageSize]
+  );
+  return { rows, total: count.rows[0].n, page: q.page, pageSize: q.pageSize };
+}
+
+export interface PlatformExportColumn {
+  key: string;
+  label: string;
+}
+
+const INSTITUTION_EXPORT_COLUMNS: PlatformExportColumn[] = [
+  { key: "code", label: "Code" },
+  { key: "name", label: "Name" },
+  { key: "type", label: "Type" },
+  { key: "status", label: "Status" },
+  { key: "students", label: "Students" },
+  { key: "staff", label: "Staff" },
+  { key: "users", label: "Users" },
+  { key: "packageName", label: "Package" },
+  { key: "createdAt", label: "Created" },
+];
+
+/** Flatten the filtered institution directory into export rows (capped). */
+export async function exportInstitutions(
+  f: InstitutionFilters & { sort: string; order: "asc" | "desc" }
+) {
+  const { whereSql, params } = buildInstitutionFilters(f);
+  const sortCol = INSTITUTION_SORT[f.sort] ?? "i.created_at";
+  const order = f.order === "asc" ? "ASC" : "DESC";
+  const raw = (
+    await query<Record<string, unknown>>(
+      `SELECT ${INSTITUTION_COLS} FROM institutions i
+       ${whereSql} ORDER BY ${sortCol} ${order} NULLS LAST, i.created_at DESC LIMIT 20000`,
+      params
+    )
+  ).rows;
+  const rows = raw.map((r) => ({
+    code: r.code,
+    name: r.name,
+    type: r.type,
+    status: r.isActive ? "active" : "suspended",
+    students: Number(r.students),
+    staff: Number(r.staff),
+    users: Number(r.users),
+    packageName: r.packageName ?? "",
+    createdAt:
+      r.createdAt instanceof Date
+        ? r.createdAt.toISOString().slice(0, 10)
+        : String(r.createdAt ?? "").slice(0, 10),
+  }));
+  return { columns: INSTITUTION_EXPORT_COLUMNS, rows: rows as Record<string, unknown>[] };
+}
+
+/** Tenant-user search for the support-access selector (impersonatable users only). */
+export async function searchUsers(f: {
+  q?: string;
+  institutionId?: string;
+  role?: string;
+  status?: "active" | "inactive";
+  limit: number;
+}) {
+  const where: string[] = ["u.role <> 'super_admin'", "u.institution_id IS NOT NULL"];
+  const params: unknown[] = [];
+  const add = (clause: (n: number) => string, value: unknown) => {
+    params.push(value);
+    where.push(clause(params.length));
+  };
+  if (f.q) add((n) => `(u.email ILIKE $${n} OR u.full_name ILIKE $${n})`, `%${f.q}%`);
+  if (f.institutionId) add((n) => `u.institution_id = $${n}`, f.institutionId);
+  if (f.role) add((n) => `u.role = $${n}`, f.role);
+  if (f.status) add((n) => `u.is_active = $${n}`, f.status === "active");
+  params.push(f.limit);
+  const { rows } = await query(
+    `SELECT u.id, u.email, u.full_name AS "fullName", u.role,
+            u.is_active AS "isActive", u.institution_id AS "institutionId",
+            inst.name AS "institutionName", inst.code AS "institutionCode"
+     FROM users u JOIN institutions inst ON inst.id = u.institution_id
+     WHERE ${where.join(" AND ")}
+     ORDER BY u.full_name ASC LIMIT $${params.length}`,
+    params
   );
   return rows;
 }
@@ -211,42 +355,128 @@ export async function setLimits(
 
 // --- Cross-tenant audit viewer (durable; read-only; no secrets) ---
 
-export async function listAudit(filters: z.infer<typeof platformAuditQuerySchema>) {
-  const params: unknown[] = [];
+type AuditFilters = Partial<{
+  q: string;
+  institutionId: string;
+  actorId: string;
+  action: string;
+  targetType: string;
+  ip: string;
+  dateFrom: string;
+  dateTo: string;
+}>;
+
+/** Parameterized WHERE for the audit viewer (no value interpolation). */
+function buildAuditFilters(f: AuditFilters): { whereSql: string; params: unknown[] } {
   const where: string[] = [];
-  if (filters.institutionId) {
-    params.push(filters.institutionId);
-    where.push(`institution_id = $${params.length}`);
-  }
-  if (filters.actorId) {
-    params.push(filters.actorId);
-    where.push(`actor_id = $${params.length}`);
-  }
-  if (filters.action) {
-    params.push(filters.action);
-    where.push(`action = $${params.length}`);
-  }
-  if (filters.targetType) {
-    params.push(filters.targetType);
-    where.push(`target_type = $${params.length}`);
-  }
-  if (filters.dateFrom) {
-    params.push(`${filters.dateFrom}T00:00:00.000Z`);
-    where.push(`created_at >= $${params.length}`);
-  }
-  if (filters.dateTo) {
-    params.push(`${filters.dateTo}T23:59:59.999Z`);
-    where.push(`created_at <= $${params.length}`);
-  }
-  params.push(filters.limit ?? 100);
-  const { rows } = await query(
-    `SELECT id, action, target_type AS "targetType", target_id AS "targetId",
-            institution_id AS "institutionId", actor_id AS "actorId", actor_email AS "actorEmail",
-            actor_role AS "actorRole", detail, ip, created_at AS "createdAt"
-     FROM platform_audit_log
-     ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
-     ORDER BY created_at DESC LIMIT $${params.length}`,
+  const params: unknown[] = [];
+  const add = (clause: (n: number) => string, value: unknown) => {
+    params.push(value);
+    where.push(clause(params.length));
+  };
+  if (f.q)
+    add(
+      (n) => `(a.action ILIKE $${n} OR a.actor_email ILIKE $${n} OR a.target_id::text ILIKE $${n} OR a.ip ILIKE $${n})`,
+      `%${f.q}%`
+    );
+  if (f.institutionId) add((n) => `a.institution_id = $${n}`, f.institutionId);
+  if (f.actorId) add((n) => `a.actor_id = $${n}`, f.actorId);
+  if (f.action) add((n) => `a.action = $${n}`, f.action);
+  if (f.targetType) add((n) => `a.target_type = $${n}`, f.targetType);
+  if (f.ip) add((n) => `a.ip ILIKE $${n}`, `%${f.ip}%`);
+  if (f.dateFrom) add((n) => `a.created_at >= $${n}`, `${f.dateFrom}T00:00:00.000Z`);
+  if (f.dateTo) add((n) => `a.created_at <= $${n}`, `${f.dateTo}T23:59:59.999Z`);
+  return { whereSql: where.length ? `WHERE ${where.join(" AND ")}` : "", params };
+}
+
+const AUDIT_COLS = `
+  a.id, a.action, a.target_type AS "targetType", a.target_id AS "targetId",
+  a.institution_id AS "institutionId", inst.name AS "institutionName", inst.code AS "institutionCode",
+  a.actor_id AS "actorId", a.actor_email AS "actorEmail", a.actor_role AS "actorRole",
+  a.detail, a.ip, a.created_at AS "createdAt"`;
+
+const AUDIT_SORT: Record<string, string> = {
+  createdAt: "a.created_at",
+  action: "a.action",
+  actorEmail: "a.actor_email",
+};
+
+interface ListAuditQuery extends AuditFilters {
+  page: number;
+  pageSize: number;
+  sort: string;
+  order: "asc" | "desc";
+}
+
+export async function listAudit(q: ListAuditQuery) {
+  const { whereSql, params } = buildAuditFilters(q);
+  const count = await query<{ n: number }>(
+    `SELECT count(*)::int AS n FROM platform_audit_log a ${whereSql}`,
     params
+  );
+  const sortCol = AUDIT_SORT[q.sort] ?? "a.created_at";
+  const order = q.order === "asc" ? "ASC" : "DESC";
+  const { rows } = await query(
+    `SELECT ${AUDIT_COLS}
+     FROM platform_audit_log a
+     LEFT JOIN institutions inst ON inst.id = a.institution_id
+     ${whereSql}
+     ORDER BY ${sortCol} ${order} NULLS LAST, a.created_at DESC
+     LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+    [...params, q.pageSize, (q.page - 1) * q.pageSize]
+  );
+  return { rows, total: count.rows[0].n, page: q.page, pageSize: q.pageSize };
+}
+
+const AUDIT_EXPORT_COLUMNS: PlatformExportColumn[] = [
+  { key: "createdAt", label: "Time" },
+  { key: "action", label: "Action" },
+  { key: "actorEmail", label: "Actor" },
+  { key: "actorRole", label: "Actor role" },
+  { key: "institutionName", label: "Institution" },
+  { key: "targetType", label: "Target type" },
+  { key: "targetId", label: "Target ID" },
+  { key: "ip", label: "IP" },
+];
+
+/** Flatten the filtered audit log into export rows (capped). */
+export async function exportAudit(
+  f: AuditFilters & { sort: string; order: "asc" | "desc" }
+) {
+  const { whereSql, params } = buildAuditFilters(f);
+  const sortCol = AUDIT_SORT[f.sort] ?? "a.created_at";
+  const order = f.order === "asc" ? "ASC" : "DESC";
+  const raw = (
+    await query<Record<string, unknown>>(
+      `SELECT ${AUDIT_COLS}
+       FROM platform_audit_log a
+       LEFT JOIN institutions inst ON inst.id = a.institution_id
+       ${whereSql} ORDER BY ${sortCol} ${order} NULLS LAST, a.created_at DESC LIMIT 50000`,
+      params
+    )
+  ).rows;
+  const rows = raw.map((r) => ({
+    createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt ?? ""),
+    action: r.action,
+    actorEmail: r.actorEmail ?? "",
+    actorRole: r.actorRole ?? "",
+    institutionName: r.institutionName ?? "",
+    targetType: r.targetType ?? "",
+    targetId: r.targetId ?? "",
+    ip: r.ip ?? "",
+  }));
+  return { columns: AUDIT_EXPORT_COLUMNS, rows: rows as Record<string, unknown>[] };
+}
+
+/** Latest audit events for one institution (institution detail timeline). */
+export async function institutionRecentActivity(institutionId: string, limit = 20) {
+  const { rows } = await query(
+    `SELECT ${AUDIT_COLS}
+     FROM platform_audit_log a
+     LEFT JOIN institutions inst ON inst.id = a.institution_id
+     WHERE a.institution_id = $1
+     ORDER BY a.created_at DESC LIMIT $2`,
+    [institutionId, limit]
   );
   return rows;
 }
@@ -289,6 +519,18 @@ export async function impersonate(
     role: target.role as never,
     institutionId: target.institutionId,
   });
+  // Surface the support-session expiry (the access token's own exp) so the UI can
+  // show the countdown and end the session when it lapses. Decoded from the JWT
+  // payload (no secret involved); falls back to null if the shape is unexpected.
+  let expiresAt: string | null = null;
+  try {
+    const payload = JSON.parse(
+      Buffer.from(token.split(".")[1], "base64url").toString("utf8")
+    ) as { exp?: number };
+    if (payload.exp) expiresAt = new Date(payload.exp * 1000).toISOString();
+  } catch {
+    /* leave expiresAt null */
+  }
   await recordAudit(actor, {
     action: "impersonate.start",
     targetType: "user",
@@ -302,6 +544,7 @@ export async function impersonate(
   return {
     impersonating: true,
     token,
+    expiresAt,
     user: {
       id: target.id,
       email: target.email,
