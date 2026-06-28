@@ -28,12 +28,21 @@ draft ──issue──▶ issued ──mark-paid──▶ paid
 - **duplicate** — clones any invoice (header + lines) into a fresh **draft**
   (number/status/dates/payment cleared) for the next billing period.
 
-## Invoice numbering (D1)
-Format **`SINV-FY2026-27-000001`** = `SAAS_INVOICE_PREFIX` + FY label + 6-digit
-sequence. Indian financial year (Apr–Mar): an invoice issued in Jun 2026 →
-`FY2026-27`. Assigned **only on issue** (drafts never consume a number), **unique
-and immutable**, **per-FY** counter (`saas_invoice_counters`, atomic
-`INSERT … ON CONFLICT … +1`) so each year has its own gap-free series.
+## Invoice numbering (D1, updated)
+Format **`SINV-FY2026-27-001000`** = prefix + FY label + zero-padded sequence
+(prefix / FY-start month / padding all configurable in settings). Assigned
+**only on issue** (drafts never consume a number), **unique and immutable**.
+
+Since migration `0076` the sequence is a **single settable, continuous running
+counter** (`invoice_settings.next_invoice_number`), not a per-FY reset: the
+operator sets the starting/next number once (Settings → **Next invoice number**)
+and issuance auto-continues from there across financial years (the FY label in
+the string still reflects the issue date). Each issue atomically takes the next
+value under a row lock on the singleton settings row → unique, gap-free,
+concurrency-safe. The number can only be set **at/above the highest already-issued
+number** (enforced) so a switch never collides. (`0076` seeds the counter just
+above any existing number; the legacy per-FY `saas_invoice_counters` table is now
+inert.)
 
 ## Due dates & overdue (B2.2)
 - Optional **`payment_terms_days`** (Net-N) and/or an explicit **`due_date`** on a

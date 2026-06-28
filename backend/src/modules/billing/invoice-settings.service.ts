@@ -1,4 +1,5 @@
 import { query } from "../../db/postgres";
+import { ApiError } from "../../utils/api-error";
 import type { z } from "zod";
 import type { invoiceSettingsSchema } from "./invoices.schema";
 
@@ -10,6 +11,7 @@ import type { invoiceSettingsSchema } from "./invoices.schema";
 
 const SETTINGS_COLS = `
   prefix, fy_start_month AS "fyStartMonth", number_padding AS "numberPadding",
+  next_invoice_number::int AS "nextInvoiceNumber",
   default_currency AS "defaultCurrency", default_tax_percent AS "defaultTaxPercent",
   default_sac AS "defaultSac", default_due_days AS "defaultDueDays",
   supplier_legal_name AS "supplierLegalName", supplier_trade_name AS "supplierTradeName",
@@ -24,6 +26,7 @@ export interface InvoiceSettings {
   prefix: string;
   fyStartMonth: number;
   numberPadding: number;
+  nextInvoiceNumber: number;
   defaultCurrency: string;
   defaultTaxPercent: string;
   defaultSac: string | null;
@@ -67,6 +70,7 @@ const COLUMN_MAP: Record<string, string> = {
   prefix: "prefix",
   fyStartMonth: "fy_start_month",
   numberPadding: "number_padding",
+  nextInvoiceNumber: "next_invoice_number",
   defaultCurrency: "default_currency",
   defaultTaxPercent: "default_tax_percent",
   defaultSac: "default_sac",
@@ -94,6 +98,20 @@ export async function updateSettings(
 ): Promise<InvoiceSettings> {
   await getSettings(); // ensure the singleton row exists before updating
   const data = input as Record<string, unknown>;
+  // Guard: the running counter can only be set at/above the highest already-issued
+  // number, otherwise a future issue would collide with an existing invoice.
+  if (typeof data.nextInvoiceNumber === "number") {
+    const { rows } = await query<{ min: string }>(
+      `SELECT COALESCE(MAX((regexp_match(number, '(\\d+)$'))[1]::bigint), 0) + 1 AS min
+       FROM saas_invoices WHERE number ~ '\\d+$'`
+    );
+    const min = Number(rows[0].min);
+    if (data.nextInvoiceNumber < min) {
+      throw ApiError.badRequest(
+        `Next invoice number must be at least ${min} (above the highest already-issued number)`
+      );
+    }
+  }
   const sets: string[] = [];
   const params: unknown[] = [];
   for (const [field, col] of Object.entries(COLUMN_MAP)) {
