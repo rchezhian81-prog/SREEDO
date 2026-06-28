@@ -1,4 +1,4 @@
-import type { Request } from "express";
+import type { Request, Response } from "express";
 import { Router } from "express";
 import { z } from "zod";
 import { param, uuidParam } from "../../utils/params";
@@ -24,14 +24,17 @@ import * as invoiceSettings from "../billing/invoice-settings.service";
 import {
   createInvoiceSchema,
   institutionInvoicesQuerySchema,
+  invoiceExportQuerySchema,
   invoiceLineSchema,
   invoiceSettingsSchema,
   listInvoicesQuerySchema,
   markPaidSchema,
+  reportQuerySchema,
   updateInvoiceSchema,
   updateLineSchema,
   voidInvoiceSchema,
 } from "../billing/invoices.schema";
+import { toCsv, toXlsx, type Cell } from "../../utils/spreadsheet";
 
 // The platform console sits ABOVE any tenant: super-admin-only (actor
 // institution_id = null). authorize("super_admin") is the hard role boundary;
@@ -70,6 +73,36 @@ async function invoiceAudit(
     detail: { ...detail, userAgent: req.get("user-agent") ?? null },
     ip: clientIp(req),
   });
+}
+
+/** Stream a column/row dataset as a CSV or XLSX download (optional totals row). */
+function sendSpreadsheet(
+  res: Response,
+  format: "csv" | "xlsx",
+  filename: string,
+  columns: { key: string; label: string }[],
+  rows: Record<string, unknown>[],
+  totals?: Record<string, unknown> | null
+): void {
+  const headers = columns.map((c) => c.label);
+  const data: Cell[][] = rows.map((r) => columns.map((c) => (r[c.key] ?? "") as Cell));
+  if (totals) {
+    data.push(
+      columns.map((c, i) => (c.key in totals ? (totals[c.key] as Cell) : i === 0 ? "TOTAL" : ""))
+    );
+  }
+  if (format === "xlsx") {
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}.xlsx"`);
+    res.send(toXlsx(headers, data));
+  } else {
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}.csv"`);
+    res.send(toCsv(headers, data));
+  }
 }
 
 /**
@@ -315,6 +348,41 @@ platformRouter.get("/invoices", requirePermission("platform:read"), async (req, 
  */
 platformRouter.get("/invoices/summary", requirePermission("platform:read"), async (_req, res) => {
   res.json(await invoices.summary());
+});
+
+/**
+ * @openapi
+ * /platform/invoices/reports:
+ *   get: { tags: [Platform], summary: "Invoice reports (type + date/status/institution filters); JSON or CSV/XLSX export", security: [{ bearerAuth: [] }], parameters: [{ in: query, name: type, schema: { type: string, enum: [all, paid, unpaid, overdue, draft, void, by-institution, by-month, revenue, tax] } }, { in: query, name: from, schema: { type: string, format: date } }, { in: query, name: to, schema: { type: string, format: date } }, { in: query, name: institutionId, schema: { type: string, format: uuid } }, { in: query, name: format, schema: { type: string, enum: [json, csv, xlsx] } }], responses: { 200: { description: "Report { type, columns, rows, totals } or a spreadsheet download" } } }
+ */
+platformRouter.get("/invoices/reports", requirePermission("platform:read"), async (req, res) => {
+  const q = reportQuerySchema.parse(req.query);
+  const result = await invoices.report(q);
+  if (q.format === "json") {
+    res.json(result);
+    return;
+  }
+  await invoiceAudit(req, "invoice.report_exported", null, q.institutionId ?? null, {
+    type: q.type,
+    format: q.format,
+    rows: result.rows.length,
+  });
+  sendSpreadsheet(res, q.format, `invoice-report-${q.type}`, result.columns, result.rows, result.totals);
+});
+
+/**
+ * @openapi
+ * /platform/invoices/export:
+ *   get: { tags: [Platform], summary: "Export the filtered invoice list (same filters as the list) as CSV/XLSX", security: [{ bearerAuth: [] }], parameters: [{ in: query, name: format, schema: { type: string, enum: [csv, xlsx] } }, { in: query, name: status, schema: { type: string } }, { in: query, name: institutionId, schema: { type: string, format: uuid } }, { in: query, name: from, schema: { type: string, format: date } }, { in: query, name: to, schema: { type: string, format: date } }, { in: query, name: overdue, schema: { type: boolean } }], responses: { 200: { description: "CSV or XLSX file of the filtered invoices" } } }
+ */
+platformRouter.get("/invoices/export", requirePermission("platform:read"), async (req, res) => {
+  const q = invoiceExportQuerySchema.parse(req.query);
+  const { columns, rows } = await invoices.exportInvoices(q);
+  await invoiceAudit(req, "invoice.exported", null, q.institutionId ?? null, {
+    format: q.format,
+    rows: rows.length,
+  });
+  sendSpreadsheet(res, q.format, "invoices", columns, rows, null);
 });
 
 /**

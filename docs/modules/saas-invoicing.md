@@ -156,6 +156,29 @@ JS float drift.
 - **PDF** also gains the supplier block, SAC column, place of supply, reverse
   charge, **amount in words**, bank/UPI, signatory and page-numbered footer.
 
+## Reports, exports & advanced search (P1)
+- **Advanced search** — the list (`GET /platform/invoices`) and exports accept
+  backend-supported filters: `status`, `institutionId`, `overdue`, `from`/`to`
+  (created), `dueFrom`/`dueTo`, `amountMin`/`amountMax`, `sacCode`, `gstin`,
+  `placeOfSupply`, `recipientState`, `reverseCharge`, `q` — all parameterized in
+  one shared `buildInvoiceFilters()` (no string interpolation of values).
+- **Reports** — `GET /platform/invoices/reports?type=…` (+ `from`/`to`/
+  `institutionId`): `all`, `paid`, `unpaid`, `overdue`, `draft`, `void`,
+  `by-institution`, `by-month`, `revenue`, `tax` — each returns `{ columns, rows,
+  totals }` (count / subtotal / tax / grand total, plus paid/issued/void or
+  collected/outstanding as applicable). Overdue = issued + past due; the tax
+  summary covers issued+paid only (void/draft excluded).
+- **Exports** — `GET /platform/invoices/export` (filtered list) and the reports
+  endpoint with `format=csv|xlsx` stream **CSV** (RFC-4180 + UTF-8 BOM) or
+  **XLSX** built natively via `utils/spreadsheet.ts` (zlib zip + OpenXML; **no
+  new dependency**). Exports honor the active filters and are audited
+  (`invoice.exported` / `invoice.report_exported`). UI: a **Reports** page
+  (`/super-admin/invoices/reports`) and an advanced-filter section + export
+  buttons on the list.
+- **Out of scope (by product decision):** partial payments, discounts, payment
+  gateway, full CGST/SGST/IGST engine, e-invoice/IRN/QR, and credit/debit notes
+  (credit/debit = P2).
+
 ## Configuration (env)
 | Var | Default | Meaning |
 |---|---|---|

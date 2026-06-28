@@ -10,6 +10,8 @@ import type {
   invoiceLineSchema,
   updateLineSchema,
   listInvoicesQuerySchema,
+  invoiceExportQuerySchema,
+  reportQuerySchema,
   markPaidSchema,
   updateInvoiceSchema,
 } from "./invoices.schema";
@@ -166,7 +168,27 @@ const SORT_COLUMNS: Record<string, string> = {
   status: "i.status",
 };
 
-export async function listAll(q: ListQuery) {
+// Backend-supported filters shared by list, export and reports (P1). Returns a
+// parameterized WHERE clause (always safe — no string interpolation of values).
+type InvoiceFilters = Partial<{
+  status: string;
+  institutionId: string;
+  overdue: boolean;
+  from: string;
+  to: string;
+  dueFrom: string;
+  dueTo: string;
+  amountMin: number;
+  amountMax: number;
+  sacCode: string;
+  gstin: string;
+  placeOfSupply: string;
+  recipientState: string;
+  reverseCharge: boolean;
+  q: string;
+}>;
+
+function buildInvoiceFilters(q: InvoiceFilters): { whereSql: string; params: unknown[] } {
   const where: string[] = [];
   const params: unknown[] = [];
   const add = (clause: (n: number) => string, value: unknown) => {
@@ -176,12 +198,19 @@ export async function listAll(q: ListQuery) {
   if (q.status) add((n) => `i.status = $${n}`, q.status);
   if (q.institutionId) add((n) => `i.institution_id = $${n}`, q.institutionId);
   if (q.overdue) {
-    where.push(
-      `(i.status = 'issued' AND i.due_date IS NOT NULL AND i.due_date < CURRENT_DATE)`
-    );
+    where.push(`(i.status = 'issued' AND i.due_date IS NOT NULL AND i.due_date < CURRENT_DATE)`);
   }
   if (q.from) add((n) => `i.created_at >= $${n}::date`, q.from);
   if (q.to) add((n) => `i.created_at < ($${n}::date + 1)`, q.to);
+  if (q.dueFrom) add((n) => `i.due_date >= $${n}::date`, q.dueFrom);
+  if (q.dueTo) add((n) => `i.due_date <= $${n}::date`, q.dueTo);
+  if (q.amountMin !== undefined) add((n) => `i.total >= $${n}`, q.amountMin);
+  if (q.amountMax !== undefined) add((n) => `i.total <= $${n}`, q.amountMax);
+  if (q.sacCode) add((n) => `i.sac_code ILIKE $${n}`, `%${q.sacCode}%`);
+  if (q.gstin) add((n) => `i.gstin ILIKE $${n}`, `%${q.gstin}%`);
+  if (q.placeOfSupply) add((n) => `i.place_of_supply ILIKE $${n}`, `%${q.placeOfSupply}%`);
+  if (q.recipientState) add((n) => `i.recipient_state ILIKE $${n}`, `%${q.recipientState}%`);
+  if (q.reverseCharge !== undefined) add((n) => `i.reverse_charge = $${n}`, q.reverseCharge);
   if (q.q) {
     add(
       (n) =>
@@ -189,15 +218,17 @@ export async function listAll(q: ListQuery) {
       `%${q.q}%`
     );
   }
-  const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  return { whereSql: where.length ? `WHERE ${where.join(" AND ")}` : "", params };
+}
 
+export async function listAll(q: ListQuery) {
+  const { whereSql, params } = buildInvoiceFilters(q);
   const count = await query<{ n: number }>(
     `SELECT count(*)::int AS n
      FROM saas_invoices i JOIN institutions inst ON inst.id = i.institution_id
      ${whereSql}`,
     params
   );
-
   const sortCol = SORT_COLUMNS[q.sort] ?? "i.created_at";
   const order = q.order === "asc" ? "ASC" : "DESC";
   const { rows } = await query(
@@ -227,6 +258,255 @@ export async function summary() {
      FROM saas_invoices`
   );
   return rows[0];
+}
+
+// ---- P1: reports + exports (no new schema; reuse buildInvoiceFilters) ----
+
+type ReportQuery = z.infer<typeof reportQuerySchema>;
+type ExportQuery = z.infer<typeof invoiceExportQuerySchema>;
+type Row = Record<string, unknown>;
+
+export interface ReportColumn {
+  key: string;
+  label: string;
+  numeric?: boolean;
+}
+
+const dateOnly = (v: unknown): string =>
+  !v ? "" : v instanceof Date ? v.toISOString().slice(0, 10) : String(v).slice(0, 10);
+
+const LIST_REPORT_FILTERS: Record<string, InvoiceFilters> = {
+  all: {},
+  paid: { status: "paid" },
+  unpaid: { status: "issued" },
+  overdue: { status: "issued", overdue: true },
+  draft: { status: "draft" },
+  void: { status: "void" },
+};
+
+const LIST_REPORT_COLUMNS: ReportColumn[] = [
+  { key: "number", label: "Invoice No" },
+  { key: "institutionName", label: "Institution" },
+  { key: "status", label: "Status" },
+  { key: "createdAt", label: "Invoice date" },
+  { key: "dueDate", label: "Due date" },
+  { key: "subtotal", label: "Subtotal", numeric: true },
+  { key: "taxPercent", label: "Tax %", numeric: true },
+  { key: "taxAmount", label: "Tax amount", numeric: true },
+  { key: "total", label: "Grand total", numeric: true },
+];
+
+/** Dispatch a report by type → { columns, rows, totals }. */
+export async function report(q: ReportQuery) {
+  const base: InvoiceFilters = { from: q.from, to: q.to, institutionId: q.institutionId };
+  if (q.type === "by-institution" || q.type === "by-month" || q.type === "revenue" || q.type === "tax") {
+    return groupedReport(q.type, base);
+  }
+  const { whereSql, params } = buildInvoiceFilters({
+    ...base,
+    ...(LIST_REPORT_FILTERS[q.type] ?? {}),
+  });
+  const rows = (
+    await query<Row>(
+      `SELECT ${INVOICE_COLS}, inst.name AS "institutionName", inst.code AS "institutionCode"
+       FROM saas_invoices i JOIN institutions inst ON inst.id = i.institution_id
+       ${whereSql} ORDER BY i.created_at DESC LIMIT 10000`,
+      params
+    )
+  ).rows.map((r) => ({ ...r, createdAt: dateOnly(r.createdAt) }));
+  const totals = (
+    await query<Row>(
+      `SELECT count(*)::int AS count,
+         coalesce(sum(i.subtotal),0)::text AS subtotal,
+         coalesce(sum(i.tax_amount),0)::text AS "taxAmount",
+         coalesce(sum(i.total),0)::text AS total,
+         coalesce(sum(i.total) FILTER (WHERE i.status='paid'),0)::text AS paid,
+         coalesce(sum(i.total) FILTER (WHERE i.status='issued'),0)::text AS issued,
+         coalesce(sum(i.total) FILTER (WHERE i.status='void'),0)::text AS void
+       FROM saas_invoices i JOIN institutions inst ON inst.id = i.institution_id ${whereSql}`,
+      params
+    )
+  ).rows[0];
+  return { type: q.type, columns: LIST_REPORT_COLUMNS, rows, totals };
+}
+
+async function groupedReport(type: string, base: InvoiceFilters) {
+  const { whereSql, params } = buildInvoiceFilters(base);
+  const sums = `coalesce(sum(i.subtotal),0)::text AS subtotal,
+    coalesce(sum(i.tax_amount),0)::text AS "taxAmount",
+    coalesce(sum(i.total),0)::text AS total,
+    coalesce(sum(i.total) FILTER (WHERE i.status='paid'),0)::text AS paid,
+    coalesce(sum(i.total) FILTER (WHERE i.status='issued'),0)::text AS outstanding`;
+  const totalsSql = `SELECT count(*)::int AS count, ${sums}
+    FROM saas_invoices i JOIN institutions inst ON inst.id = i.institution_id ${whereSql}`;
+
+  if (type === "by-institution") {
+    const rows = (
+      await query<Row>(
+        `SELECT inst.name AS "institutionName", inst.code AS "institutionCode",
+           count(*)::int AS count, ${sums}
+         FROM saas_invoices i JOIN institutions inst ON inst.id = i.institution_id
+         ${whereSql} GROUP BY inst.name, inst.code ORDER BY sum(i.total) DESC NULLS LAST`,
+        params
+      )
+    ).rows;
+    const totals = (await query<Row>(totalsSql, params)).rows[0];
+    return {
+      type, rows, totals,
+      columns: [
+        { key: "institutionName", label: "Institution" },
+        { key: "institutionCode", label: "Code" },
+        { key: "count", label: "Invoices", numeric: true },
+        { key: "subtotal", label: "Subtotal", numeric: true },
+        { key: "taxAmount", label: "Tax", numeric: true },
+        { key: "total", label: "Total", numeric: true },
+        { key: "paid", label: "Paid", numeric: true },
+        { key: "outstanding", label: "Outstanding", numeric: true },
+      ] as ReportColumn[],
+    };
+  }
+  if (type === "by-month") {
+    const rows = (
+      await query<Row>(
+        `SELECT to_char(date_trunc('month', i.created_at), 'YYYY-MM') AS month,
+           count(*)::int AS count, ${sums}
+         FROM saas_invoices i JOIN institutions inst ON inst.id = i.institution_id
+         ${whereSql} GROUP BY 1 ORDER BY 1 DESC`,
+        params
+      )
+    ).rows;
+    const totals = (await query<Row>(totalsSql, params)).rows[0];
+    return {
+      type, rows, totals,
+      columns: [
+        { key: "month", label: "Month" },
+        { key: "count", label: "Invoices", numeric: true },
+        { key: "subtotal", label: "Subtotal", numeric: true },
+        { key: "taxAmount", label: "Tax", numeric: true },
+        { key: "total", label: "Total", numeric: true },
+        { key: "paid", label: "Paid", numeric: true },
+        { key: "outstanding", label: "Outstanding", numeric: true },
+      ] as ReportColumn[],
+    };
+  }
+  if (type === "revenue") {
+    const rev = `coalesce(sum(i.total) FILTER (WHERE i.status IN ('issued','paid')),0)::text AS invoiced,
+      coalesce(sum(i.total) FILTER (WHERE i.status='paid'),0)::text AS collected,
+      coalesce(sum(i.total) FILTER (WHERE i.status='issued'),0)::text AS outstanding`;
+    const rows = (
+      await query<Row>(
+        `SELECT to_char(date_trunc('month', i.created_at), 'YYYY-MM') AS month,
+           count(*)::int AS count, ${rev}
+         FROM saas_invoices i JOIN institutions inst ON inst.id = i.institution_id
+         ${whereSql} GROUP BY 1 ORDER BY 1 DESC`,
+        params
+      )
+    ).rows;
+    const totals = (
+      await query<Row>(
+        `SELECT count(*)::int AS count, ${rev}
+         FROM saas_invoices i JOIN institutions inst ON inst.id = i.institution_id ${whereSql}`,
+        params
+      )
+    ).rows[0];
+    return {
+      type, rows, totals,
+      columns: [
+        { key: "month", label: "Month" },
+        { key: "count", label: "Invoices", numeric: true },
+        { key: "invoiced", label: "Invoiced", numeric: true },
+        { key: "collected", label: "Collected", numeric: true },
+        { key: "outstanding", label: "Outstanding", numeric: true },
+      ] as ReportColumn[],
+    };
+  }
+  // tax summary (flat tax) over issued + paid
+  const taxWhere = whereSql ? `${whereSql} AND i.status IN ('issued','paid')` : `WHERE i.status IN ('issued','paid')`;
+  const taxCols = `count(*)::int AS count,
+    coalesce(sum(i.subtotal),0)::text AS "taxableValue",
+    coalesce(sum(i.tax_amount),0)::text AS "taxAmount",
+    coalesce(sum(i.total),0)::text AS total`;
+  const rows = (
+    await query<Row>(
+      `SELECT i.tax_percent::text AS "taxPercent", ${taxCols}
+       FROM saas_invoices i JOIN institutions inst ON inst.id = i.institution_id
+       ${taxWhere} GROUP BY i.tax_percent ORDER BY i.tax_percent`,
+      params
+    )
+  ).rows;
+  const totals = (
+    await query<Row>(
+      `SELECT ${taxCols} FROM saas_invoices i JOIN institutions inst ON inst.id = i.institution_id ${taxWhere}`,
+      params
+    )
+  ).rows[0];
+  return {
+    type, rows, totals,
+    columns: [
+      { key: "taxPercent", label: "Tax %", numeric: true },
+      { key: "count", label: "Invoices", numeric: true },
+      { key: "taxableValue", label: "Taxable value", numeric: true },
+      { key: "taxAmount", label: "Tax amount", numeric: true },
+      { key: "total", label: "Total", numeric: true },
+    ] as ReportColumn[],
+  };
+}
+
+const EXPORT_COLUMNS: ReportColumn[] = [
+  { key: "id", label: "Invoice ID" },
+  { key: "number", label: "Invoice number" },
+  { key: "institutionName", label: "Institution" },
+  { key: "status", label: "Status" },
+  { key: "createdAt", label: "Invoice date" },
+  { key: "dueDate", label: "Due date" },
+  { key: "period", label: "Billing period" },
+  { key: "subtotal", label: "Subtotal", numeric: true },
+  { key: "taxPercent", label: "Tax %", numeric: true },
+  { key: "taxAmount", label: "Tax amount", numeric: true },
+  { key: "total", label: "Grand total", numeric: true },
+  { key: "sacCode", label: "SAC/HSN" },
+  { key: "gstin", label: "GSTIN" },
+  { key: "placeOfSupply", label: "Place of supply" },
+  { key: "recipientState", label: "Recipient state" },
+  { key: "reverseCharge", label: "Reverse charge" },
+  { key: "issuedAt", label: "Issued date" },
+  { key: "voided", label: "Void date / reason" },
+];
+
+/** Flatten the filtered invoice list into export rows (capped). */
+export async function exportInvoices(q: ExportQuery) {
+  const { whereSql, params } = buildInvoiceFilters(q);
+  const sortCol = SORT_COLUMNS[q.sort] ?? "i.created_at";
+  const order = q.order === "asc" ? "ASC" : "DESC";
+  const raw = (
+    await query<Row>(
+      `SELECT ${INVOICE_COLS}, inst.name AS "institutionName", inst.code AS "institutionCode"
+       FROM saas_invoices i JOIN institutions inst ON inst.id = i.institution_id
+       ${whereSql} ORDER BY ${sortCol} ${order} NULLS LAST, i.created_at DESC LIMIT 20000`,
+      params
+    )
+  ).rows;
+  const rows = raw.map((r) => ({
+    id: r.id,
+    number: r.number ?? "",
+    institutionName: r.institutionName,
+    status: r.status,
+    createdAt: dateOnly(r.createdAt),
+    dueDate: r.dueDate ?? "",
+    period: r.periodStart || r.periodEnd ? `${r.periodStart ?? ""}..${r.periodEnd ?? ""}` : "",
+    subtotal: Number(r.subtotal),
+    taxPercent: Number(r.taxPercent),
+    taxAmount: Number(r.taxAmount),
+    total: Number(r.total),
+    sacCode: r.sacCode ?? "",
+    gstin: r.gstin ?? "",
+    placeOfSupply: r.placeOfSupply ?? "",
+    recipientState: r.recipientState ?? "",
+    reverseCharge: r.reverseCharge ? "Yes" : "No",
+    issuedAt: dateOnly(r.issuedAt),
+    voided: r.status === "void" ? `${dateOnly(r.voidedAt)} ${r.voidReason ?? ""}`.trim() : "",
+  }));
+  return { columns: EXPORT_COLUMNS, rows: rows as Row[] };
 }
 
 async function insertLine(
