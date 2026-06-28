@@ -12,6 +12,9 @@ import type { invoiceSettingsSchema } from "./invoices.schema";
 const SETTINGS_COLS = `
   prefix, fy_start_month AS "fyStartMonth", number_padding AS "numberPadding",
   next_invoice_number::int AS "nextInvoiceNumber",
+  credit_note_prefix AS "creditNotePrefix", debit_note_prefix AS "debitNotePrefix",
+  next_credit_note_number::int AS "nextCreditNoteNumber",
+  next_debit_note_number::int AS "nextDebitNoteNumber",
   default_currency AS "defaultCurrency", default_tax_percent AS "defaultTaxPercent",
   default_sac AS "defaultSac", default_due_days AS "defaultDueDays",
   supplier_legal_name AS "supplierLegalName", supplier_trade_name AS "supplierTradeName",
@@ -27,6 +30,10 @@ export interface InvoiceSettings {
   fyStartMonth: number;
   numberPadding: number;
   nextInvoiceNumber: number;
+  creditNotePrefix: string;
+  debitNotePrefix: string;
+  nextCreditNoteNumber: number;
+  nextDebitNoteNumber: number;
   defaultCurrency: string;
   defaultTaxPercent: string;
   defaultSac: string | null;
@@ -71,6 +78,10 @@ const COLUMN_MAP: Record<string, string> = {
   fyStartMonth: "fy_start_month",
   numberPadding: "number_padding",
   nextInvoiceNumber: "next_invoice_number",
+  creditNotePrefix: "credit_note_prefix",
+  debitNotePrefix: "debit_note_prefix",
+  nextCreditNoteNumber: "next_credit_note_number",
+  nextDebitNoteNumber: "next_debit_note_number",
   defaultCurrency: "default_currency",
   defaultTaxPercent: "default_tax_percent",
   defaultSac: "default_sac",
@@ -92,26 +103,53 @@ const COLUMN_MAP: Record<string, string> = {
   logoPath: "logo_path",
 };
 
+/**
+ * Reject setting a running counter below the highest already-issued number for
+ * that series (no-op when the field is absent). `minSql` must SELECT one `min`
+ * column = highest issued trailing number + 1.
+ */
+async function assertNextAtLeast(
+  value: unknown,
+  label: string,
+  minSql: string
+): Promise<void> {
+  if (typeof value !== "number") return;
+  const { rows } = await query<{ min: string }>(minSql);
+  const min = Number(rows[0].min);
+  if (value < min) {
+    throw ApiError.badRequest(
+      `${label} must be at least ${min} (above the highest already-issued number)`
+    );
+  }
+}
+
 export async function updateSettings(
   input: z.infer<typeof invoiceSettingsSchema>,
   actorId: string
 ): Promise<InvoiceSettings> {
   await getSettings(); // ensure the singleton row exists before updating
   const data = input as Record<string, unknown>;
-  // Guard: the running counter can only be set at/above the highest already-issued
-  // number, otherwise a future issue would collide with an existing invoice.
-  if (typeof data.nextInvoiceNumber === "number") {
-    const { rows } = await query<{ min: string }>(
-      `SELECT COALESCE(MAX((regexp_match(number, '(\\d+)$'))[1]::bigint), 0) + 1 AS min
-       FROM saas_invoices WHERE number ~ '\\d+$'`
-    );
-    const min = Number(rows[0].min);
-    if (data.nextInvoiceNumber < min) {
-      throw ApiError.badRequest(
-        `Next invoice number must be at least ${min} (above the highest already-issued number)`
-      );
-    }
-  }
+  // Guard: a running counter can only be set at/above the highest already-issued
+  // number, otherwise a future issue would collide with an existing document.
+  // Applies identically to invoices and to each note series (credit / debit).
+  await assertNextAtLeast(
+    data.nextInvoiceNumber,
+    "Next invoice number",
+    `SELECT COALESCE(MAX((regexp_match(number, '(\\d+)$'))[1]::bigint), 0) + 1 AS min
+     FROM saas_invoices WHERE number ~ '\\d+$'`
+  );
+  await assertNextAtLeast(
+    data.nextCreditNoteNumber,
+    "Next credit note number",
+    `SELECT COALESCE(MAX((regexp_match(number, '(\\d+)$'))[1]::bigint), 0) + 1 AS min
+     FROM saas_invoice_notes WHERE kind = 'credit' AND number ~ '\\d+$'`
+  );
+  await assertNextAtLeast(
+    data.nextDebitNoteNumber,
+    "Next debit note number",
+    `SELECT COALESCE(MAX((regexp_match(number, '(\\d+)$'))[1]::bigint), 0) + 1 AS min
+     FROM saas_invoice_notes WHERE kind = 'debit' AND number ~ '\\d+$'`
+  );
   const sets: string[] = [];
   const params: unknown[] = [];
   for (const [field, col] of Object.entries(COLUMN_MAP)) {

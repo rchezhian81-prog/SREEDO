@@ -19,6 +19,10 @@ interface Settings {
   fyStartMonth: number;
   numberPadding: number;
   nextInvoiceNumber: number;
+  creditNotePrefix: string;
+  debitNotePrefix: string;
+  nextCreditNoteNumber: number;
+  nextDebitNoteNumber: number;
   defaultCurrency: string;
   defaultTaxPercent: string;
   defaultSac: string | null;
@@ -61,6 +65,10 @@ export default function InvoiceSettingsPage() {
           fyStartMonth: str(s.fyStartMonth),
           numberPadding: str(s.numberPadding),
           nextInvoiceNumber: str(s.nextInvoiceNumber),
+          creditNotePrefix: str(s.creditNotePrefix),
+          debitNotePrefix: str(s.debitNotePrefix),
+          nextCreditNoteNumber: str(s.nextCreditNoteNumber),
+          nextDebitNoteNumber: str(s.nextDebitNoteNumber),
           defaultCurrency: str(s.defaultCurrency),
           defaultTaxPercent: str(s.defaultTaxPercent),
           defaultSac: str(s.defaultSac),
@@ -103,6 +111,10 @@ export default function InvoiceSettingsPage() {
         fyStartMonth: Number(form.fyStartMonth) || 4,
         numberPadding: Number(form.numberPadding) || 6,
         nextInvoiceNumber: form.nextInvoiceNumber ? Number(form.nextInvoiceNumber) : undefined,
+        creditNotePrefix: form.creditNotePrefix || "CN-",
+        debitNotePrefix: form.debitNotePrefix || "DN-",
+        nextCreditNoteNumber: form.nextCreditNoteNumber ? Number(form.nextCreditNoteNumber) : undefined,
+        nextDebitNoteNumber: form.nextDebitNoteNumber ? Number(form.nextDebitNoteNumber) : undefined,
         defaultCurrency: form.defaultCurrency || "INR",
         defaultTaxPercent: Number(form.defaultTaxPercent) || 0,
         defaultSac: blank(form.defaultSac),
@@ -223,6 +235,37 @@ export default function InvoiceSettingsPage() {
           </Field>
           <Field label="Default SAC/HSN">
             <Input value={form.defaultSac} onChange={(e) => set("defaultSac", e.target.value)} />
+          </Field>
+        </div>
+      </Card>
+
+      <Card className="mb-4">
+        <p className="mb-1 text-sm font-medium text-ink">Credit &amp; debit note numbering</p>
+        <p className="mb-3 text-xs text-muted">
+          Each note type is its own continuous series (set once, never resets). The FY
+          label and padding are shared with invoices. A &quot;next&quot; value must be at or
+          above the highest already-issued number for that series.
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Credit note prefix">
+            <Input value={form.creditNotePrefix} onChange={(e) => set("creditNotePrefix", e.target.value)} />
+          </Field>
+          <Field label="Debit note prefix">
+            <Input value={form.debitNotePrefix} onChange={(e) => set("debitNotePrefix", e.target.value)} />
+          </Field>
+          <Field label="Next credit note number">
+            <Input
+              type="number"
+              value={form.nextCreditNoteNumber}
+              onChange={(e) => set("nextCreditNoteNumber", e.target.value)}
+            />
+          </Field>
+          <Field label="Next debit note number">
+            <Input
+              type="number"
+              value={form.nextDebitNoteNumber}
+              onChange={(e) => set("nextDebitNoteNumber", e.target.value)}
+            />
           </Field>
         </div>
       </Card>
