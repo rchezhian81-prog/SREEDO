@@ -42,11 +42,15 @@ export default function PlatformInstitutionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // Filters / paging / sort
+  // Filters / paging / sort. `qInput` is the live field; `q` is the debounced,
+  // committed value the query actually uses.
+  const [qInput, setQInput] = useState("");
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
   const [type, setType] = useState("");
   const [packageId, setPackageId] = useState("");
+  const [createdFrom, setCreatedFrom] = useState("");
+  const [createdTo, setCreatedTo] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [sort, setSort] = useState<SortKey>("createdAt");
@@ -58,12 +62,14 @@ export default function PlatformInstitutionsPage() {
     if (status) p.set("status", status);
     if (type) p.set("type", type);
     if (packageId) p.set("packageId", packageId);
+    if (createdFrom) p.set("createdFrom", createdFrom);
+    if (createdTo) p.set("createdTo", createdTo);
     p.set("page", String(page));
     p.set("pageSize", String(pageSize));
     p.set("sort", sort);
     p.set("order", order);
     return p;
-  }, [q, status, type, packageId, page, pageSize, sort, order]);
+  }, [q, status, type, packageId, createdFrom, createdTo, page, pageSize, sort, order]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -86,11 +92,16 @@ export default function PlatformInstitutionsPage() {
     if (ready) api.get<PackageOption[]>("/packages").then(setPackages).catch(() => setPackages([]));
   }, [ready]);
 
-  // Debounce free-text search; reset to page 1 on any filter change.
+  // Real debounce: commit the search field 300ms after typing stops.
   useEffect(() => {
-    const t = setTimeout(() => setPage(1), 0);
+    const t = setTimeout(() => setQ(qInput), 300);
     return () => clearTimeout(t);
-  }, [q, status, type, packageId, pageSize, sort, order]);
+  }, [qInput]);
+
+  // Reset to page 1 on any filter change.
+  useEffect(() => {
+    setPage(1);
+  }, [q, status, type, packageId, createdFrom, createdTo, pageSize, sort, order]);
 
   const toggleSort = (key: SortKey) => {
     if (sort === key) setOrder((o) => (o === "asc" ? "desc" : "asc"));
@@ -180,8 +191,8 @@ export default function PlatformInstitutionsPage() {
       />
 
       {/* Filters */}
-      <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        <Input placeholder="Search name or code…" value={q} onChange={(e) => setQ(e.target.value)} />
+      <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <Input placeholder="Search name or code…" value={qInput} onChange={(e) => setQInput(e.target.value)} />
         <Select value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="">All statuses</option>
           <option value="active">Active</option>
@@ -200,6 +211,14 @@ export default function PlatformInstitutionsPage() {
             </option>
           ))}
         </Select>
+        <label className="flex items-center gap-2 text-sm text-slate-500">
+          <span className="shrink-0">Created from</span>
+          <Input type="date" value={createdFrom} onChange={(e) => setCreatedFrom(e.target.value)} />
+        </label>
+        <label className="flex items-center gap-2 text-sm text-slate-500">
+          <span className="shrink-0">to</span>
+          <Input type="date" value={createdTo} onChange={(e) => setCreatedTo(e.target.value)} />
+        </label>
       </div>
 
       {error && <ErrorNote message={error} />}
@@ -209,7 +228,7 @@ export default function PlatformInstitutionsPage() {
       ) : rows.length === 0 ? (
         <EmptyState
           message={
-            q || status || type || packageId
+            q || status || type || packageId || createdFrom || createdTo
               ? "No institutions match these filters."
               : "No institutions yet. Create one to get started."
           }

@@ -163,4 +163,94 @@ describe("super admin — platform console", () => {
     expect(kpis.body).toHaveProperty("activeSubscriptions");
     expect(kpis.body.activeSubscriptions).toBeGreaterThanOrEqual(1);
   });
+
+  it("loads platform health and SMTP status (graceful when unconfigured)", async () => {
+    const health = await get("/api/v1/platform/health", tok.root);
+    expect(health.status).toBe(200);
+    expect(health.body).toHaveProperty("postgres");
+    expect(health.body.postgres).toBe(true);
+    expect(health.body).toHaveProperty("uptimeSeconds");
+
+    const status = await get("/api/v1/platform/email/status", tok.root);
+    expect(status.status).toBe(200);
+    expect(status.body).toHaveProperty("configured");
+    // SMTP is not configured in the test env → test send degrades to 503, never 500.
+    const test = await post("/api/v1/platform/email/test", tok.root, { to: "ops@example.com" });
+    expect([200, 503]).toContain(test.status);
+    if (test.status === 503) expect(test.body.ok).toBe(false);
+  });
+
+  it("rounds-trips per-institution limit overrides (override wins over the plan)", async () => {
+    const res = await request(app)
+      .patch(`/api/v1/platform/institutions/${instA}/limits`)
+      .set(auth(tok.root))
+      .send({ maxStudents: 5, maxBranches: 2, reportsQuota: 10 });
+    expect(res.status).toBe(200);
+    const detail = await get(`/api/v1/platform/institutions/${instA}`, tok.root);
+    expect(detail.status).toBe(200);
+    // The effective limits (not the package) must reflect the override and expose
+    // every row the detail UI renders.
+    expect(detail.body.limits.maxStudents).toBe(5);
+    expect(detail.body.limits.maxBranches).toBe(2);
+    expect(detail.body.limits.reportsQuota).toBe(10);
+    expect(detail.body.limits).toHaveProperty("branches");
+  });
+
+  it("accepts trialing subscription status and rejects an invalid one", async () => {
+    const pkg = (
+      await query<{ id: string }>(
+        `INSERT INTO subscription_packages (name, price, billing_cycle)
+         VALUES ('Trial Pkg', 0, 'monthly') RETURNING id`,
+        []
+      )
+    ).rows[0].id;
+    const ok = await post(`/api/v1/platform/institutions/${instA}/subscription`, tok.root, {
+      packageId: pkg,
+      status: "trialing",
+    });
+    expect(ok.status).toBe(201);
+    // The old/incorrect UI value 'trial' must be rejected (matches the schema/DB enum).
+    const bad = await post(`/api/v1/platform/institutions/${instA}/subscription`, tok.root, {
+      packageId: pkg,
+      status: "trial",
+    });
+    expect(bad.status).toBe(400);
+  });
+
+  it("enforces a single active support session (server-side) with an audited end", async () => {
+    const first = await post("/api/v1/platform/impersonate", tok.root, {
+      userId: adminId,
+      reason: "support session one",
+    });
+    expect(first.status).toBe(200);
+
+    // A second concurrent session is refused server-side (409), not just in the UI.
+    const second = await post("/api/v1/platform/impersonate", tok.root, {
+      userId: adminId,
+      reason: "support session two",
+    });
+    expect(second.status).toBe(409);
+
+    // Ending the session is audited and lets a new one start.
+    const ended = await post("/api/v1/platform/impersonate/end", tok.root, {});
+    expect(ended.status).toBe(200);
+    expect(ended.body.ended).toBeGreaterThanOrEqual(1);
+
+    const third = await post("/api/v1/platform/impersonate", tok.root, {
+      userId: adminId,
+      reason: "support session three",
+    });
+    expect(third.status).toBe(200);
+
+    const audit = await get("/api/v1/platform/audit?action=impersonate.end", tok.root);
+    expect(audit.body.rows.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("searches the audit log by institution name", async () => {
+    await post(`/api/v1/platform/institutions/${instA}/suspend`, tok.root, { reason: "by-institution audit search" });
+    // instA was created with code ALPHA → name 'Institution ALPHA'.
+    const res = await get("/api/v1/platform/audit?q=ALPHA", tok.root);
+    expect(res.status).toBe(200);
+    expect(res.body.rows.some((r: { institutionId: string }) => r.institutionId === instA)).toBe(true);
+  });
 });

@@ -185,6 +185,15 @@ platformRouter.post("/impersonate", requirePermission("platform:impersonate"), a
 
 /**
  * @openapi
+ * /platform/impersonate/end:
+ *   post: { tags: [Platform], summary: "End the caller's active support session(s) (audited; idempotent)", security: [{ bearerAuth: [] }], responses: { 200: { description: "{ ended }" } } }
+ */
+platformRouter.post("/impersonate/end", requirePermission("platform:impersonate"), async (req, res) => {
+  res.json(await service.endImpersonation(actor(req)));
+});
+
+/**
+ * @openapi
  * /platform/institutions:
  *   get: { tags: [Platform], summary: "List institutions with status + usage (search/filter/sort/paginate)", security: [{ bearerAuth: [] }], parameters: [{ in: query, name: q, schema: { type: string } }, { in: query, name: status, schema: { type: string, enum: [active, suspended] } }, { in: query, name: type, schema: { type: string, enum: [school, college] } }, { in: query, name: packageId, schema: { type: string, format: uuid } }, { in: query, name: createdFrom, schema: { type: string, format: date } }, { in: query, name: createdTo, schema: { type: string, format: date } }, { in: query, name: page, schema: { type: integer } }, { in: query, name: pageSize, schema: { type: integer } }, { in: query, name: sort, schema: { type: string, enum: [name, code, status, createdAt, students, staff, package] } }, { in: query, name: order, schema: { type: string, enum: [asc, desc] } }], responses: { 200: { description: "Paged institutions { rows, total, page, pageSize }" } } }
  *   post: { tags: [Platform], summary: Create an institution (audited), security: [{ bearerAuth: [] }], responses: { 201: { description: Created } } }

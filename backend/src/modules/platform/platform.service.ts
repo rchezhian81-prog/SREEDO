@@ -376,7 +376,8 @@ function buildAuditFilters(f: AuditFilters): { whereSql: string; params: unknown
   };
   if (f.q)
     add(
-      (n) => `(a.action ILIKE $${n} OR a.actor_email ILIKE $${n} OR a.target_id::text ILIKE $${n} OR a.ip ILIKE $${n})`,
+      (n) =>
+        `(a.action ILIKE $${n} OR a.actor_email ILIKE $${n} OR a.actor_role ILIKE $${n} OR a.target_id::text ILIKE $${n} OR a.ip ILIKE $${n} OR inst.name ILIKE $${n} OR inst.code ILIKE $${n})`,
       `%${f.q}%`
     );
   if (f.institutionId) add((n) => `a.institution_id = $${n}`, f.institutionId);
@@ -411,7 +412,10 @@ interface ListAuditQuery extends AuditFilters {
 export async function listAudit(q: ListAuditQuery) {
   const { whereSql, params } = buildAuditFilters(q);
   const count = await query<{ n: number }>(
-    `SELECT count(*)::int AS n FROM platform_audit_log a ${whereSql}`,
+    `SELECT count(*)::int AS n
+     FROM platform_audit_log a
+     LEFT JOIN institutions inst ON inst.id = a.institution_id
+     ${whereSql}`,
     params
   );
   const sortCol = AUDIT_SORT[q.sort] ?? "a.created_at";
@@ -513,6 +517,19 @@ export async function impersonate(
     throw ApiError.badRequest("Target is not a tenant user");
   }
 
+  // Single-session guard (server-side): refuse a second concurrent support
+  // session for this super admin while one is still active (un-ended, un-expired).
+  const active = await query(
+    `SELECT 1 FROM platform_impersonation_sessions
+     WHERE actor_id = $1 AND ended_at IS NULL AND expires_at > now() LIMIT 1`,
+    [actor.id]
+  );
+  if (active.rows[0]) {
+    throw ApiError.conflict(
+      "You already have an active support session. End it before starting another."
+    );
+  }
+
   const token = signAccessToken({
     sub: target.id,
     email: target.email,
@@ -531,6 +548,13 @@ export async function impersonate(
   } catch {
     /* leave expiresAt null */
   }
+  // Record the active session for the single-session guard + audited lifecycle.
+  await query(
+    `INSERT INTO platform_impersonation_sessions
+       (actor_id, target_id, target_email, reason, expires_at)
+     VALUES ($1,$2,$3,$4, COALESCE($5::timestamptz, now() + interval '30 minutes'))`,
+    [actor.id, target.id, target.email, input.reason, expiresAt]
+  );
   await recordAudit(actor, {
     action: "impersonate.start",
     targetType: "user",
@@ -553,6 +577,27 @@ export async function impersonate(
       fullName: target.fullName,
     },
   };
+}
+
+/** End the caller's active support session(s) (audited). Idempotent. */
+export async function endImpersonation(actor: Actor) {
+  const { rows } = await query<{ target_id: string; target_email: string }>(
+    `UPDATE platform_impersonation_sessions
+       SET ended_at = now()
+     WHERE actor_id = $1 AND ended_at IS NULL
+     RETURNING target_id, target_email`,
+    [actor.id]
+  );
+  for (const r of rows) {
+    await recordAudit(actor, {
+      action: "impersonate.end",
+      targetType: "user",
+      targetId: r.target_id,
+      institutionId: null,
+      detail: { targetEmail: r.target_email },
+    });
+  }
+  return { ended: rows.length };
 }
 
 // --- RBAC console (role ↔ permission management) ---

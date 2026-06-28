@@ -31,6 +31,7 @@ export default function PlatformSupportPage() {
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [conflict, setConflict] = useState(false);
   const [session, setSession] = useState<ImpersonationResult | null>(null);
   const [startedAt, setStartedAt] = useState<Date | null>(null);
 
@@ -79,6 +80,7 @@ export default function PlatformSupportPage() {
     )
       return;
     setBusy(true);
+    setConflict(false);
     try {
       const result = await api.post<ImpersonationResult>("/platform/impersonate", {
         userId: selected.id,
@@ -88,21 +90,31 @@ export default function PlatformSupportPage() {
       setStartedAt(new Date());
     } catch (err) {
       setSession(null);
+      // 409 = an active session already exists server-side (e.g. after a reload).
+      if (err instanceof ApiError && err.status === 409) setConflict(true);
       setError(err instanceof ApiError ? err.message : "Failed to start support session");
     } finally {
       setBusy(false);
     }
   };
 
-  const endSession = () => {
-    // Exit is local: the platform session is never silently swapped, so the super
-    // admin stays signed in. The scoped token is simply discarded.
-    setSession(null);
-    setStartedAt(null);
-    setSelected(null);
-    setReason("");
-    setQ("");
-    setResults([]);
+  const endSession = async () => {
+    // End the server-side session (single-session guard + audited), then clear
+    // local state. The scoped token is short-lived and simply expires.
+    setBusy(true);
+    try {
+      await api.post("/platform/impersonate/end").catch(() => undefined);
+    } finally {
+      setSession(null);
+      setStartedAt(null);
+      setSelected(null);
+      setReason("");
+      setQ("");
+      setResults([]);
+      setConflict(false);
+      setError(null);
+      setBusy(false);
+    }
   };
 
   if (!ready) return gate;
@@ -249,9 +261,15 @@ export default function PlatformSupportPage() {
             )}
 
             <ErrorNote message={error} />
+            {conflict && (
+              <Button variant="secondary" onClick={endSession} disabled={busy}>
+                End the existing session
+              </Button>
+            )}
             <p className="text-xs text-slate-400">
               A super admin cannot impersonate another super admin; only one session can be
-              active at a time. The target must be a tenant user. Every attempt is audited.
+              active at a time (enforced server-side). The target must be a tenant user.
+              Every start and end is audited.
             </p>
             <Button onClick={start} disabled={busy || !selected || !reasonValid}>
               {busy ? "Starting…" : "Start support session"}

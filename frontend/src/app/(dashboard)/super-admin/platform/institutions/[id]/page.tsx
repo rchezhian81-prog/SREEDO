@@ -414,8 +414,8 @@ export default function PlatformInstitutionDetailPage() {
                   onChange={(e) => setSubStatus(e.target.value)}
                 >
                   <option value="active">Active</option>
-                  <option value="trial">Trial</option>
-                  <option value="past_due">Past due</option>
+                  <option value="trialing">Trial</option>
+                  <option value="suspended">Suspended</option>
                   <option value="cancelled">Cancelled</option>
                 </Select>
               </Field>
