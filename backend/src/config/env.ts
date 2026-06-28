@@ -133,6 +133,13 @@ export const env = {
   // for operator-issued subscription invoices (paid offline; no gateway).
   saasInvoicePrefix: process.env.SAAS_INVOICE_PREFIX ?? "SINV-",
   saasInvoiceCurrency: process.env.SAAS_INVOICE_CURRENCY ?? "INR",
+  // Operator/seller identity printed on the invoice PDF "from" block. Name has a
+  // sensible default; the rest are optional and omitted from the PDF when unset.
+  saasCompanyName: process.env.SAAS_COMPANY_NAME ?? "SRE EDU OS",
+  saasCompanyAddress: optional("SAAS_COMPANY_ADDRESS"),
+  saasCompanyEmail: optional("SAAS_COMPANY_EMAIL"),
+  saasCompanyGstin: optional("SAAS_COMPANY_GSTIN"),
+  saasCompanyLogoPath: optional("SAAS_COMPANY_LOGO_PATH"),
 
   // Online payment gateway (provider-agnostic hosted checkout) — optional.
   // When PAYMENT_GATEWAY_PROVIDER + PAYMENT_GATEWAY_WEBHOOK_SECRET are unset the

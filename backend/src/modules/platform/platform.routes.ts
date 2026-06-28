@@ -22,10 +22,12 @@ import * as billing from "../billing/billing.service";
 import * as invoices from "../billing/invoices.service";
 import {
   createInvoiceSchema,
+  institutionInvoicesQuerySchema,
   invoiceLineSchema,
   listInvoicesQuerySchema,
   markPaidSchema,
   updateInvoiceSchema,
+  updateLineSchema,
 } from "../billing/invoices.schema";
 
 // The platform console sits ABOVE any tenant: super-admin-only (actor
@@ -271,11 +273,19 @@ platformRouter.get("/institutions/:id/subscription/events", requirePermission("p
 /**
  * @openapi
  * /platform/invoices:
- *   get: { tags: [Platform], summary: List all SaaS invoices (optional status filter), security: [{ bearerAuth: [] }], parameters: [{ in: query, name: status, schema: { type: string, enum: [draft, issued, paid, void] } }], responses: { 200: { description: Invoices, newest first } } }
+ *   get: { tags: [Platform], summary: List SaaS invoices (paginated; status/institution/overdue/date/search filters + sort), security: [{ bearerAuth: [] }], parameters: [{ in: query, name: status, schema: { type: string, enum: [draft, issued, paid, void] } }, { in: query, name: institutionId, schema: { type: string, format: uuid } }, { in: query, name: overdue, schema: { type: boolean } }, { in: query, name: from, schema: { type: string, format: date } }, { in: query, name: to, schema: { type: string, format: date } }, { in: query, name: q, schema: { type: string } }, { in: query, name: page, schema: { type: integer } }, { in: query, name: pageSize, schema: { type: integer } }, { in: query, name: sort, schema: { type: string, enum: [createdAt, dueDate, total, number, status] } }, { in: query, name: order, schema: { type: string, enum: [asc, desc] } }], responses: { 200: { description: "Paged invoices { rows, total, page, pageSize }" } } }
  */
 platformRouter.get("/invoices", requirePermission("platform:read"), async (req, res) => {
-  const { status } = listInvoicesQuerySchema.parse(req.query);
-  res.json(await invoices.listAll(status));
+  res.json(await invoices.listAll(listInvoicesQuerySchema.parse(req.query)));
+});
+
+/**
+ * @openapi
+ * /platform/invoices/summary:
+ *   get: { tags: [Platform], summary: Aggregate invoice counters across all tenants (for dashboard cards), security: [{ bearerAuth: [] }], responses: { 200: { description: "Counts + outstanding/paid/overdue amounts" } } }
+ */
+platformRouter.get("/invoices/summary", requirePermission("platform:read"), async (_req, res) => {
+  res.json(await invoices.summary());
 });
 
 /**
@@ -311,11 +321,26 @@ platformRouter.post("/invoices/:id/lines", requirePermission("platform:manage_su
 
 /**
  * @openapi
+ * /platform/invoices/{id}/lines/{lineId}:
+ *   patch: { tags: [Platform], summary: Edit a line item on a draft invoice (draft only), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }, { in: path, name: lineId, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Updated invoice }, 400: { description: Not a draft }, 404: { description: Line not found } } }
+ */
+platformRouter.patch("/invoices/:id/lines/:lineId", requirePermission("platform:manage_subscriptions"), async (req, res) => {
+  res.json(
+    await invoices.updateLine(uuidParam(req), uuidParam(req, "lineId"), updateLineSchema.parse(req.body))
+  );
+});
+
+/**
+ * @openapi
  * /platform/invoices/{id}:
  *   patch: { tags: [Platform], summary: Edit a draft invoice's header (draft only), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Updated invoice }, 400: { description: Not a draft } } }
+ *   delete: { tags: [Platform], summary: Delete a draft invoice permanently (draft only), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Deleted }, 400: { description: Not a draft } } }
  */
 platformRouter.patch("/invoices/:id", requirePermission("platform:manage_subscriptions"), async (req, res) => {
   res.json(await invoices.updateDraft(uuidParam(req), updateInvoiceSchema.parse(req.body)));
+});
+platformRouter.delete("/invoices/:id", requirePermission("platform:manage_subscriptions"), async (req, res) => {
+  res.json(await invoices.deleteDraft(uuidParam(req)));
 });
 
 /**
@@ -356,12 +381,30 @@ platformRouter.post("/invoices/:id/void", requirePermission("platform:manage_sub
 
 /**
  * @openapi
+ * /platform/invoices/{id}/duplicate:
+ *   post: { tags: [Platform], summary: Clone an invoice into a fresh draft (header + lines), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 201: { description: New draft invoice }, 404: { description: Not found } } }
+ */
+platformRouter.post("/invoices/:id/duplicate", requirePermission("platform:manage_subscriptions"), async (req, res) => {
+  res.status(201).json(await invoices.duplicateInvoice(uuidParam(req), req.user!.id));
+});
+
+/**
+ * @openapi
+ * /platform/invoices/{id}/resend:
+ *   post: { tags: [Platform], summary: Re-send the invoice email to the tenant's admins (issued or paid), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: "{ recipients } emailed (best-effort)" }, 400: { description: Not issued or paid } } }
+ */
+platformRouter.post("/invoices/:id/resend", requirePermission("platform:manage_subscriptions"), async (req, res) => {
+  res.json(await invoices.resendInvoice(uuidParam(req)));
+});
+
+/**
+ * @openapi
  * /platform/institutions/{id}/invoices:
  *   get: { tags: [Platform], summary: List a tenant's SaaS invoices, security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }, { in: query, name: status, schema: { type: string } }], responses: { 200: { description: Invoices } } }
  *   post: { tags: [Platform], summary: Create a draft SaaS invoice for a tenant, security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 201: { description: Draft invoice } } }
  */
 platformRouter.get("/institutions/:id/invoices", requirePermission("platform:read"), async (req, res) => {
-  const { status } = listInvoicesQuerySchema.parse(req.query);
+  const { status } = institutionInvoicesQuerySchema.parse(req.query);
   res.json(await invoices.listForInstitution(uuidParam(req), status));
 });
 platformRouter.post("/institutions/:id/invoices", requirePermission("platform:manage_subscriptions"), async (req, res) => {

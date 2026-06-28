@@ -259,6 +259,49 @@ export function Modal({
   );
 }
 
+/** A confirm/cancel dialog built on Modal, for destructive or important actions. */
+export function ConfirmDialog({
+  open,
+  title,
+  message,
+  confirmLabel = "Confirm",
+  cancelLabel = "Cancel",
+  tone = "danger",
+  busy = false,
+  onConfirm,
+  onClose,
+}: {
+  open: boolean;
+  title: string;
+  message: ReactNode;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  tone?: "danger" | "primary";
+  busy?: boolean;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <Modal title={title} open={open} onClose={onClose}>
+      <div className="space-y-5">
+        <div className="text-sm text-muted">{message}</div>
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose} disabled={busy}>
+            {cancelLabel}
+          </Button>
+          <Button
+            variant={tone === "danger" ? "danger" : "primary"}
+            onClick={onConfirm}
+            disabled={busy}
+          >
+            {busy ? "Working…" : confirmLabel}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 export function PageHeader({
   title,
   subtitle,
