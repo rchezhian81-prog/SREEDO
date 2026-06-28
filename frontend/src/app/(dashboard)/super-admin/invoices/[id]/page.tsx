@@ -13,6 +13,7 @@ import {
   ErrorNote,
   Field,
   Input,
+  Modal,
   PageHeader,
   Select,
   Spinner,
@@ -27,7 +28,24 @@ interface Line {
   description: string;
   quantity: string;
   unitPrice: string;
+  sacCode: string | null;
   amount: string;
+}
+interface EmailLog {
+  id: string;
+  recipient: string;
+  template: string;
+  status: string;
+  error: string | null;
+  createdAt: string;
+}
+interface AuditEvent {
+  action: string;
+  actorEmail: string | null;
+  actorRole: string | null;
+  detail: Record<string, unknown> | null;
+  ip: string | null;
+  createdAt: string;
 }
 interface Invoice {
   id: string;
@@ -49,11 +67,20 @@ interface Invoice {
   billingAddress: string | null;
   taxNotes: string | null;
   notes: string | null;
+  sacCode: string | null;
+  placeOfSupply: string | null;
+  reverseCharge: boolean;
+  recipientState: string | null;
+  recipientStateCode: string | null;
+  roundOff: string;
+  voidReason: string | null;
+  voidedAt: string | null;
   issuedAt: string | null;
   paidAt: string | null;
   paymentMethod: string | null;
   paymentReference: string | null;
   lines: Line[];
+  emails: EmailLog[];
 }
 
 type Tone = "slate" | "green" | "amber" | "red" | "blue";
@@ -86,6 +113,9 @@ export default function InvoiceDetailPage() {
 
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
+  const [audit, setAudit] = useState<AuditEvent[]>([]);
+  const [voidOpen, setVoidOpen] = useState(false);
+  const [voidReason, setVoidReason] = useState("");
 
   // Edit-draft header form (prefilled from the loaded invoice).
   const [edit, setEdit] = useState({
@@ -100,6 +130,11 @@ export default function InvoiceDetailPage() {
     periodEnd: "",
     taxNotes: "",
     notes: "",
+    sacCode: "",
+    placeOfSupply: "",
+    recipientState: "",
+    recipientStateCode: "",
+    reverseCharge: false,
   });
 
   const money = (v: string | number) => formatMoney(v, inv?.currency ?? "INR");
@@ -108,8 +143,12 @@ export default function InvoiceDetailPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.get<Invoice>(`/platform/invoices/${id}`);
+      const [data, auditRows] = await Promise.all([
+        api.get<Invoice>(`/platform/invoices/${id}`),
+        api.get<AuditEvent[]>(`/platform/invoices/${id}/audit`).catch(() => []),
+      ]);
       setInv(data);
+      setAudit(auditRows);
       setEdit({
         currency: data.currency ?? "",
         taxPercent: String(Number(data.taxPercent) || 0),
@@ -123,6 +162,11 @@ export default function InvoiceDetailPage() {
         periodEnd: data.periodEnd ?? "",
         taxNotes: data.taxNotes ?? "",
         notes: data.notes ?? "",
+        sacCode: data.sacCode ?? "",
+        placeOfSupply: data.placeOfSupply ?? "",
+        recipientState: data.recipientState ?? "",
+        recipientStateCode: data.recipientStateCode ?? "",
+        reverseCharge: data.reverseCharge ?? false,
       });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load invoice");
@@ -209,6 +253,11 @@ export default function InvoiceDetailPage() {
         periodEnd: edit.periodEnd || null,
         taxNotes: edit.taxNotes || null,
         notes: edit.notes || null,
+        sacCode: edit.sacCode || null,
+        placeOfSupply: edit.placeOfSupply || null,
+        recipientState: edit.recipientState || null,
+        recipientStateCode: edit.recipientStateCode || null,
+        reverseCharge: edit.reverseCharge,
       })
     );
 
@@ -249,13 +298,11 @@ export default function InvoiceDetailPage() {
     }
   };
 
-  const askVoid = () =>
-    setConfirm({
-      title: "Void invoice",
-      message:
-        "Void this invoice? It stays in the records but is marked void. This can't be undone.",
-      confirmLabel: "Void",
-      run: () => api.post(`/platform/invoices/${id}/void`),
+  const doVoid = () =>
+    act(async () => {
+      await api.post(`/platform/invoices/${id}/void`, { reason: voidReason.trim() });
+      setVoidOpen(false);
+      setVoidReason("");
     });
 
   const askRemoveLine = (lineId: string) =>
@@ -367,7 +414,17 @@ export default function InvoiceDetailPage() {
               {inv.paymentReference ? ` · ${inv.paymentReference}` : ""}
             </span>
           )}
+          {inv.sacCode && <span className="text-xs text-muted">SAC/HSN {inv.sacCode}</span>}
+          {inv.placeOfSupply && (
+            <span className="text-xs text-muted">Place of supply: {inv.placeOfSupply}</span>
+          )}
+          {inv.reverseCharge && <span className="text-xs text-muted">Reverse charge</span>}
         </div>
+        {inv.status === "void" && inv.voidReason && (
+          <div className="mt-2 text-xs text-red-600 dark:text-red-400">
+            Void reason: {inv.voidReason}
+          </div>
+        )}
         {(inv.billingName || inv.billingAddress || inv.gstin) && (
           <div className="mt-3 text-sm text-muted">
             {inv.billingName && <div className="text-ink">{inv.billingName}</div>}
@@ -571,6 +628,41 @@ export default function InvoiceDetailPage() {
               </Field>
             </div>
             <div className="mt-3 grid grid-cols-2 gap-3">
+              <Field label="SAC/HSN">
+                <Input
+                  value={edit.sacCode}
+                  onChange={(e) => setEdit({ ...edit, sacCode: e.target.value })}
+                />
+              </Field>
+              <Field label="Place of supply">
+                <Input
+                  value={edit.placeOfSupply}
+                  onChange={(e) => setEdit({ ...edit, placeOfSupply: e.target.value })}
+                />
+              </Field>
+              <Field label="Recipient state">
+                <Input
+                  value={edit.recipientState}
+                  onChange={(e) => setEdit({ ...edit, recipientState: e.target.value })}
+                />
+              </Field>
+              <Field label="Recipient state code">
+                <Input
+                  value={edit.recipientStateCode}
+                  onChange={(e) => setEdit({ ...edit, recipientStateCode: e.target.value })}
+                />
+              </Field>
+            </div>
+            <label className="mt-3 flex items-center gap-2 text-sm text-muted">
+              <input
+                type="checkbox"
+                checked={edit.reverseCharge}
+                onChange={(e) => setEdit({ ...edit, reverseCharge: e.target.checked })}
+                className="h-4 w-4 rounded border-line"
+              />
+              Reverse charge applicable
+            </label>
+            <div className="mt-3 grid grid-cols-2 gap-3">
               <Field label="Tax notes">
                 <Textarea
                   rows={2}
@@ -631,7 +723,7 @@ export default function InvoiceDetailPage() {
               <Button onClick={issue} disabled={busy || inv.lines.length === 0}>
                 Issue invoice
               </Button>
-              <Button variant="danger" onClick={askVoid} disabled={busy}>
+              <Button variant="danger" onClick={() => setVoidOpen(true)} disabled={busy}>
                 Void
               </Button>
             </div>
@@ -667,12 +759,71 @@ export default function InvoiceDetailPage() {
             </div>
           </div>
           <div className="mt-4 flex gap-2">
-            <Button variant="danger" onClick={askVoid} disabled={busy}>
+            <Button variant="danger" onClick={() => setVoidOpen(true)} disabled={busy}>
               Void
             </Button>
           </div>
         </Card>
       )}
+
+      {inv.emails.length > 0 && (
+        <Card className="mb-4">
+          <p className="mb-2 text-sm font-medium text-ink">Email delivery log</p>
+          <div className="space-y-1.5 text-sm">
+            {inv.emails.map((e) => (
+              <div key={e.id} className="flex flex-wrap items-center gap-2">
+                <Badge tone={e.status === "sent" ? "green" : e.status === "failed" ? "red" : "slate"}>
+                  {e.status}
+                </Badge>
+                <span className="text-ink">{e.recipient}</span>
+                <span className="text-faint">{formatDate(e.createdAt)}</span>
+                {e.error && <span className="text-xs text-red-600">{e.error}</span>}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {audit.length > 0 && (
+        <Card className="mb-4">
+          <p className="mb-2 text-sm font-medium text-ink">Audit timeline</p>
+          <div className="text-sm">
+            {audit.map((a, i) => (
+              <div
+                key={i}
+                className="flex flex-wrap items-center gap-2 border-b border-line py-1.5 last:border-0"
+              >
+                <span className="font-medium capitalize text-ink">
+                  {a.action.replace(/^invoice\./, "").replace(/_/g, " ")}
+                </span>
+                <span className="text-faint">{formatDate(a.createdAt)}</span>
+                {a.actorEmail && <span className="text-muted">· {a.actorEmail}</span>}
+                {a.ip && <span className="text-faint">· {a.ip}</span>}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      <Modal title="Void invoice" open={voidOpen} onClose={() => setVoidOpen(false)}>
+        <div className="space-y-4">
+          <p className="text-sm text-muted">
+            Voiding keeps the invoice in the records but marks it void. A paid invoice
+            can&apos;t be voided. This can&apos;t be undone.
+          </p>
+          <Field label="Reason (required)">
+            <Textarea rows={3} value={voidReason} onChange={(e) => setVoidReason(e.target.value)} />
+          </Field>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setVoidOpen(false)} disabled={busy}>
+              Cancel
+            </Button>
+            <Button variant="danger" onClick={doVoid} disabled={busy || !voidReason.trim()}>
+              {busy ? "Voiding…" : "Void invoice"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       <ConfirmDialog
         open={confirm !== null}

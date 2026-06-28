@@ -141,6 +141,11 @@ export default function InvoicesPage() {
     billingAddress: "",
     periodStart: "",
     periodEnd: "",
+    sacCode: "",
+    placeOfSupply: "",
+    recipientState: "",
+    recipientStateCode: "",
+    reverseCharge: false,
     notes: "",
   });
   const [lines, setLines] = useState<DraftLine[]>([
@@ -249,6 +254,11 @@ export default function InvoicesPage() {
         billingAddress: form.billingAddress || undefined,
         periodStart: form.periodStart || undefined,
         periodEnd: form.periodEnd || undefined,
+        sacCode: form.sacCode || undefined,
+        placeOfSupply: form.placeOfSupply || undefined,
+        reverseCharge: form.reverseCharge || undefined,
+        recipientState: form.recipientState || undefined,
+        recipientStateCode: form.recipientStateCode || undefined,
         notes: form.notes || undefined,
         lines: lines
           .filter((l) => l.description.trim())
@@ -313,7 +323,14 @@ export default function InvoicesPage() {
       <PageHeader
         title="Invoices"
         subtitle="SaaS subscription invoices (gateway-free, offline payment) — super-admin"
-        action={<Button onClick={openCreate}>+ New invoice</Button>}
+        action={
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => router.push("/super-admin/invoices/settings")}>
+              Settings
+            </Button>
+            <Button onClick={openCreate}>+ New invoice</Button>
+          </div>
+        }
       />
 
       {summary && (
@@ -602,6 +619,42 @@ export default function InvoicesPage() {
               onChange={(e) => setForm({ ...form, billingAddress: e.target.value })}
             />
           </Field>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="SAC/HSN (optional)">
+              <Input
+                value={form.sacCode}
+                onChange={(e) => setForm({ ...form, sacCode: e.target.value })}
+              />
+            </Field>
+            <Field label="Place of supply (optional)">
+              <Input
+                value={form.placeOfSupply}
+                onChange={(e) => setForm({ ...form, placeOfSupply: e.target.value })}
+              />
+            </Field>
+            <Field label="Recipient state (optional)">
+              <Input
+                value={form.recipientState}
+                onChange={(e) => setForm({ ...form, recipientState: e.target.value })}
+              />
+            </Field>
+            <Field label="Recipient state code (optional)">
+              <Input
+                value={form.recipientStateCode}
+                onChange={(e) => setForm({ ...form, recipientStateCode: e.target.value })}
+              />
+            </Field>
+          </div>
+          <label className="flex items-center gap-2 text-sm text-muted">
+            <input
+              type="checkbox"
+              checked={form.reverseCharge}
+              onChange={(e) => setForm({ ...form, reverseCharge: e.target.checked })}
+              className="h-4 w-4 rounded border-line"
+            />
+            Reverse charge applicable
+          </label>
 
           <div>
             <p className="mb-2 text-sm font-medium text-ink">Line items</p>

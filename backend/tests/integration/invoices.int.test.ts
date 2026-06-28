@@ -89,10 +89,11 @@ describe("billing B2: gateway-free SaaS invoicing", () => {
     expect(paid.body.paymentReference).toBe("NEFT-12345");
     expect(paid.body.paidAt).toBeTruthy();
 
-    // A paid invoice cannot be voided.
+    // A paid invoice cannot be voided (even with a reason).
     const badVoid = await request(app)
       .post(`/api/v1/platform/invoices/${invoiceId}/void`)
-      .set(auth(superToken));
+      .set(auth(superToken))
+      .send({ reason: "attempt" });
     expect(badVoid.status).toBe(400);
 
     // Tenant list shows the invoice.
@@ -126,7 +127,8 @@ describe("billing B2: gateway-free SaaS invoicing", () => {
       .send({});
     const voided = await request(app)
       .post(`/api/v1/platform/invoices/${draft.body.id}/void`)
-      .set(auth(superToken));
+      .set(auth(superToken))
+      .send({ reason: "duplicate draft" });
     expect(voided.status).toBe(200);
     expect(voided.body.status).toBe("void");
   });
