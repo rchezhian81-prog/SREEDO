@@ -18,6 +18,7 @@ interface Settings {
   prefix: string;
   fyStartMonth: number;
   numberPadding: number;
+  nextInvoiceNumber: number;
   defaultCurrency: string;
   defaultTaxPercent: string;
   defaultSac: string | null;
@@ -59,6 +60,7 @@ export default function InvoiceSettingsPage() {
           prefix: str(s.prefix),
           fyStartMonth: str(s.fyStartMonth),
           numberPadding: str(s.numberPadding),
+          nextInvoiceNumber: str(s.nextInvoiceNumber),
           defaultCurrency: str(s.defaultCurrency),
           defaultTaxPercent: str(s.defaultTaxPercent),
           defaultSac: str(s.defaultSac),
@@ -100,6 +102,7 @@ export default function InvoiceSettingsPage() {
         prefix: form.prefix || "SINV-",
         fyStartMonth: Number(form.fyStartMonth) || 4,
         numberPadding: Number(form.numberPadding) || 6,
+        nextInvoiceNumber: form.nextInvoiceNumber ? Number(form.nextInvoiceNumber) : undefined,
         defaultCurrency: form.defaultCurrency || "INR",
         defaultTaxPercent: Number(form.defaultTaxPercent) || 0,
         defaultSac: blank(form.defaultSac),
@@ -201,6 +204,13 @@ export default function InvoiceSettingsPage() {
           </Field>
           <Field label="Number padding">
             <Input type="number" value={form.numberPadding} onChange={(e) => set("numberPadding", e.target.value)} />
+          </Field>
+          <Field label="Next invoice number">
+            <Input
+              type="number"
+              value={form.nextInvoiceNumber}
+              onChange={(e) => set("nextInvoiceNumber", e.target.value)}
+            />
           </Field>
           <Field label="Default currency">
             <Input value={form.defaultCurrency} onChange={(e) => set("defaultCurrency", e.target.value)} />

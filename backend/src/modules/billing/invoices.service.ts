@@ -737,13 +737,14 @@ export async function issueInvoice(invoiceId: string, issuedBy?: string) {
   const fyStartMonth = settings.fyStartMonth || 4;
   await withTransaction(async (client) => {
     const label = await currentFyLabel(client as never, fyStartMonth);
-    const ctr = await client.query<{ last_value: number }>(
-      `INSERT INTO saas_invoice_counters (fy, last_value) VALUES ($1, 1)
-       ON CONFLICT (fy) DO UPDATE SET last_value = saas_invoice_counters.last_value + 1
-       RETURNING last_value`,
-      [label]
+    // Continuous, settable series: atomically take the next number from the
+    // singleton settings row (row lock serializes concurrent issues → unique,
+    // gap-free). The counter never resets; the FY label reflects the issue date.
+    const seq = await client.query<{ assigned: string }>(
+      `UPDATE invoice_settings SET next_invoice_number = next_invoice_number + 1
+       WHERE id = TRUE RETURNING (next_invoice_number - 1)::text AS assigned`
     );
-    const number = `${prefix}${label}-${String(ctr.rows[0].last_value).padStart(
+    const number = `${prefix}${label}-${String(seq.rows[0].assigned).padStart(
       padding,
       "0"
     )}`;

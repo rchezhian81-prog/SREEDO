@@ -88,6 +88,9 @@ export const invoiceSettingsSchema = z
     prefix: z.string().min(1).max(16).optional(),
     fyStartMonth: z.number().int().min(1).max(12).optional(),
     numberPadding: z.number().int().min(1).max(12).optional(),
+    // The next invoice number to assign on issue (continuous series). Must stay
+    // at/above the highest already-issued number — enforced in the service.
+    nextInvoiceNumber: z.number().int().min(1).optional(),
     defaultCurrency: z.string().min(1).max(8).optional(),
     defaultTaxPercent: z.number().min(0).max(100).optional(),
     defaultSac: z.string().max(20).nullable().optional(),
