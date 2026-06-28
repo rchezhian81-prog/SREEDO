@@ -130,4 +130,42 @@ describe("billing B2: gateway-free SaaS invoicing", () => {
     expect(voided.status).toBe(200);
     expect(voided.body.status).toBe("void");
   });
+
+  // Regression: GET /platform/invoices joins institutions, so the shared column
+  // list must be table-qualified or Postgres errors on ambiguous id/created_at.
+  it("lists all invoices across tenants (empty + populated, with institution join)", async () => {
+    // Empty list must succeed (not 500) and return [].
+    const empty = await request(app)
+      .get("/api/v1/platform/invoices")
+      .set(auth(superToken));
+    expect(empty.status).toBe(200);
+    expect(empty.body).toEqual([]);
+
+    await request(app)
+      .post(`/api/v1/platform/institutions/${instId}/invoices`)
+      .set(auth(superToken))
+      .send({ lines: [{ description: "Plan", unitPrice: 500 }] });
+
+    const list = await request(app)
+      .get("/api/v1/platform/invoices")
+      .set(auth(superToken));
+    expect(list.status).toBe(200);
+    expect(list.body).toHaveLength(1);
+    expect(list.body[0].institutionName).toBe("Institution INV");
+    expect(list.body[0].institutionCode).toBe("INV");
+    expect(Number(list.body[0].total)).toBe(500);
+
+    // Status filter also exercises the join.
+    const filtered = await request(app)
+      .get("/api/v1/platform/invoices?status=draft")
+      .set(auth(superToken));
+    expect(filtered.status).toBe(200);
+    expect(filtered.body).toHaveLength(1);
+
+    // Non-super-admin is blocked.
+    const denied = await request(app)
+      .get("/api/v1/platform/invoices")
+      .set(auth(adminToken));
+    expect(denied.status).toBe(403);
+  });
 });

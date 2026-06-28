@@ -19,17 +19,20 @@ import type {
  * computed in SQL to avoid floating-point drift.
  */
 
+// Columns are qualified with the `i` alias because listAll() joins institutions
+// (which also has id/created_at) — unqualified names would be ambiguous. Every
+// query using INVOICE_COLS aliases saas_invoices AS i.
 const INVOICE_COLS = `
-  id, institution_id AS "institutionId", package_id AS "packageId",
-  number, status, currency,
-  to_char(period_start, 'YYYY-MM-DD') AS "periodStart",
-  to_char(period_end, 'YYYY-MM-DD') AS "periodEnd",
-  subtotal, tax_percent AS "taxPercent", tax_amount AS "taxAmount", total,
-  gstin, billing_name AS "billingName", billing_address AS "billingAddress",
-  tax_notes AS "taxNotes", notes,
-  issued_at AS "issuedAt", paid_at AS "paidAt",
-  payment_method AS "paymentMethod", payment_reference AS "paymentReference",
-  created_at AS "createdAt"`;
+  i.id, i.institution_id AS "institutionId", i.package_id AS "packageId",
+  i.number, i.status, i.currency,
+  to_char(i.period_start, 'YYYY-MM-DD') AS "periodStart",
+  to_char(i.period_end, 'YYYY-MM-DD') AS "periodEnd",
+  i.subtotal, i.tax_percent AS "taxPercent", i.tax_amount AS "taxAmount", i.total,
+  i.gstin, i.billing_name AS "billingName", i.billing_address AS "billingAddress",
+  i.tax_notes AS "taxNotes", i.notes,
+  i.issued_at AS "issuedAt", i.paid_at AS "paidAt",
+  i.payment_method AS "paymentMethod", i.payment_reference AS "paymentReference",
+  i.created_at AS "createdAt"`;
 
 const LINE_COLS = `
   id, invoice_id AS "invoiceId", description, quantity,
@@ -73,7 +76,7 @@ async function recomputeTotals(invoiceId: string): Promise<void> {
 
 export async function getInvoice(invoiceId: string) {
   const { rows } = await query(
-    `SELECT ${INVOICE_COLS} FROM saas_invoices WHERE id = $1`,
+    `SELECT ${INVOICE_COLS} FROM saas_invoices i WHERE i.id = $1`,
     [invoiceId]
   );
   if (!rows[0]) throw ApiError.notFound("Invoice not found");
@@ -92,12 +95,12 @@ export async function listForInstitution(
   let filter = "";
   if (status) {
     params.push(status);
-    filter = ` AND status = $${params.length}`;
+    filter = ` AND i.status = $${params.length}`;
   }
   const { rows } = await query(
-    `SELECT ${INVOICE_COLS} FROM saas_invoices
-     WHERE institution_id = $1${filter}
-     ORDER BY created_at DESC`,
+    `SELECT ${INVOICE_COLS} FROM saas_invoices i
+     WHERE i.institution_id = $1${filter}
+     ORDER BY i.created_at DESC`,
     params
   );
   return rows;
