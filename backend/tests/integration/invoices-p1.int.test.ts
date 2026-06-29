@@ -29,6 +29,9 @@ describe("billing P1: reports, exports, advanced search", () => {
     recipientState?: string;
     placeOfSupply?: string;
     dueDate?: string;
+    paidAt?: string;
+    paymentMethod?: string;
+    reference?: string;
   }) {
     const inst = opts.inst ?? instA;
     const draft = await request(app)
@@ -53,7 +56,14 @@ describe("billing P1: reports, exports, advanced search", () => {
     }
     await request(app).post(`/api/v1/platform/invoices/${id}/issue`).set(auth(superToken));
     if (target === "paid") {
-      await request(app).post(`/api/v1/platform/invoices/${id}/mark-paid`).set(auth(superToken)).send({ paymentMethod: "cash" });
+      await request(app)
+        .post(`/api/v1/platform/invoices/${id}/mark-paid`)
+        .set(auth(superToken))
+        .send({
+          paymentMethod: opts.paymentMethod ?? "cash",
+          reference: opts.reference,
+          paidAt: opts.paidAt,
+        });
     }
     return id;
   }
@@ -200,5 +210,135 @@ describe("billing P1: reports, exports, advanced search", () => {
     expect(r.status).toBe(403);
     const e = await request(app).get("/api/v1/platform/invoices/export?format=csv").set(auth(adminToken));
     expect(e.status).toBe(403);
+  });
+
+  // ---- Payment status (P1): filters, exports, guards, audit ----
+
+  it("filters the list by paymentStatus (paid vs unpaid/outstanding)", async () => {
+    await mk({ unitPrice: 1000, status: "paid" });
+    await mk({ unitPrice: 2000, status: "issued" }); // outstanding
+    await mk({ unitPrice: 3000, status: "draft" }); // neither
+    await mk({ unitPrice: 4000, status: "void" }); // neither
+
+    const paid = await request(app).get("/api/v1/platform/invoices?paymentStatus=paid").set(auth(superToken));
+    expect(paid.body.total).toBe(1);
+    expect(paid.body.rows[0].status).toBe("paid");
+
+    const unpaid = await request(app).get("/api/v1/platform/invoices?paymentStatus=unpaid").set(auth(superToken));
+    expect(unpaid.body.total).toBe(1);
+    expect(unpaid.body.rows[0].status).toBe("issued");
+  });
+
+  it("filters the list by paid-date range", async () => {
+    await mk({ unitPrice: 1000, status: "paid", paidAt: "2024-01-10" });
+    await mk({ unitPrice: 2000, status: "paid", paidAt: "2024-06-15" });
+
+    const jan = await request(app)
+      .get("/api/v1/platform/invoices?paidFrom=2024-01-01&paidTo=2024-01-31")
+      .set(auth(superToken));
+    expect(jan.body.total).toBe(1);
+    expect(Number(jan.body.rows[0].total)).toBe(1000);
+
+    const span = await request(app)
+      .get("/api/v1/platform/invoices?paidFrom=2024-01-01&paidTo=2024-12-31")
+      .set(auth(superToken));
+    expect(span.body.total).toBe(2);
+  });
+
+  it("export carries payment columns (status, paid date, mode, reference, outstanding, institution code)", async () => {
+    await mk({ unitPrice: 1000, status: "paid", paymentMethod: "upi", reference: "UTR12345", paidAt: "2024-03-03" });
+    await mk({ unitPrice: 2500, status: "issued" }); // outstanding
+
+    const csv = await request(app)
+      .get("/api/v1/platform/invoices/export?format=csv")
+      .set(auth(superToken))
+      .buffer(true)
+      .parse(binary);
+    expect(csv.status).toBe(200);
+    const text = csv.body.toString("utf8");
+    for (const header of [
+      "Institution code",
+      "Payment status",
+      "Paid date",
+      "Payment mode",
+      "Payment reference",
+      "Outstanding",
+    ]) {
+      expect(text).toContain(header);
+    }
+    // Paid invoice carries its mode/reference/paid-date; issued one is "unpaid".
+    expect(text).toContain("upi");
+    expect(text).toContain("UTR12345");
+    expect(text).toContain("2024-03-03");
+    expect(text).toContain("unpaid");
+    // Outstanding equals the issued invoice's total (2500), zero for the paid one.
+    expect(text).toContain("2500");
+  });
+
+  it("only filtered rows are exported (paymentStatus scopes the file)", async () => {
+    await mk({ unitPrice: 1111, status: "paid" });
+    await mk({ unitPrice: 2222, status: "issued" });
+
+    const csv = await request(app)
+      .get("/api/v1/platform/invoices/export?format=csv&paymentStatus=paid")
+      .set(auth(superToken))
+      .buffer(true)
+      .parse(binary);
+    const text = csv.body.toString("utf8");
+    expect(text).toContain("1111");
+    expect(text).not.toContain("2222");
+  });
+
+  it("draft and void invoices cannot be marked paid", async () => {
+    const draft = await mk({ unitPrice: 1000, status: "draft" });
+    const draftRes = await request(app)
+      .post(`/api/v1/platform/invoices/${draft}/mark-paid`)
+      .set(auth(superToken))
+      .send({ paymentMethod: "cash" });
+    expect(draftRes.status).toBe(400);
+
+    const voided = await mk({ unitPrice: 1000, status: "void" });
+    const voidRes = await request(app)
+      .post(`/api/v1/platform/invoices/${voided}/mark-paid`)
+      .set(auth(superToken))
+      .send({ paymentMethod: "cash" });
+    expect(voidRes.status).toBe(400);
+  });
+
+  it("paid invoices drop out of the overdue and outstanding views", async () => {
+    // Past-due, then paid → settled, not overdue/outstanding.
+    await mk({ unitPrice: 1000, status: "paid", dueDate: "2020-01-01" });
+    // A genuinely overdue, still-issued invoice for contrast.
+    await mk({ unitPrice: 2000, status: "issued", dueDate: "2020-01-01" });
+
+    const overdue = await request(app).get("/api/v1/platform/invoices/reports?type=overdue").set(auth(superToken));
+    expect(overdue.body.rows).toHaveLength(1);
+    expect(Number(overdue.body.totals.total)).toBe(2000);
+
+    const unpaid = await request(app).get("/api/v1/platform/invoices/reports?type=unpaid").set(auth(superToken));
+    expect(unpaid.body.rows).toHaveLength(1);
+    expect(Number(unpaid.body.totals.total)).toBe(2000);
+
+    const overdueList = await request(app).get("/api/v1/platform/invoices?overdue=true").set(auth(superToken));
+    expect(overdueList.body.total).toBe(1);
+  });
+
+  it("mark-paid records date/mode/reference and writes an audit entry", async () => {
+    const id = await mk({
+      unitPrice: 1000,
+      status: "paid",
+      paymentMethod: "bank_transfer",
+      reference: "NEFT-9",
+      paidAt: "2024-05-05",
+    });
+    const inv = await request(app).get(`/api/v1/platform/invoices/${id}`).set(auth(superToken));
+    expect(inv.body.status).toBe("paid");
+    expect(inv.body.paymentMethod).toBe("bank_transfer");
+    expect(inv.body.paymentReference).toBe("NEFT-9");
+    expect(String(inv.body.paidAt)).toContain("2024-05-05");
+
+    const audit = await request(app).get(`/api/v1/platform/invoices/${id}/audit`).set(auth(superToken));
+    const actions = audit.body.map((a: { action: string }) => a.action);
+    expect(actions).toContain("invoice.paid");
   });
 });
