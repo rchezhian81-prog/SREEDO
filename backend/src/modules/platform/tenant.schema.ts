@@ -7,7 +7,8 @@ import { z } from "zod";
  */
 
 export const INSTITUTION_TYPES = ["school", "college", "university", "coaching", "other"] as const;
-export const LIFECYCLE_STATUSES = ["draft", "trial", "active", "suspended", "expired", "archived"] as const;
+export const LIFECYCLE_STATUSES = ["draft", "trial", "active", "suspended", "expired", "archived", "closed"] as const;
+export const DOCUMENT_CATEGORIES = ["registration", "trust_company", "gst", "pan_tan", "agreement", "authorization", "logo", "other"] as const;
 export const MODULE_KEYS = [
   "admissions", "students", "staff", "attendance", "fees", "exams", "transport",
   "hostel", "library", "inventory", "communication", "reports", "documents",
@@ -121,6 +122,7 @@ export const settingsSchema = z
         smsSenderId: z.string().max(20).nullable().optional(),
         notifyEmail: z.boolean().optional(),
         notifySms: z.boolean().optional(),
+        whatsappEnabled: z.boolean().optional(),
       })
       .partial(),
   })
@@ -137,11 +139,46 @@ export const complianceSchema = z
   .object({
     termsAccepted: z.boolean().optional(),
     agreementSigned: z.boolean().optional(),
+    dataProcessingConsent: z.boolean().optional(),
     kycStatus: z.enum(["pending", "verified", "rejected"]).optional(),
     approvalStatus: z.enum(["pending", "approved", "rejected"]).optional(),
     approvalRemarks: z.string().max(1000).nullable().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: "No compliance fields to update" });
+
+// Lightweight CRM fields (account owner + last-contacted) on the institution row.
+export const crmSchema = z
+  .object({
+    accountManager: z.string().trim().max(200).nullable().optional(),
+    lastContactedAt: z.string().datetime().nullable().optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, { message: "No CRM fields to update" });
+
+// Complete onboarding; `override` lets a super-admin activate despite missing steps.
+export const completeOnboardingSchema = z
+  .object({ override: z.boolean().optional() })
+  .optional();
+
+// Tenant document metadata (the file itself arrives as multipart `file`).
+export const documentMetaSchema = z.object({
+  category: z.enum(DOCUMENT_CATEGORIES).default("other"),
+});
+export const documentVerifySchema = z.object({
+  status: z.enum(["pending", "verified", "rejected"]),
+  remarks: z.string().trim().max(1000).nullable().optional(),
+});
+
+// Per-tenant branding (mirrors institution_branding; super-admin write path).
+export const brandingSchema = z
+  .object({
+    displayName: z.string().trim().max(160).nullable().optional(),
+    logoUrl: z.string().trim().url().max(1000).nullable().optional(),
+    primaryColor: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/, "Use a #rrggbb hex colour").nullable().optional(),
+    tagline: z.string().trim().max(200).nullable().optional(),
+    letterhead: z.string().trim().max(2000).nullable().optional(),
+    footer: z.string().trim().max(2000).nullable().optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, { message: "No branding fields to update" });
 
 export const primaryAdminSchema = z.object({
   fullName: z.string().trim().min(1).max(200),
@@ -167,6 +204,9 @@ export const tenantListQuerySchema = z.object({
   institutionType: z.enum(INSTITUTION_TYPES).optional(),
   status: z.enum(LIFECYCLE_STATUSES).optional(),
   type: z.enum(["school", "college"]).optional(),
+  package: z.string().trim().max(200).optional(),
+  createdFrom: z.string().date().optional(),
+  createdTo: z.string().date().optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
   sort: z.enum(["name", "code", "status", "institutionType", "createdAt", "students", "staff"]).default("createdAt"),

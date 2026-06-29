@@ -18,23 +18,26 @@ type NavItem = {
   label: string;
   icon: IconName;
   adminOnly?: boolean;
+  // When set, the item is hidden if the tenant has an explicit enabled-modules
+  // list that does not include this key. Untagged items are always shown.
+  moduleKey?: string;
 };
 
 const SCHOOL_NAV: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: "grid" },
   { href: "/get-started", label: "Get Started", icon: "rocket", adminOnly: true },
   { href: "/analytics", label: "Analytics", icon: "trendUp" },
-  { href: "/students", label: "Students", icon: "cap" },
-  { href: "/admissions", label: "Admissions", icon: "card", adminOnly: true },
-  { href: "/teachers", label: "Teachers", icon: "board" },
+  { href: "/students", label: "Students", icon: "cap", moduleKey: "students" },
+  { href: "/admissions", label: "Admissions", icon: "card", adminOnly: true, moduleKey: "admissions" },
+  { href: "/teachers", label: "Teachers", icon: "board", moduleKey: "staff" },
   { href: "/classes", label: "Classes", icon: "school" },
-  { href: "/timetable", label: "Timetable", icon: "calendar" },
-  { href: "/timetable/generate", label: "Auto Timetable", icon: "sparkles", adminOnly: true },
+  { href: "/timetable", label: "Timetable", icon: "calendar", moduleKey: "timetable" },
+  { href: "/timetable/generate", label: "Auto Timetable", icon: "sparkles", adminOnly: true, moduleKey: "timetable" },
   { href: "/calendar", label: "Calendar", icon: "calendar" },
-  { href: "/library", label: "Library", icon: "file" },
-  { href: "/transport", label: "Transport", icon: "bus" },
-  { href: "/hostel", label: "Hostel", icon: "building" },
-  { href: "/inventory", label: "Inventory", icon: "package" },
+  { href: "/library", label: "Library", icon: "file", moduleKey: "library" },
+  { href: "/transport", label: "Transport", icon: "bus", moduleKey: "transport" },
+  { href: "/hostel", label: "Hostel", icon: "building", moduleKey: "hostel" },
+  { href: "/inventory", label: "Inventory", icon: "package", moduleKey: "inventory" },
   { href: "/staff", label: "Staff Attendance", icon: "briefcase" },
   { href: "/front-office", label: "Front Office", icon: "help", adminOnly: true },
   { href: "/lost-found", label: "Lost & Found", icon: "tag", adminOnly: true },
@@ -42,12 +45,12 @@ const SCHOOL_NAV: NavItem[] = [
   { href: "/alumni", label: "Alumni", icon: "users", adminOnly: true },
   { href: "/cafeteria", label: "Cafeteria", icon: "utensils", adminOnly: true },
   { href: "/leave", label: "Leave", icon: "calcheck" },
-  { href: "/payroll", label: "Payroll", icon: "wallet" },
-  { href: "/attendance", label: "Attendance", icon: "calcheck" },
-  { href: "/period-attendance", label: "Period Attendance", icon: "calcheck" },
-  { href: "/exams", label: "Exams", icon: "file" },
-  { href: "/reports", label: "Reports", icon: "barChart" },
-  { href: "/documents", label: "Documents", icon: "file" },
+  { href: "/payroll", label: "Payroll", icon: "wallet", moduleKey: "payroll" },
+  { href: "/attendance", label: "Attendance", icon: "calcheck", moduleKey: "attendance" },
+  { href: "/period-attendance", label: "Period Attendance", icon: "calcheck", moduleKey: "attendance" },
+  { href: "/exams", label: "Exams", icon: "file", moduleKey: "exams" },
+  { href: "/reports", label: "Reports", icon: "barChart", moduleKey: "reports" },
+  { href: "/documents", label: "Documents", icon: "file", moduleKey: "documents" },
   { href: "/homework", label: "Homework", icon: "board" },
   { href: "/study-materials", label: "Study Materials", icon: "bookOpen" },
   { href: "/live-classes", label: "Live Classes", icon: "video" },
@@ -61,13 +64,13 @@ const SCHOOL_NAV: NavItem[] = [
   { href: "/report-builder", label: "Report Builder", icon: "barChart" },
   { href: "/scheduled-reports", label: "Scheduled Reports", icon: "calendar" },
   { href: "/disciplinary", label: "Disciplinary", icon: "shield" },
-  { href: "/fees", label: "Fees", icon: "card" },
+  { href: "/fees", label: "Fees", icon: "card", moduleKey: "fees" },
   { href: "/fees/setup", label: "Fee Setup", icon: "gear" },
   { href: "/fees/refunds", label: "Fee Refunds", icon: "receipt", adminOnly: true },
   { href: "/online-payments", label: "Online Payments", icon: "wallet" },
   { href: "/accounting", label: "Accounting", icon: "wallet", adminOnly: true },
   { href: "/announcements", label: "Announcements", icon: "megaphone" },
-  { href: "/communication", label: "Communication", icon: "mail" },
+  { href: "/communication", label: "Communication", icon: "mail", moduleKey: "communication" },
   { href: "/messaging", label: "Messaging", icon: "message" },
   { href: "/feedback", label: "Feedback", icon: "message", adminOnly: true },
   { href: "/assistant", label: "AI Assistant", icon: "sparkles" },
@@ -392,13 +395,16 @@ export default function DashboardLayout({
   }, [hydrated, accessToken, user, setBranding]);
 
   // The institution's type on the backend is the source of truth for School vs
-  // College — reconcile the (pre-login, user-guessed) mode to it on load.
+  // College — reconcile the (pre-login, user-guessed) mode to it on load. We also
+  // capture the tenant's enabled-modules list to gate the sidebar.
+  const [enabledModules, setEnabledModules] = useState<string[] | null>(null);
   useEffect(() => {
     if (!hydrated || !accessToken || user?.role === "super_admin") return;
     api
-      .get<{ institutionType: "school" | "college" | null }>("/auth/me")
+      .get<{ institutionType: "school" | "college" | null; enabledModules: string[] | null }>("/auth/me")
       .then((me) => {
         if (me.institutionType) setMode(me.institutionType);
+        setEnabledModules(me.enabledModules ?? null);
       })
       .catch(() => undefined);
   }, [hydrated, accessToken, user, setMode]);
@@ -407,9 +413,18 @@ export default function DashboardLayout({
   const inSuperArea = pathname.startsWith("/super-admin");
   const navItems = isSuper
     ? SUPER_ADMIN_NAV
-    : (mode === "college" ? COLLEGE_NAV : SCHOOL_NAV).filter(
-        (item) => !item.adminOnly || user?.role === "admin"
-      );
+    : (mode === "college" ? COLLEGE_NAV : SCHOOL_NAV)
+        .filter((item) => !item.adminOnly || user?.role === "admin")
+        // Hide modules the tenant explicitly disabled. Untagged items and the
+        // "all enabled" default (null/empty list) are always shown — so core
+        // navigation can never disappear.
+        .filter(
+          (item) =>
+            !item.moduleKey ||
+            !enabledModules ||
+            enabledModules.length === 0 ||
+            enabledModules.includes(item.moduleKey)
+        );
 
   // While unauthenticated or mid-redirect to the correct area, show a spinner.
   if (!hydrated || !accessToken) return <Spinner />;

@@ -1,13 +1,20 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import type { z } from "zod";
 import { query, withTransaction } from "../../db/postgres";
 import { ApiError } from "../../utils/api-error";
 import { hashPassword } from "../../utils/password";
 import { effectiveLimits } from "../../utils/plan-limits";
+import { storage } from "../../utils/storage";
+import { mailerConfigured } from "../../utils/mailer";
+import { assertValidFile } from "../documents/documents.service";
+import { requestPasswordReset } from "../auth/auth.service";
 import { recordAudit, type Actor } from "./platform.service";
 import type {
+  brandingSchema,
   complianceSchema,
   createTenantSchema,
+  crmSchema,
+  documentVerifySchema,
   noteSchema,
   primaryAdminSchema,
   settingsSchema,
@@ -36,6 +43,9 @@ type NoteInput = z.infer<typeof noteSchema>;
 type UpdateNote = z.infer<typeof updateNoteSchema>;
 type ListQuery = z.infer<typeof tenantListQuerySchema>;
 type ExportQuery = z.infer<typeof tenantExportQuerySchema>;
+type BrandingInput = z.infer<typeof brandingSchema>;
+type CrmInput = z.infer<typeof crmSchema>;
+type DocVerifyInput = z.infer<typeof documentVerifySchema>;
 
 /** Structural school/college mode derived from the tenant-facing type. */
 function structuralType(institutionType: string): "school" | "college" {
@@ -55,6 +65,8 @@ const TENANT_COLS = `
   i.terms_accepted AS "termsAccepted", i.agreement_signed AS "agreementSigned",
   i.kyc_status AS "kycStatus", i.approval_status AS "approvalStatus",
   i.approval_remarks AS "approvalRemarks", i.approved_at AS "approvedAt",
+  i.data_processing_consent AS "dataProcessingConsent",
+  i.account_manager AS "accountManager", i.last_contacted_at AS "lastContactedAt",
   i.created_at AS "createdAt", i.updated_at AS "updatedAt"`;
 
 async function assertTenant(id: string): Promise<void> {
@@ -64,7 +76,7 @@ async function assertTenant(id: string): Promise<void> {
 
 // ---- Directory (list + export) ----
 
-type Filters = Partial<Pick<ListQuery, "q" | "institutionType" | "status" | "type">>;
+type Filters = Partial<Pick<ListQuery, "q" | "institutionType" | "status" | "type" | "package" | "createdFrom" | "createdTo">>;
 
 function buildFilters(f: Filters): { whereSql: string; params: unknown[] } {
   const where: string[] = [];
@@ -77,6 +89,15 @@ function buildFilters(f: Filters): { whereSql: string; params: unknown[] } {
   if (f.institutionType) add((n) => `i.institution_type = $${n}`, f.institutionType);
   if (f.status) add((n) => `i.status = $${n}`, f.status);
   if (f.type) add((n) => `i.type = $${n}`, f.type);
+  if (f.package)
+    add(
+      (n) => `EXISTS (SELECT 1 FROM institution_subscriptions sub
+                JOIN subscription_packages p ON p.id = sub.package_id
+                WHERE sub.institution_id = i.id AND p.name ILIKE $${n})`,
+      `%${f.package}%`
+    );
+  if (f.createdFrom) add((n) => `i.created_at >= $${n}`, f.createdFrom);
+  if (f.createdTo) add((n) => `i.created_at < ($${n}::date + interval '1 day')`, f.createdTo);
   return { whereSql: where.length ? `WHERE ${where.join(" AND ")}` : "", params };
 }
 
@@ -189,21 +210,22 @@ export async function tenantBilling(id: string) {
 
 // Onboarding checklist — steps derived from REAL data where possible; manual
 // steps (branding/communication/documents) read from the onboarding jsonb.
-const ONBOARDING_STEPS: { key: string; label: string; manual?: boolean }[] = [
-  { key: "profile", label: "Institution profile" },
-  { key: "academic_structure", label: "Institution type & academic structure" },
-  { key: "primary_admin", label: "Primary admin" },
+const ONBOARDING_STEPS: { key: string; label: string; manual?: boolean; required?: boolean }[] = [
+  { key: "profile", label: "Institution profile", required: true },
+  { key: "academic_structure", label: "Institution type & academic structure", required: true },
+  { key: "primary_admin", label: "Primary admin", required: true },
   { key: "subscription", label: "Subscription / package" },
   { key: "limits", label: "Plan limits" },
   { key: "branding", label: "Branding / logo", manual: true },
-  { key: "domain", label: "Tenant URL / slug" },
+  { key: "domain", label: "Tenant URL / slug", required: true },
+  { key: "documents", label: "Required documents" },
   { key: "communication", label: "Communication settings", manual: true },
   { key: "review", label: "Review & activate" },
 ];
 
 function computeOnboarding(
   d: Record<string, unknown>,
-  derived: { hasAdmin: boolean; hasSubscription: boolean }
+  derived: { hasAdmin: boolean; hasSubscription: boolean; hasDocuments: boolean }
 ) {
   const settings = (d.settings ?? {}) as Record<string, unknown>;
   const onboarding = (d.onboarding ?? {}) as { steps?: Record<string, boolean> };
@@ -216,28 +238,37 @@ function computeOnboarding(
     subscription: derived.hasSubscription,
     limits: has((settings as { limits?: unknown }).limits),
     domain: !!d.slug,
+    documents: derived.hasDocuments,
     review: d.status !== "draft",
   };
   const steps = ONBOARDING_STEPS.map((s) => ({
     key: s.key,
     label: s.label,
+    required: s.required === true,
     done: s.manual ? manual[s.key] === true : auto[s.key] === true,
   }));
   const done = steps.filter((s) => s.done).length;
-  return { steps, completion: Math.round((done / steps.length) * 100), completedAt: (onboarding as { completedAt?: string }).completedAt ?? null };
+  const missing = steps.filter((s) => s.required && !s.done).map((s) => s.label);
+  return {
+    steps,
+    completion: Math.round((done / steps.length) * 100),
+    missing,
+    completedAt: (onboarding as { completedAt?: string }).completedAt ?? null,
+  };
 }
 
 export async function getTenant(id: string) {
   const { rows } = await query<Record<string, unknown>>(`SELECT ${TENANT_COLS} FROM institutions i WHERE i.id = $1`, [id]);
   if (!rows[0]) throw ApiError.notFound("Institution not found");
   const t = rows[0];
-  const [usage, limits, billing, adminRows, recent] = await Promise.all([
+  const [usage, limits, billing, adminRows, recent, brandingRows, docCount] = await Promise.all([
     tenantUsage(id),
     effectiveLimits(id),
     tenantBilling(id),
     query<Record<string, unknown>>(
-      `SELECT id, full_name AS "fullName", email, is_active AS "isActive"
-       FROM users WHERE institution_id = $1 AND role = 'admin' ORDER BY created_at ASC`,
+      `SELECT u.id, u.full_name AS "fullName", u.email, u.is_active AS "isActive",
+              (SELECT max(rt.last_used_at) FROM refresh_tokens rt WHERE rt.user_id = u.id) AS "lastActiveAt"
+       FROM users u WHERE u.institution_id = $1 AND u.role = 'admin' ORDER BY u.created_at ASC`,
       [id]
     ),
     query(
@@ -245,12 +276,33 @@ export async function getTenant(id: string) {
        FROM platform_audit_log a WHERE a.institution_id = $1 ORDER BY a.created_at DESC LIMIT 20`,
       [id]
     ),
+    query<Record<string, unknown>>(
+      `SELECT display_name AS "displayName", logo_url AS "logoUrl",
+              primary_color AS "primaryColor", tagline, letterhead, footer
+       FROM institution_branding WHERE institution_id = $1`,
+      [id]
+    ),
+    query<{ n: number }>(
+      `SELECT count(*)::int AS n FROM tenant_documents WHERE institution_id = $1 AND archived_at IS NULL`,
+      [id]
+    ),
   ]);
   const onboarding = computeOnboarding(t, {
     hasAdmin: adminRows.rows.length > 0,
     hasSubscription: !!billing.subscription,
+    hasDocuments: docCount.rows[0].n > 0,
   });
-  return { ...t, usage, limits, billing, admins: adminRows.rows, recentActivity: recent.rows, onboardingProgress: onboarding };
+  return {
+    ...t,
+    usage,
+    limits,
+    billing,
+    branding: brandingRows.rows[0] ?? null,
+    documentCount: docCount.rows[0].n,
+    admins: adminRows.rows,
+    recentActivity: recent.rows,
+    onboardingProgress: onboarding,
+  };
 }
 
 // ---- Create / update ----
@@ -288,6 +340,8 @@ export async function createTenant(input: CreateTenant, actor: Actor) {
     action: "tenant.create", targetType: "institution", targetId: id, institutionId: id,
     detail: { code: input.code, institutionType: input.institutionType },
   });
+  // Email the new admin a password-setup link (best-effort; no-op if SMTP is off).
+  if (input.primaryAdmin) await sendSetupLink(input.primaryAdmin.email);
   return getTenant(id);
 }
 
@@ -322,13 +376,15 @@ export async function updateTenant(id: string, input: UpdateTenant, actor: Actor
 
 // ---- Lifecycle (status + is_active sync; suspend/archive require a reason) ----
 
-const ALLOWED_STATUS = new Set(["draft", "trial", "active", "suspended", "expired", "archived"]);
+const ALLOWED_STATUS = new Set(["draft", "trial", "active", "suspended", "expired", "archived", "closed"]);
+// Reversible-stop and terminal states need an audited reason.
+const REASON_REQUIRED = new Set(["suspended", "archived", "closed"]);
 
 export async function setLifecycle(id: string, status: string, reason: string | undefined, actor: Actor) {
   if (!ALLOWED_STATUS.has(status)) throw ApiError.badRequest("Invalid status");
   await assertTenant(id);
-  if ((status === "suspended" || status === "archived") && !reason?.trim()) {
-    throw ApiError.badRequest(`A reason is required to ${status === "archived" ? "archive" : "suspend"} a tenant`);
+  if (REASON_REQUIRED.has(status) && !reason?.trim()) {
+    throw ApiError.badRequest(`A reason is required to ${status === "archived" ? "archive" : status} a tenant`);
   }
   const isActive = ACTIVE_STATUSES.has(status);
   const { rows } = await query(
@@ -379,8 +435,15 @@ export async function setOnboardingStep(id: string, step: string, done: boolean,
   return getTenant(id);
 }
 
-export async function completeOnboarding(id: string, actor: Actor) {
+export async function completeOnboarding(id: string, override: boolean, actor: Actor) {
   await assertTenant(id);
+  // Block activation until required onboarding steps are done — unless a
+  // super-admin explicitly overrides (the override is recorded in the audit).
+  const current = await getTenant(id);
+  const missing = current.onboardingProgress.missing;
+  if (missing.length && !override) {
+    throw ApiError.badRequest(`Complete required steps before activating: ${missing.join(", ")}`);
+  }
   // A draft tenant becomes active (and usable) on completion; a non-draft status is left as-is.
   await query(
     `UPDATE institutions SET
@@ -391,7 +454,8 @@ export async function completeOnboarding(id: string, actor: Actor) {
     [id]
   );
   await recordAudit(actor, {
-    action: "tenant.onboarding_complete", targetType: "institution", targetId: id, institutionId: id, detail: {},
+    action: "tenant.onboarding_complete", targetType: "institution", targetId: id, institutionId: id,
+    detail: override && missing.length ? { override: true, missing } : {},
   });
   return getTenant(id);
 }
@@ -403,6 +467,7 @@ export async function setCompliance(id: string, input: ComplianceInput, actor: A
   const data = input as Record<string, unknown>;
   const map: Record<string, string> = {
     termsAccepted: "terms_accepted", agreementSigned: "agreement_signed",
+    dataProcessingConsent: "data_processing_consent",
     kycStatus: "kyc_status", approvalStatus: "approval_status", approvalRemarks: "approval_remarks",
   };
   const sets: string[] = [];
@@ -447,14 +512,45 @@ async function createAdminUser(
   return rows[0].id;
 }
 
+/**
+ * Best-effort: email a password-setup (reset) link so a newly created admin can
+ * set their own password. Reuses the auth password-reset flow; safely no-ops
+ * (logs only) when SMTP is unconfigured. Returns whether email delivery is on.
+ */
+async function sendSetupLink(email: string): Promise<boolean> {
+  try {
+    await requestPasswordReset(email);
+  } catch (err) {
+    console.warn("tenant admin setup-link send failed:", err);
+  }
+  return mailerConfigured();
+}
+
 export async function setPrimaryAdmin(id: string, input: PrimaryAdmin, actor: Actor) {
   await assertTenant(id);
   const adminId = await withTransaction((client) => createAdminUser(client as never, id, input));
   await recordAudit(actor, {
     action: "tenant.admin_create", targetType: "user", targetId: adminId, institutionId: id,
-    detail: { email: input.email },
+    detail: { email: input.email, emailConfigured: mailerConfigured() },
   });
+  await sendSetupLink(input.email);
   return getTenant(id);
+}
+
+/** Re-send a password-setup / reset link to an existing tenant admin (audited). */
+export async function sendAdminSetupLink(id: string, adminUserId: string, actor: Actor) {
+  await assertTenant(id);
+  const { rows } = await query<{ email: string }>(
+    `SELECT email FROM users WHERE id = $2 AND institution_id = $1 AND role = 'admin'`,
+    [id, adminUserId]
+  );
+  if (!rows[0]) throw ApiError.notFound("Tenant admin not found");
+  const emailSent = await sendSetupLink(rows[0].email);
+  await recordAudit(actor, {
+    action: "tenant.admin_reset_link", targetType: "user", targetId: adminUserId, institutionId: id,
+    detail: { email: rows[0].email, emailConfigured: emailSent },
+  });
+  return { emailSent };
 }
 
 export async function setAdminActive(id: string, adminUserId: string, active: boolean, actor: Actor) {
@@ -533,4 +629,243 @@ export async function deleteNote(noteId: string, actor: Actor) {
     institutionId: rows[0].institution_id, detail: { noteId },
   });
   return listNotes(rows[0].institution_id);
+}
+
+// ---- CRM (account owner + last-contacted, on the institution row) ----
+
+export async function updateCrm(id: string, input: CrmInput, actor: Actor) {
+  await assertTenant(id);
+  const data = input as Record<string, unknown>;
+  const map: Record<string, string> = { accountManager: "account_manager", lastContactedAt: "last_contacted_at" };
+  const sets: string[] = [];
+  const params: unknown[] = [];
+  for (const [field, col] of Object.entries(map)) {
+    if (field in data) {
+      params.push(data[field]);
+      sets.push(`${col} = $${params.length}`);
+    }
+  }
+  params.push(id);
+  await query(`UPDATE institutions SET ${sets.join(", ")} WHERE id = $${params.length}`, params);
+  await recordAudit(actor, {
+    action: "tenant.crm_update", targetType: "institution", targetId: id, institutionId: id,
+    detail: { fields: Object.keys(data) },
+  });
+  return getTenant(id);
+}
+
+// ---- Branding (per-tenant institution_branding; super-admin write path) ----
+
+export async function updateBranding(id: string, input: BrandingInput, actor: Actor) {
+  await assertTenant(id);
+  const data = input as Record<string, unknown>;
+  const map: Record<string, string> = {
+    displayName: "display_name", logoUrl: "logo_url", primaryColor: "primary_color", tagline: "tagline",
+    letterhead: "letterhead", footer: "footer",
+  };
+  await query(
+    `INSERT INTO institution_branding (institution_id) VALUES ($1) ON CONFLICT (institution_id) DO NOTHING`,
+    [id]
+  );
+  const sets: string[] = ["updated_at = now()"];
+  const params: unknown[] = [];
+  for (const [field, col] of Object.entries(map)) {
+    if (field in data) {
+      params.push(data[field]);
+      sets.push(`${col} = $${params.length}`);
+    }
+  }
+  params.push(id);
+  await query(`UPDATE institution_branding SET ${sets.join(", ")} WHERE institution_id = $${params.length}`, params);
+  await recordAudit(actor, {
+    action: "tenant.branding_update", targetType: "institution", targetId: id, institutionId: id,
+    detail: { fields: Object.keys(data) },
+  });
+  return getTenant(id);
+}
+
+// ---- Tenant documents (registration cert, agreement, KYC, …). Bytes in the
+//      shared storage layer; verification + audit on every write. ----
+
+const DOC_COLS = `
+  id, category, original_name AS "originalName", mime_type AS "mimeType",
+  size_bytes AS "sizeBytes", storage_mode AS "storageMode",
+  verification_status AS "verificationStatus", verification_remarks AS "verificationRemarks",
+  verified_at AS "verifiedAt", archived_at AS "archivedAt",
+  uploaded_by_email AS "uploadedByEmail", created_at AS "createdAt"`;
+
+export async function listDocuments(id: string) {
+  await assertTenant(id);
+  const { rows } = await query(
+    `SELECT ${DOC_COLS} FROM tenant_documents WHERE institution_id = $1 ORDER BY created_at DESC`,
+    [id]
+  );
+  return rows;
+}
+
+export async function addDocument(
+  id: string,
+  category: string,
+  file: { originalname: string; mimetype: string; size: number; buffer: Buffer },
+  actor: Actor
+) {
+  await assertTenant(id);
+  const ext = assertValidFile(file.originalname, file.mimetype, file.size);
+  const safeName = `${randomUUID()}.${ext}`;
+  const storageKey = `tenant-documents/${id}/${safeName}`;
+  try {
+    await storage.put(storageKey, file.buffer, file.mimetype);
+  } catch (err) {
+    console.error("tenant document storage.put failed:", err);
+    throw ApiError.serviceUnavailable("File storage is unavailable");
+  }
+  const { rows } = await query<{ id: string }>(
+    `INSERT INTO tenant_documents
+       (institution_id, category, original_name, safe_name, mime_type, size_bytes,
+        storage_key, storage_mode, uploaded_by, uploaded_by_email)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+    [id, category, file.originalname, safeName, file.mimetype, file.size, storageKey, storage.mode, actor.id, actor.email]
+  );
+  await recordAudit(actor, {
+    action: "tenant.document_add", targetType: "institution", targetId: id, institutionId: id,
+    detail: { documentId: rows[0].id, category },
+  });
+  return listDocuments(id);
+}
+
+export async function getDocumentForDownload(id: string, docId: string) {
+  await assertTenant(id);
+  const { rows } = await query<{ storage_key: string; mime_type: string; original_name: string }>(
+    `SELECT storage_key, mime_type, original_name FROM tenant_documents WHERE id = $2 AND institution_id = $1`,
+    [id, docId]
+  );
+  if (!rows[0]) throw ApiError.notFound("Document not found");
+  let buffer: Buffer;
+  try {
+    buffer = await storage.get(rows[0].storage_key);
+  } catch (err) {
+    console.error("tenant document storage.get failed:", err);
+    throw ApiError.serviceUnavailable("File storage is unavailable");
+  }
+  return { buffer, mimeType: rows[0].mime_type, originalName: rows[0].original_name };
+}
+
+export async function verifyDocument(id: string, docId: string, input: DocVerifyInput, actor: Actor) {
+  await assertTenant(id);
+  const { rows } = await query<{ id: string }>(
+    `UPDATE tenant_documents
+       SET verification_status = $3, verification_remarks = $4, verified_by = $5, verified_at = now()
+     WHERE id = $2 AND institution_id = $1 RETURNING id`,
+    [id, docId, input.status, input.remarks ?? null, actor.id]
+  );
+  if (!rows[0]) throw ApiError.notFound("Document not found");
+  await recordAudit(actor, {
+    action: "tenant.document_verify", targetType: "institution", targetId: id, institutionId: id,
+    detail: { documentId: docId, status: input.status },
+  });
+  return listDocuments(id);
+}
+
+/** Soft-archive a document (keeps the file + row; drops it from active views). */
+export async function archiveDocument(id: string, docId: string, actor: Actor) {
+  await assertTenant(id);
+  const { rows } = await query<{ id: string }>(
+    `UPDATE tenant_documents SET archived_at = now()
+     WHERE id = $2 AND institution_id = $1 AND archived_at IS NULL RETURNING id`,
+    [id, docId]
+  );
+  if (!rows[0]) throw ApiError.notFound("Document not found");
+  await recordAudit(actor, {
+    action: "tenant.document_archive", targetType: "institution", targetId: id, institutionId: id,
+    detail: { documentId: docId },
+  });
+  return listDocuments(id);
+}
+
+/** Permanently remove a single document file + row (a document, not a tenant). */
+export async function deleteDocument(id: string, docId: string, actor: Actor) {
+  await assertTenant(id);
+  const { rows } = await query<{ storage_key: string }>(
+    `DELETE FROM tenant_documents WHERE id = $2 AND institution_id = $1 RETURNING storage_key`,
+    [id, docId]
+  );
+  if (!rows[0]) throw ApiError.notFound("Document not found");
+  await storage.remove(rows[0].storage_key).catch((err) => console.warn("tenant document storage.remove failed:", err));
+  await recordAudit(actor, {
+    action: "tenant.document_delete", targetType: "institution", targetId: id, institutionId: id,
+    detail: { documentId: docId },
+  });
+  return listDocuments(id);
+}
+
+// ---- Health / usage dashboard (REAL metrics only) ----
+
+export async function tenantHealth(id: string) {
+  await assertTenant(id);
+  const [usage, billing, extra] = await Promise.all([
+    tenantUsage(id),
+    tenantBilling(id),
+    query<Record<string, unknown>>(
+      `SELECT
+         (SELECT COALESCE(sum(size_bytes),0)::bigint FROM documents WHERE institution_id = $1) AS "storageBytes",
+         (SELECT count(*)::int FROM users WHERE institution_id = $1 AND locked_until IS NOT NULL AND locked_until > now()) AS "lockedAccounts",
+         (SELECT count(*)::int FROM users WHERE institution_id = $1 AND failed_login_attempts > 0) AS "failingLogins",
+         (SELECT count(*)::int FROM messages WHERE institution_id = $1) AS "inAppMessages",
+         (SELECT count(*)::int FROM tenant_documents WHERE institution_id = $1 AND archived_at IS NULL) AS "documents",
+         (SELECT max(rt.last_used_at) FROM refresh_tokens rt JOIN users u ON u.id = rt.user_id WHERE u.institution_id = $1) AS "lastSessionActivity"`,
+      [id]
+    ),
+  ]);
+  const e = extra.rows[0];
+  const b = billing as Record<string, unknown>;
+  return {
+    usage,
+    storageBytes: Number(e.storageBytes ?? 0),
+    lockedAccounts: Number(e.lockedAccounts ?? 0),
+    failingLogins: Number(e.failingLogins ?? 0),
+    inAppMessages: Number(e.inAppMessages ?? 0),
+    documents: Number(e.documents ?? 0),
+    lastSessionActivity: e.lastSessionActivity ?? null,
+    billing: {
+      outstanding: b.outstanding,
+      overdueCount: b.overdueCount,
+      paid: b.paid,
+      issued: b.issued,
+      subscription: b.subscription,
+    },
+  };
+}
+
+// ---- Safe exit / export (basic profile + users; never deletes tenant data) ----
+
+export async function exportTenantProfile(id: string) {
+  const t = (await getTenant(id)) as Record<string, unknown>;
+  const columns = [{ key: "field", label: "Field" }, { key: "value", label: "Value" }];
+  const pick: [string, unknown][] = [
+    ["Name", t.name], ["Code", t.code], ["Type", t.institutionType], ["Status", t.status],
+    ["Legal name", t.legalName], ["Short name", t.shortName], ["Email", t.email], ["Phone", t.phone],
+    ["Website", t.website], ["Address", t.address], ["City", t.city], ["State", t.state],
+    ["Country", t.country], ["PIN", t.pincode], ["Academic year", t.academicYear],
+    ["Timezone", t.timezone], ["Currency", t.currency], ["Slug", t.slug],
+    ["Account manager", t.accountManager],
+  ];
+  const rows = pick.map(([field, value]) => ({ field, value: value ?? "" }));
+  return { columns, rows: rows as Record<string, unknown>[] };
+}
+
+export async function exportTenantUsers(id: string) {
+  await assertTenant(id);
+  const { rows } = await query<Record<string, unknown>>(
+    `SELECT full_name AS "fullName", email, role, is_active AS "isActive",
+            to_char(created_at,'YYYY-MM-DD') AS "createdAt"
+     FROM users WHERE institution_id = $1 ORDER BY role, full_name`,
+    [id]
+  );
+  const columns = [
+    { key: "fullName", label: "Name" }, { key: "email", label: "Email" },
+    { key: "role", label: "Role" }, { key: "isActive", label: "Active" },
+    { key: "createdAt", label: "Created" },
+  ];
+  const data = rows.map((r) => ({ ...r, isActive: r.isActive ? "yes" : "no" }));
+  return { columns, rows: data };
 }

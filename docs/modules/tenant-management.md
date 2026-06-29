@@ -38,67 +38,102 @@ No hard delete — archived tenants drop out of active views but keep all histor
   tenant users.
 
 ## Endpoints (super-admin, `/platform/tenants`)
-List/export (`?q,institutionType,status,page,pageSize,sort,order` + `/export`
-csv/xlsx) · `POST /tenants` (create, optional primary admin, starts draft) ·
-`GET/PATCH /tenants/:id` (rich detail / profile+type update) ·
-`GET /tenants/:id/billing` (read-only invoice+subscription summary) ·
-`POST /tenants/:id/lifecycle` ({status, reason}) ·
-`PATCH /tenants/:id/settings` (type-based config) ·
-`POST /tenants/:id/onboarding/step` + `/onboarding/complete` ·
+List/export (`?q,institutionType,status,package,createdFrom,createdTo,page,
+pageSize,sort,order` + `/export` csv/xlsx) · `POST /tenants` (create, optional
+primary admin, starts draft) · `GET/PATCH /tenants/:id` (rich detail / profile+type
+update) · `GET /tenants/:id/billing` (read-only invoice+subscription summary) ·
+`GET /tenants/:id/health` (real-data health snapshot) ·
+`POST /tenants/:id/lifecycle` ({status, reason}; suspend/archive/close require a
+reason) · `PATCH /tenants/:id/settings` (type-based config) ·
+`PATCH /tenants/:id/branding` (display name/logo URL/colour/tagline) ·
+`PATCH /tenants/:id/crm` (account manager, last contacted) ·
+`POST /tenants/:id/onboarding/step` + `/onboarding/complete` ({override?}) ·
 `PATCH /tenants/:id/compliance` · `POST /tenants/:id/admin` +
-`PATCH /tenants/:id/admin/:userId` (enable/disable) ·
+`PATCH /tenants/:id/admin/:userId` (enable/disable) +
+`POST /tenants/:id/admin/:userId/reset-link` (email setup/reset link) ·
+`GET/POST /tenants/:id/documents`, `GET …/:docId/download`,
+`PATCH …/:docId/verify`, `POST …/:docId/archive`, `DELETE …/:docId` ·
+`GET /tenants/:id/export` + `/tenants/:id/users/export` (csv/xlsx) ·
 `GET/POST /tenants/:id/notes`, `PATCH/DELETE /tenants/notes/:noteId`.
-All sensitive actions audit to `platform_audit_log` (`tenant.*` actions);
-super-admin-only; parameterized SQL.
+Subscription assign/change, status, events and limits reuse the existing
+`/platform/institutions/:id/subscription[...]` + `/limits` endpoints; support access
+reuses `/platform/users` + `/platform/impersonate[...]`. All sensitive actions audit
+to `platform_audit_log` (`tenant.*` actions); super-admin-only; parameterized SQL.
 
 ## Onboarding
 Checklist with **completion %** — steps derived from **real data** where possible
 (profile complete, academic structure set, primary admin exists, subscription
-assigned, limits set, slug set, status≠draft) plus manual toggles
-(branding/communication) in the `onboarding` jsonb. `complete` activates a draft.
+assigned, limits set, slug set, documents uploaded, status≠draft) plus manual
+toggles (branding/communication) in the `onboarding` jsonb. Required steps
+(profile, academic structure, primary admin, slug) **block activation** until done
+— a super-admin may `complete` with `{override:true}` (recorded in the audit).
 
 ## Primary admin
-Created with a **cryptographically-random password** (never returned); the admin
-sets their own via the password-reset flow — no guessable default. Enable/disable
-supported. Duplicate email → 409.
+Created with a **cryptographically-random password** (never returned) and emailed a
+**password-setup/reset link** (best-effort; no-op + reported when SMTP is off) so
+the account is immediately usable. Enable/disable + re-send setup link supported.
+Duplicate email → 409. A true pending-**invite** flow is deferred (no infra).
 
 ## UI (super-admin → Tenants)
-- **List** (`/super-admin/platform/tenants`): search + type/status filters, sort,
-  pagination, CSV/XLSX export, create.
+- **List** (`/super-admin/platform/tenants`): search + type/status/package/
+  created-date filters, sort, pagination, CSV/XLSX export, create.
 - **Create/onboarding** (`/tenants/new`): identity (name/code/type), contact,
   optional primary admin.
-- **Detail** (`/tenants/[id]`): tabbed — Overview, Profile, Academic & Settings
-  (type-based school/college config + academic-structure JSON + communication
-  defaults), Modules
-  (enable/disable), Subscription & Billing (read-only + link to invoices), Limits
-  & Usage, Branding & Domain (slug + link to branding), Onboarding (checklist +
-  %), Compliance/approval, Admins, Notes (CRM), Audit (timeline + link). Lifecycle
-  actions + Support-access shortcut in the header.
+- **Detail** (`/tenants/[id]`): 18 tabs — Overview (KPIs + export/exit), Profile,
+  Onboarding (checklist/%/required/override), Academic Structure (per-type presets
+  + JSON), Settings (full school/college type-based config), Modules, Admins
+  (status, last-active, add, enable/disable, setup-link), Subscription & Billing
+  (read-only summary + assign/change package + status/events + **create draft
+  invoice** + invoices link), Limits & Usage (editable overrides + near/over-limit +
+  overdue warnings), Branding & Domain (slug + URL preview/open + display
+  name/logo/colour/tagline), Documents (upload/verify/archive/delete/download),
+  **Import** (templates + tenant-workspace shortcuts), Communication (sender identity
+  + channels + test email), Health (live metrics), Compliance (terms/agreement/
+  consent/KYC/approval), Notes (CRM owner + internal notes, **inline edit**), Support
+  (inline user search + reason + start/end impersonation), Audit (timeline + link).
+  Lifecycle actions (activate/trial/suspend/expire/reactivate/archive/close) use a
+  styled confirm + reason modal (with a **closure checklist** for archive/close);
+  success notices auto-dismiss (toast-like).
+- The legacy `/super-admin/platform/institutions[/new|/:id]` pages now **redirect**
+  here so there is **one** entry point.
+- **Module gating**: `GET /auth/me` returns the tenant's normalized `enabledModules`,
+  and the dashboard sidebar **hides modules a tenant has disabled** (untagged/core
+  items and the unset default always show — navigation can never disappear).
 
 ## Linked (not rebuilt)
-Branding module (logo/theme), Documents module (file upload), Communication
-(notification preferences), subscription/packages/limits, the invoice module
-(read-only billing summary), platform audit + support access (#106), students/staff
-import endpoints.
+Branding table (`institution_branding`), the shared storage layer + file validator
+(reused for tenant documents), the auth password-reset flow (admin setup links),
+subscription/packages/limits + `subscription_events`, the invoice module (read-only
+billing summary), platform audit + support access/impersonation (#106),
+students/staff import endpoints, the email service (`mailer`).
 
 ## Deferred (honestly — no faking)
-Custom-domain **DNS/SSL automation** (no infra — slug is stored for routing only);
-a full **import engine** (link to existing import shortcuts only); **backup**
-infrastructure; **WhatsApp** config. Per-tenant **communication defaults** (sender
-name, reply-to, SMS sender ID, channel toggles) are editable in the Academic &
-Settings tab; a tenant **document-upload** UI reuses the documents module and is a
-thin follow-up.
+A full cross-tenant **import engine** (the Import tab ships templates + tenant-workspace
+shortcuts because bulk import must map to the tenant's own classes/courses; classes/fees
+bulk import don't exist) and **CSV→JSON parsing**; custom-domain **DNS/SSL automation**
+(slug stored for routing only); **backup** infrastructure; a real pending **invite**
+flow (setup/reset links are used instead); **logo file upload** from the super-admin
+surface (set logo URL here; file upload runs in the tenant app); and metrics with **no
+backing data** (per-user last-login, SMS/email send counts, failed-login history) —
+intentionally omitted from Health rather than faked.
 
 ## Migration
 `0081_tenant_management.sql` — additive columns + backfill (`institution_type =
 type`, `status` from `is_active`, `slug` from `code`) + `institution_notes` table +
-indexes (`institution_type`, `status`, unique `slug`). Applies on boot via
-`runMigrations()`. No existing column dropped; no data deleted.
+indexes (`institution_type`, `status`, unique `slug`).
+`0082_tenant_documents_extras.sql` — adds the `closed` lifecycle status (recreates
+the named status CHECK), CRM/consent columns (`account_manager`,
+`last_contacted_at`, `data_processing_consent`), and the `tenant_documents` table
+(+ index). Both additive — applied on boot via `runMigrations()`; no existing column
+dropped, no data deleted, no tenant hard-deleted.
 
 ## Tests
-`backend/tests/integration/tenant.int.test.ts` (13): create (type derivation),
+`backend/tests/integration/tenant.int.test.ts` (23): create (type derivation),
 duplicate-code + RBAC, profile update + re-derive, lifecycle + is_active sync +
-reason guard, type-based settings, onboarding progress + complete, primary admin
-(no leak) + toggle, internal notes + tenant-user denial, compliance + approver
-stamp, read-only billing summary, list/filter/paginate/export, rich detail +
-audit + no-hard-delete.
+reason guard, `closed` status, type-based settings (incl. communication/WhatsApp),
+onboarding progress + complete + required-step enforcement + override, primary admin
+(no leak) + toggle + setup-link, internal notes + tenant-user denial, CRM fields,
+branding, compliance + consent + approver stamp, read-only billing summary, health
+snapshot, documents (upload/verify/download/archive/delete + RBAC + bad-type
+reject), profile/users export, list/filter (type/package/created-date)/paginate/
+export, rich detail + audit + no-hard-delete.

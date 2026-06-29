@@ -92,7 +92,7 @@ describe("super admin — tenant / institution management", () => {
       academicStructure: { levels: ["class", "section"] },
       enabledModules: { fees: true, library: false },
       schoolSettings: { houseSystem: true, examPattern: "term", attendanceMode: "daily" },
-      communication: { emailSenderName: "GoCampus", notifyEmail: true, notifySms: false },
+      communication: { emailSenderName: "GoCampus", notifyEmail: true, notifySms: false, whatsappEnabled: true },
     });
     expect(upd.status).toBe(200);
     expect(upd.body.settings.enabledModules.fees).toBe(true);
@@ -100,6 +100,7 @@ describe("super admin — tenant / institution management", () => {
     expect(upd.body.settings.academicStructure.levels).toEqual(["class", "section"]);
     expect(upd.body.settings.communication.emailSenderName).toBe("GoCampus");
     expect(upd.body.settings.communication.notifyEmail).toBe(true);
+    expect(upd.body.settings.communication.whatsappEnabled).toBe(true);
   });
 
   it("tracks onboarding progress and completes it (activates a draft)", async () => {
@@ -109,9 +110,22 @@ describe("super admin — tenant / institution management", () => {
     expect(t.body.onboardingProgress.steps.find((s: { key: string }) => s.key === "profile").done).toBe(true);
     const mark = await post(`/api/v1/platform/tenants/${id}/onboarding/step`, tok.root, { step: "branding", done: true });
     expect(mark.body.onboardingProgress.steps.find((s: { key: string }) => s.key === "branding").done).toBe(true);
+    // satisfy remaining required steps (academic structure + primary admin); profile + slug already done
+    await patch(`/api/v1/platform/tenants/${id}/settings`, tok.root, { academicStructure: { levels: ["class"] } });
+    await post(`/api/v1/platform/tenants/${id}/admin`, tok.root, { fullName: "OB Admin", email: "obadmin@b.edu" });
     const done = await post(`/api/v1/platform/tenants/${id}/onboarding/complete`, tok.root);
     expect(done.body.status).toBe("active");
     expect(done.body.onboardingProgress.completedAt).toBeTruthy();
+  });
+
+  it("blocks activation until required onboarding steps are done, unless overridden", async () => {
+    const t = await createTenant({ name: "Enforce", code: "ENF", institutionType: "school" });
+    const id = t.body.id; // minimal: missing profile + academic structure + primary admin
+    const blocked = await post(`/api/v1/platform/tenants/${id}/onboarding/complete`, tok.root);
+    expect(blocked.status).toBe(400);
+    const overridden = await post(`/api/v1/platform/tenants/${id}/onboarding/complete`, tok.root, { override: true });
+    expect(overridden.status).toBe(200);
+    expect(overridden.body.status).toBe("active");
   });
 
   it("creates a primary admin (secure, no password leak) and toggles it", async () => {
@@ -149,10 +163,11 @@ describe("super admin — tenant / institution management", () => {
     const t = await createTenant({ name: "Comp", code: "COMP", institutionType: "school" });
     const id = t.body.id;
     const upd = await patch(`/api/v1/platform/tenants/${id}/compliance`, tok.root, {
-      termsAccepted: true, kycStatus: "verified", approvalStatus: "approved", approvalRemarks: "All docs ok",
+      termsAccepted: true, dataProcessingConsent: true, kycStatus: "verified", approvalStatus: "approved", approvalRemarks: "All docs ok",
     });
     expect(upd.status).toBe(200);
     expect(upd.body.termsAccepted).toBe(true);
+    expect(upd.body.dataProcessingConsent).toBe(true);
     expect(upd.body.kycStatus).toBe("verified");
     expect(upd.body.approvalStatus).toBe("approved");
     expect(upd.body.approvedAt).toBeTruthy();
@@ -204,5 +219,132 @@ describe("super admin — tenant / institution management", () => {
     // never hard-deletes: there is no DELETE /tenants/:id route
     const delAttempt = await request(app).delete(`/api/v1/platform/tenants/${id}`).set(auth(tok.root));
     expect([404, 405]).toContain(delAttempt.status);
+  });
+
+  it("supports the closed lifecycle status (reason required, deactivates)", async () => {
+    const t = await createTenant({ name: "Close", code: "CLOSE", institutionType: "school" });
+    const id = t.body.id;
+    expect((await post(`/api/v1/platform/tenants/${id}/lifecycle`, tok.root, { status: "closed" })).status).toBe(400);
+    const closed = await post(`/api/v1/platform/tenants/${id}/lifecycle`, tok.root, { status: "closed", reason: "Contract ended" });
+    expect(closed.body.status).toBe("closed");
+    expect(closed.body.isActive).toBe(false);
+  });
+
+  it("updates CRM fields (account manager, last contacted)", async () => {
+    const t = await createTenant({ name: "Crm", code: "CRM", institutionType: "school" });
+    const upd = await patch(`/api/v1/platform/tenants/${t.body.id}/crm`, tok.root, { accountManager: "Riya", lastContactedAt: new Date().toISOString() });
+    expect(upd.status).toBe(200);
+    expect(upd.body.accountManager).toBe("Riya");
+    expect(upd.body.lastContactedAt).toBeTruthy();
+  });
+
+  it("updates per-tenant branding", async () => {
+    const t = await createTenant({ name: "Brand", code: "BRND", institutionType: "school" });
+    const upd = await patch(`/api/v1/platform/tenants/${t.body.id}/branding`, tok.root, { displayName: "Brand Public", primaryColor: "#112233", tagline: "Learn more", letterhead: "Brand Public School, Pune", footer: "Reg. 12345 · brand.edu" });
+    expect(upd.status).toBe(200);
+    expect(upd.body.branding.displayName).toBe("Brand Public");
+    expect(upd.body.branding.primaryColor).toBe("#112233");
+    expect(upd.body.branding.letterhead).toBe("Brand Public School, Pune");
+    expect(upd.body.branding.footer).toBe("Reg. 12345 · brand.edu");
+  });
+
+  it("returns a real-data health snapshot", async () => {
+    const t = await createTenant({ name: "Hlth", code: "HLTH", institutionType: "school" });
+    const h = await get(`/api/v1/platform/tenants/${t.body.id}/health`, tok.root);
+    expect(h.status).toBe(200);
+    expect(h.body.usage).toHaveProperty("students");
+    expect(typeof h.body.storageBytes).toBe("number");
+    expect(h.body.billing).toHaveProperty("outstanding");
+  });
+
+  it("emails a setup/reset link to a tenant admin and reports email status", async () => {
+    const t = await createTenant({ name: "Reset", code: "RST", institutionType: "school" });
+    const id = t.body.id;
+    const add = await post(`/api/v1/platform/tenants/${id}/admin`, tok.root, { fullName: "Bob", email: "bob@rst.edu" });
+    const adminId = add.body.admins.find((a: { email: string }) => a.email === "bob@rst.edu").id;
+    const link = await post(`/api/v1/platform/tenants/${id}/admin/${adminId}/reset-link`, tok.root);
+    expect(link.status).toBe(200);
+    expect(typeof link.body.emailSent).toBe("boolean"); // false when SMTP is unconfigured (test env)
+  });
+
+  it("manages tenant documents (upload, verify, download, archive, delete) — super-admin only", async () => {
+    const t = await createTenant({ name: "Docs", code: "DOCS", institutionType: "school" });
+    const id = t.body.id;
+    const pdf = Buffer.from("%PDF-1.4 test document bytes");
+    const up = await request(app).post(`/api/v1/platform/tenants/${id}/documents`).set(auth(tok.root))
+      .field("category", "registration").attach("file", pdf, { filename: "reg.pdf", contentType: "application/pdf" });
+    expect(up.status).toBe(200);
+    expect(up.body).toHaveLength(1);
+    const docId = up.body[0].id;
+    expect(up.body[0].verificationStatus).toBe("pending");
+    // tenant admin may NOT upload (super-admin surface)
+    const forbidden = await request(app).post(`/api/v1/platform/tenants/${id}/documents`).set(auth(tok.admin))
+      .field("category", "other").attach("file", pdf, { filename: "x.pdf", contentType: "application/pdf" });
+    expect(forbidden.status).toBe(403);
+    // verify
+    const ver = await patch(`/api/v1/platform/tenants/${id}/documents/${docId}/verify`, tok.root, { status: "verified", remarks: "ok" });
+    expect(ver.body[0].verificationStatus).toBe("verified");
+    // download bytes
+    const dl = await request(app).get(`/api/v1/platform/tenants/${id}/documents/${docId}/download`).set(auth(tok.root)).buffer(true).parse(binary);
+    expect(dl.status).toBe(200);
+    expect(dl.body.toString("utf8")).toContain("%PDF");
+    // soft archive then hard delete (a document, never the tenant)
+    expect((await post(`/api/v1/platform/tenants/${id}/documents/${docId}/archive`, tok.root)).body[0].archivedAt).toBeTruthy();
+    const del = await request(app).delete(`/api/v1/platform/tenants/${id}/documents/${docId}`).set(auth(tok.root));
+    expect(del.status).toBe(200);
+    expect(del.body).toHaveLength(0);
+  });
+
+  it("rejects an unsupported document type", async () => {
+    const t = await createTenant({ name: "BadDoc", code: "BADDOC", institutionType: "school" });
+    const bad = await request(app).post(`/api/v1/platform/tenants/${t.body.id}/documents`).set(auth(tok.root))
+      .field("category", "other").attach("file", Buffer.from("MZ exe"), { filename: "evil.exe", contentType: "application/octet-stream" });
+    expect(bad.status).toBe(400);
+  });
+
+  it("exports a tenant's profile and users (CSV)", async () => {
+    const t = await createTenant({ name: "Export Co", code: "EXP", institutionType: "school" });
+    const id = t.body.id;
+    await post(`/api/v1/platform/tenants/${id}/admin`, tok.root, { fullName: "U One", email: "u@exp.edu" });
+    const prof = await request(app).get(`/api/v1/platform/tenants/${id}/export?format=csv`).set(auth(tok.root)).buffer(true).parse(binary);
+    expect(prof.status).toBe(200);
+    expect(prof.body.toString("utf8")).toContain("Export Co");
+    const users = await request(app).get(`/api/v1/platform/tenants/${id}/users/export?format=csv`).set(auth(tok.root)).buffer(true).parse(binary);
+    expect(users.body.toString("utf8")).toContain("u@exp.edu");
+  });
+
+  it("exposes normalized enabledModules via /auth/me for sidebar gating", async () => {
+    const t = await createTenant({ name: "Mods", code: "MODS", institutionType: "school" });
+    const id = t.body.id;
+    await patch(`/api/v1/platform/tenants/${id}/settings`, tok.root, {
+      enabledModules: { fees: true, library: false, students: true },
+    });
+    await createUser({ email: "modadmin@x.dev", password: PW, role: "admin", institutionId: id });
+    const token = await tokenFor("modadmin@x.dev", PW);
+    const me = await get("/api/v1/auth/me", token);
+    expect(me.status).toBe(200);
+    expect(Array.isArray(me.body.enabledModules)).toBe(true);
+    expect(me.body.enabledModules).toEqual(expect.arrayContaining(["fees", "students"]));
+    expect(me.body.enabledModules).not.toContain("library");
+  });
+
+  it("filters the directory by package and created-date range", async () => {
+    const a = await createTenant({ name: "PkgCo", code: "PKGCO", institutionType: "school" });
+    await createTenant({ name: "NoPkg", code: "NOPKG", institutionType: "school" });
+    const pkg = await query<{ id: string }>(
+      `INSERT INTO subscription_packages (name, max_students, max_staff, price, billing_cycle)
+       VALUES ('GoldPlan', 100, 10, 1000, 'monthly') RETURNING id`
+    );
+    await query(
+      `INSERT INTO institution_subscriptions (institution_id, package_id, status, starts_at) VALUES ($1, $2, 'active', now())`,
+      [a.body.id, pkg.rows[0].id]
+    );
+    const byPkg = await get("/api/v1/platform/tenants?package=Gold", tok.root);
+    expect(byPkg.body.rows).toHaveLength(1);
+    expect(byPkg.body.rows[0].code).toBe("PKGCO");
+    const future = await get("/api/v1/platform/tenants?createdFrom=2999-01-01", tok.root);
+    expect(future.body.total).toBe(0);
+    const past = await get("/api/v1/platform/tenants?createdFrom=2000-01-01", tok.root);
+    expect(past.body.total).toBeGreaterThanOrEqual(2);
   });
 });
