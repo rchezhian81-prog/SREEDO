@@ -278,7 +278,7 @@ export async function getTenant(id: string) {
     ),
     query<Record<string, unknown>>(
       `SELECT display_name AS "displayName", logo_url AS "logoUrl",
-              primary_color AS "primaryColor", tagline
+              primary_color AS "primaryColor", tagline, letterhead, footer
        FROM institution_branding WHERE institution_id = $1`,
       [id]
     ),
@@ -661,6 +661,7 @@ export async function updateBranding(id: string, input: BrandingInput, actor: Ac
   const data = input as Record<string, unknown>;
   const map: Record<string, string> = {
     displayName: "display_name", logoUrl: "logo_url", primaryColor: "primary_color", tagline: "tagline",
+    letterhead: "letterhead", footer: "footer",
   };
   await query(
     `INSERT INTO institution_branding (institution_id) VALUES ($1) ON CONFLICT (institution_id) DO NOTHING`,

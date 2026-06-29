@@ -240,10 +240,12 @@ describe("super admin — tenant / institution management", () => {
 
   it("updates per-tenant branding", async () => {
     const t = await createTenant({ name: "Brand", code: "BRND", institutionType: "school" });
-    const upd = await patch(`/api/v1/platform/tenants/${t.body.id}/branding`, tok.root, { displayName: "Brand Public", primaryColor: "#112233", tagline: "Learn more" });
+    const upd = await patch(`/api/v1/platform/tenants/${t.body.id}/branding`, tok.root, { displayName: "Brand Public", primaryColor: "#112233", tagline: "Learn more", letterhead: "Brand Public School, Pune", footer: "Reg. 12345 · brand.edu" });
     expect(upd.status).toBe(200);
     expect(upd.body.branding.displayName).toBe("Brand Public");
     expect(upd.body.branding.primaryColor).toBe("#112233");
+    expect(upd.body.branding.letterhead).toBe("Brand Public School, Pune");
+    expect(upd.body.branding.footer).toBe("Reg. 12345 · brand.edu");
   });
 
   it("returns a real-data health snapshot", async () => {

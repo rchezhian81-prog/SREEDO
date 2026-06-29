@@ -175,6 +175,8 @@ export const brandingSchema = z
     logoUrl: z.string().trim().url().max(1000).nullable().optional(),
     primaryColor: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/, "Use a #rrggbb hex colour").nullable().optional(),
     tagline: z.string().trim().max(200).nullable().optional(),
+    letterhead: z.string().trim().max(2000).nullable().optional(),
+    footer: z.string().trim().max(2000).nullable().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: "No branding fields to update" });
 

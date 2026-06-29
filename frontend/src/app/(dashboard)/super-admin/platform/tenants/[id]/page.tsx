@@ -12,7 +12,7 @@ import { formatBytes, formatNumber, limitLabel } from "../../_utils";
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
 
 interface Admin { id: string; fullName: string; email: string; isActive: boolean; lastActiveAt: string | null }
-interface Branding { displayName: string | null; logoUrl: string | null; primaryColor: string | null; tagline: string | null }
+interface Branding { displayName: string | null; logoUrl: string | null; primaryColor: string | null; tagline: string | null; letterhead: string | null; footer: string | null }
 interface OnboardingStep { key: string; label: string; required: boolean; done: boolean }
 interface Tenant {
   id: string; name: string; code: string; type: "school" | "college"; institutionType: string;
@@ -433,8 +433,11 @@ function ModulesTab({ t, busy, onSave }: { t: Tenant; busy: boolean; onSave: (m:
           </label>
         ))}
       </div>
-      <p className="mt-2 text-xs text-slate-400">Module access still respects the subscription/package. Unchecked = disabled for this tenant.</p>
-      <div className="mt-3"><Button disabled={busy} onClick={() => onSave(m)}>Save modules</Button></div>
+      <p className="mt-2 text-xs text-slate-400">Module access still respects the subscription/package. Unchecked = hidden from the tenant&apos;s sidebar.</p>
+      {/* Save a COMPLETE map (every key explicit) so a "disable only" choice
+          normalizes to a real allow-list and actually hides the module — a sparse
+          {key:false} would normalize to [] and be treated as "all enabled". */}
+      <div className="mt-3"><Button disabled={busy} onClick={() => onSave(Object.fromEntries(MODULE_KEYS.map((k) => [k, m[k] !== false] as [string, boolean])))}>Save modules</Button></div>
     </Card>
   );
 }
@@ -603,8 +606,11 @@ function LimitsTab({ t, busy, onSave }: { t: Tenant; busy: boolean; onSave: (l: 
 
 function BrandingTab({ t, busy, onSaveSlug, onSaveBranding }: { t: Tenant; busy: boolean; onSaveSlug: (slug: string) => void; onSaveBranding: (b: Record<string, unknown>) => void }) {
   const [slug, setSlug] = useState(t.slug ?? "");
-  const br = t.branding ?? { displayName: "", logoUrl: "", primaryColor: "", tagline: "" };
-  const [f, setF] = useState({ displayName: br.displayName ?? "", logoUrl: br.logoUrl ?? "", primaryColor: br.primaryColor ?? "", tagline: br.tagline ?? "" });
+  const br = t.branding;
+  const [f, setF] = useState({
+    displayName: br?.displayName ?? "", logoUrl: br?.logoUrl ?? "", primaryColor: br?.primaryColor ?? "",
+    tagline: br?.tagline ?? "", letterhead: br?.letterhead ?? "", footer: br?.footer ?? "",
+  });
   const set = (k: string, v: string) => setF((s) => ({ ...s, [k]: v }));
   const blank = (v: string) => (v.trim() === "" ? null : v.trim());
   const tenantUrl = slug ? `https://${slug}.gocampusos.com` : "—";
@@ -627,11 +633,15 @@ function BrandingTab({ t, busy, onSaveSlug, onSaveBranding }: { t: Tenant; busy:
           <Field label="Logo URL"><Input value={f.logoUrl} onChange={(e) => set("logoUrl", e.target.value)} /></Field>
           <Field label="Primary / accent colour (#rrggbb)"><Input value={f.primaryColor} onChange={(e) => set("primaryColor", e.target.value)} /></Field>
         </div>
+        <div className="mt-3 grid grid-cols-1 gap-3">
+          <Field label="Letterhead (printed on reports / certificates / letters)"><Textarea rows={2} value={f.letterhead} onChange={(e) => set("letterhead", e.target.value)} /></Field>
+          <Field label="Footer / address line (printed documents)"><Textarea rows={2} value={f.footer} onChange={(e) => set("footer", e.target.value)} /></Field>
+        </div>
         <div className="mt-2 flex items-center gap-2 text-xs text-slate-400">
           {f.primaryColor && /^#[0-9a-fA-F]{6}$/.test(f.primaryColor) && <span className="inline-block h-4 w-4 rounded" style={{ backgroundColor: f.primaryColor }} />}
           Logo file upload runs in the tenant app (white-label module); here you can set the logo URL + identity.
         </div>
-        <div className="mt-3"><Button disabled={busy} onClick={() => onSaveBranding({ displayName: blank(f.displayName), tagline: blank(f.tagline), logoUrl: blank(f.logoUrl), primaryColor: blank(f.primaryColor) })}>Save branding</Button></div>
+        <div className="mt-3"><Button disabled={busy} onClick={() => onSaveBranding({ displayName: blank(f.displayName), tagline: blank(f.tagline), logoUrl: blank(f.logoUrl), primaryColor: blank(f.primaryColor), letterhead: blank(f.letterhead), footer: blank(f.footer) })}>Save branding</Button></div>
       </Card>
     </div>
   );
