@@ -67,6 +67,7 @@ import {
 } from "./modules/pdfs/pdfs.routes";
 import { payrollRouter } from "./modules/payroll/payroll.routes";
 import { platformRouter } from "./modules/platform/platform.routes";
+import { tenantRouter } from "./modules/platform/tenant.routes";
 import { portalRouter } from "./modules/portal/portal.routes";
 import { reportCenterRouter } from "./modules/reportcenter/reportcenter.routes";
 import { reportsRouter } from "./modules/reports/reports.routes";
@@ -224,6 +225,7 @@ export function createApp(): express.Express {
   api.use("/period-attendance", periodAttendanceRouter); // per-period attendance (admin/teacher)
   api.use("/timetable-gen", timetableGenRouter); // timetable auto-generation (admin)
   api.use("/platform", platformRouter); // super-admin platform hardening
+  api.use("/platform", tenantRouter); // super-admin tenant/institution management
   api.use("/", superAdminRouter); // /institutions, /branches, /packages
   app.use("/api/v1", api);
 

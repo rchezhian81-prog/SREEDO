@@ -89,6 +89,7 @@ const TABLES = [
   "timetable_entries",
   "periods",
   "rooms",
+  "institution_notes",
   "saas_invoice_note_lines",
   "saas_invoice_notes",
   "saas_invoice_lines",

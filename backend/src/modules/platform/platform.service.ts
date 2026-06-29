@@ -31,7 +31,7 @@ interface AuditInput {
 }
 
 /** Durable, cross-tenant record of a platform action (never includes secrets). */
-async function recordAudit(actor: Actor, input: AuditInput): Promise<void> {
+export async function recordAudit(actor: Actor, input: AuditInput): Promise<void> {
   await query(
     `INSERT INTO platform_audit_log
        (action, target_type, target_id, institution_id, actor_id, actor_email, actor_role, detail, ip)

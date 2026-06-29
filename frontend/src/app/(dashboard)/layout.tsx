@@ -103,7 +103,7 @@ const COLLEGE_NAV: NavItem[] = SCHOOL_NAV.flatMap((item) =>
 const SUPER_ADMIN_NAV: NavItem[] = [
   { href: "/super-admin", label: "Institutions", icon: "building" },
   { href: "/super-admin/platform", label: "Platform Overview", icon: "grid" },
-  { href: "/super-admin/platform/institutions", label: "Tenants", icon: "building" },
+  { href: "/super-admin/platform/tenants", label: "Tenants", icon: "building" },
   { href: "/super-admin/platform/audit", label: "Platform Audit", icon: "file" },
   { href: "/super-admin/platform/support", label: "Support Access", icon: "help" },
   { href: "/super-admin/rbac", label: "Roles & Permissions", icon: "shield" },
