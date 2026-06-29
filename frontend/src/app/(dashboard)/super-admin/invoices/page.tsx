@@ -34,6 +34,7 @@ interface InvoiceRow {
   dueDate: string | null;
   isOverdue: boolean;
   createdAt: string;
+  paidAt: string | null;
 }
 
 interface Paged {
@@ -128,6 +129,9 @@ export default function InvoicesPage() {
   // Advanced filters (backend-supported).
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [adv, setAdv] = useState({
+    paymentStatus: "", // "", "paid", "unpaid"
+    paidFrom: "",
+    paidTo: "",
     dueFrom: "",
     dueTo: "",
     amountMin: "",
@@ -184,6 +188,9 @@ export default function InvoicesPage() {
     if (from) p.set("from", from);
     if (to) p.set("to", to);
     if (debouncedSearch.trim()) p.set("q", debouncedSearch.trim());
+    if (adv.paymentStatus) p.set("paymentStatus", adv.paymentStatus);
+    if (adv.paidFrom) p.set("paidFrom", adv.paidFrom);
+    if (adv.paidTo) p.set("paidTo", adv.paidTo);
     if (adv.dueFrom) p.set("dueFrom", adv.dueFrom);
     if (adv.dueTo) p.set("dueTo", adv.dueTo);
     if (adv.amountMin) p.set("amountMin", adv.amountMin);
@@ -468,6 +475,22 @@ export default function InvoicesPage() {
 
       {showAdvanced && (
         <div className="mb-4 grid grid-cols-2 gap-3 rounded-xl border border-line bg-surface p-4 md:grid-cols-4">
+          <Field label="Payment status">
+            <Select
+              value={adv.paymentStatus}
+              onChange={(e) => setAdvField("paymentStatus", e.target.value)}
+            >
+              <option value="">Any</option>
+              <option value="paid">Paid</option>
+              <option value="unpaid">Unpaid / outstanding</option>
+            </Select>
+          </Field>
+          <Field label="Paid from">
+            <Input type="date" value={adv.paidFrom} onChange={(e) => setAdvField("paidFrom", e.target.value)} />
+          </Field>
+          <Field label="Paid to">
+            <Input type="date" value={adv.paidTo} onChange={(e) => setAdvField("paidTo", e.target.value)} />
+          </Field>
           <Field label="Due from">
             <Input type="date" value={adv.dueFrom} onChange={(e) => setAdvField("dueFrom", e.target.value)} />
           </Field>
@@ -542,6 +565,11 @@ export default function InvoicesPage() {
                         <Badge tone={statusTone(r.status)}>{r.status}</Badge>
                         {r.isOverdue && <Badge tone="red">overdue</Badge>}
                       </div>
+                      {r.status === "paid" && r.paidAt && (
+                        <span className="mt-0.5 block text-xs text-faint">
+                          Paid {formatDate(r.paidAt)}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-muted">
                       {r.dueDate ? (

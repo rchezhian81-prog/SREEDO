@@ -172,12 +172,15 @@ const SORT_COLUMNS: Record<string, string> = {
 // parameterized WHERE clause (always safe — no string interpolation of values).
 type InvoiceFilters = Partial<{
   status: string;
+  paymentStatus: "paid" | "unpaid";
   institutionId: string;
   overdue: boolean;
   from: string;
   to: string;
   dueFrom: string;
   dueTo: string;
+  paidFrom: string;
+  paidTo: string;
   amountMin: number;
   amountMax: number;
   sacCode: string;
@@ -196,6 +199,10 @@ function buildInvoiceFilters(q: InvoiceFilters): { whereSql: string; params: unk
     where.push(clause(params.length));
   };
   if (q.status) add((n) => `i.status = $${n}`, q.status);
+  // Payment status maps to the status enum (paid invoices / outstanding issued
+  // ones); the literals are constants, so no parameter is needed.
+  if (q.paymentStatus === "paid") where.push(`i.status = 'paid'`);
+  if (q.paymentStatus === "unpaid") where.push(`i.status = 'issued'`);
   if (q.institutionId) add((n) => `i.institution_id = $${n}`, q.institutionId);
   if (q.overdue) {
     where.push(`(i.status = 'issued' AND i.due_date IS NOT NULL AND i.due_date < CURRENT_DATE)`);
@@ -204,6 +211,8 @@ function buildInvoiceFilters(q: InvoiceFilters): { whereSql: string; params: unk
   if (q.to) add((n) => `i.created_at < ($${n}::date + 1)`, q.to);
   if (q.dueFrom) add((n) => `i.due_date >= $${n}::date`, q.dueFrom);
   if (q.dueTo) add((n) => `i.due_date <= $${n}::date`, q.dueTo);
+  if (q.paidFrom) add((n) => `i.paid_at >= $${n}::date`, q.paidFrom);
+  if (q.paidTo) add((n) => `i.paid_at < ($${n}::date + 1)`, q.paidTo);
   if (q.amountMin !== undefined) add((n) => `i.total >= $${n}`, q.amountMin);
   if (q.amountMax !== undefined) add((n) => `i.total <= $${n}`, q.amountMax);
   if (q.sacCode) add((n) => `i.sac_code ILIKE $${n}`, `%${q.sacCode}%`);
@@ -260,7 +269,7 @@ export async function summary() {
   return rows[0];
 }
 
-// ---- P1: reports + exports (no new schema; reuse buildInvoiceFilters) ----
+// ---- P1: reports + exports + payment status (reuse buildInvoiceFilters) ----
 
 type ReportQuery = z.infer<typeof reportQuerySchema>;
 type ExportQuery = z.infer<typeof invoiceExportQuerySchema>;
@@ -275,6 +284,14 @@ export interface ReportColumn {
 const dateOnly = (v: unknown): string =>
   !v ? "" : v instanceof Date ? v.toISOString().slice(0, 10) : String(v).slice(0, 10);
 
+/** Coarse payment status derived from the invoice status (for reports/exports). */
+const paymentStatusLabel = (status: unknown): string =>
+  status === "paid" ? "paid" : status === "issued" ? "unpaid" : "";
+
+/** Outstanding amount: the full total while issued (unpaid), else nothing owed. */
+const outstandingOf = (status: unknown, total: unknown): number =>
+  status === "issued" ? Number(total) : 0;
+
 const LIST_REPORT_FILTERS: Record<string, InvoiceFilters> = {
   all: {},
   paid: { status: "paid" },
@@ -288,8 +305,10 @@ const LIST_REPORT_COLUMNS: ReportColumn[] = [
   { key: "number", label: "Invoice No" },
   { key: "institutionName", label: "Institution" },
   { key: "status", label: "Status" },
+  { key: "paymentStatus", label: "Payment status" },
   { key: "createdAt", label: "Invoice date" },
   { key: "dueDate", label: "Due date" },
+  { key: "paidDate", label: "Paid date" },
   { key: "subtotal", label: "Subtotal", numeric: true },
   { key: "taxPercent", label: "Tax %", numeric: true },
   { key: "taxAmount", label: "Tax amount", numeric: true },
@@ -313,7 +332,12 @@ export async function report(q: ReportQuery) {
        ${whereSql} ORDER BY i.created_at DESC LIMIT 10000`,
       params
     )
-  ).rows.map((r) => ({ ...r, createdAt: dateOnly(r.createdAt) }));
+  ).rows.map((r) => ({
+    ...r,
+    createdAt: dateOnly(r.createdAt),
+    paidDate: dateOnly(r.paidAt),
+    paymentStatus: paymentStatusLabel(r.status),
+  }));
   const totals = (
     await query<Row>(
       `SELECT count(*)::int AS count,
@@ -456,21 +480,28 @@ const EXPORT_COLUMNS: ReportColumn[] = [
   { key: "id", label: "Invoice ID" },
   { key: "number", label: "Invoice number" },
   { key: "institutionName", label: "Institution" },
+  { key: "institutionCode", label: "Institution code" },
   { key: "status", label: "Status" },
+  { key: "paymentStatus", label: "Payment status" },
   { key: "createdAt", label: "Invoice date" },
   { key: "dueDate", label: "Due date" },
+  { key: "paidDate", label: "Paid date" },
+  { key: "paymentMethod", label: "Payment mode" },
+  { key: "paymentReference", label: "Payment reference" },
   { key: "period", label: "Billing period" },
   { key: "subtotal", label: "Subtotal", numeric: true },
   { key: "taxPercent", label: "Tax %", numeric: true },
   { key: "taxAmount", label: "Tax amount", numeric: true },
   { key: "total", label: "Grand total", numeric: true },
+  { key: "outstanding", label: "Outstanding", numeric: true },
   { key: "sacCode", label: "SAC/HSN" },
   { key: "gstin", label: "GSTIN" },
   { key: "placeOfSupply", label: "Place of supply" },
   { key: "recipientState", label: "Recipient state" },
   { key: "reverseCharge", label: "Reverse charge" },
   { key: "issuedAt", label: "Issued date" },
-  { key: "voided", label: "Void date / reason" },
+  { key: "voidedDate", label: "Void date" },
+  { key: "voidReason", label: "Void reason" },
 ];
 
 /** Flatten the filtered invoice list into export rows (capped). */
@@ -490,21 +521,28 @@ export async function exportInvoices(q: ExportQuery) {
     id: r.id,
     number: r.number ?? "",
     institutionName: r.institutionName,
+    institutionCode: r.institutionCode ?? "",
     status: r.status,
+    paymentStatus: paymentStatusLabel(r.status),
     createdAt: dateOnly(r.createdAt),
     dueDate: r.dueDate ?? "",
+    paidDate: dateOnly(r.paidAt),
+    paymentMethod: r.paymentMethod ?? "",
+    paymentReference: r.paymentReference ?? "",
     period: r.periodStart || r.periodEnd ? `${r.periodStart ?? ""}..${r.periodEnd ?? ""}` : "",
     subtotal: Number(r.subtotal),
     taxPercent: Number(r.taxPercent),
     taxAmount: Number(r.taxAmount),
     total: Number(r.total),
+    outstanding: outstandingOf(r.status, r.total),
     sacCode: r.sacCode ?? "",
     gstin: r.gstin ?? "",
     placeOfSupply: r.placeOfSupply ?? "",
     recipientState: r.recipientState ?? "",
     reverseCharge: r.reverseCharge ? "Yes" : "No",
     issuedAt: dateOnly(r.issuedAt),
-    voided: r.status === "void" ? `${dateOnly(r.voidedAt)} ${r.voidReason ?? ""}`.trim() : "",
+    voidedDate: r.status === "void" ? dateOnly(r.voidedAt) : "",
+    voidReason: r.status === "void" ? (r.voidReason ?? "") : "",
   }));
   return { columns: EXPORT_COLUMNS, rows: rows as Row[] };
 }

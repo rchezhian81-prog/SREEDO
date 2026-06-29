@@ -125,12 +125,18 @@ export const invoiceSettingsSchema = z
 // enum→bool transform (z.coerce.boolean treats any non-empty string as true).
 const filterFields = {
   status: z.enum(["draft", "issued", "paid", "void"]).optional(),
+  // Payment status is a coarser cut than `status`: paid = settled invoices,
+  // unpaid = issued-but-not-yet-paid (i.e. outstanding). Draft/void are neither.
+  paymentStatus: z.enum(["paid", "unpaid"]).optional(),
   institutionId: z.string().uuid().optional(),
   overdue: z.coerce.boolean().optional(),
   from: z.string().date().optional(),
   to: z.string().date().optional(),
   dueFrom: z.string().date().optional(),
   dueTo: z.string().date().optional(),
+  // Paid-date range (filters on paid_at; only paid invoices carry one).
+  paidFrom: z.string().date().optional(),
+  paidTo: z.string().date().optional(),
   amountMin: z.coerce.number().min(0).optional(),
   amountMax: z.coerce.number().min(0).optional(),
   sacCode: z.string().max(20).optional(),
