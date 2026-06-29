@@ -251,8 +251,8 @@ export default function InvoicesPage() {
   // Institutions power both the filter dropdown and the create form.
   useEffect(() => {
     api
-      .get<InstitutionBrief[]>("/platform/institutions")
-      .then(setInstitutions)
+      .get<{ rows: InstitutionBrief[] }>("/platform/institutions?pageSize=100&sort=name&order=asc")
+      .then((d) => setInstitutions(d.rows))
       .catch(() => {
         /* best-effort */
       });

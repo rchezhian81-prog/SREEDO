@@ -56,7 +56,10 @@ export default function InvoiceReportsPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.get<InstitutionBrief[]>("/platform/institutions").then(setInstitutions).catch(() => {});
+    api
+      .get<{ rows: InstitutionBrief[] }>("/platform/institutions?pageSize=100&sort=name&order=asc")
+      .then((d) => setInstitutions(d.rows))
+      .catch(() => {});
   }, []);
 
   const queryString = useCallback(() => {
