@@ -88,8 +88,8 @@ export function JobsConsole() {
   useEffect(() => {
     if (!isSuper) return;
     api
-      .get<PlatformInstitution[]>("/platform/institutions")
-      .then(setInstitutions)
+      .get<{ rows: PlatformInstitution[] }>("/platform/institutions?pageSize=100&sort=name&order=asc")
+      .then((d) => setInstitutions(d.rows))
       .catch(() => undefined);
   }, [isSuper]);
 
