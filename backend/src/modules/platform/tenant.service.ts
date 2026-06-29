@@ -381,7 +381,7 @@ export async function setOnboardingStep(id: string, step: string, done: boolean,
 
 export async function completeOnboarding(id: string, actor: Actor) {
   await assertTenant(id);
-  // Moving out of draft into trial activates the tenant for use.
+  // A draft tenant becomes active (and usable) on completion; a non-draft status is left as-is.
   await query(
     `UPDATE institutions SET
        status = CASE WHEN status = 'draft' THEN 'active' ELSE status END,

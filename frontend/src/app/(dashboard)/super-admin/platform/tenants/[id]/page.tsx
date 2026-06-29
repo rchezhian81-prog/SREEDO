@@ -215,14 +215,17 @@ function SettingsTab({ t, busy, onSave }: { t: Tenant; busy: boolean; onSave: (b
   const [school, setSchool] = useState<Record<string, unknown>>(s.schoolSettings ?? {});
   const [college, setCollege] = useState<Record<string, unknown>>(s.collegeSettings ?? {});
   const [structure, setStructure] = useState(JSON.stringify(s.academicStructure ?? {}, null, 2));
+  const [comm, setComm] = useState<Record<string, unknown>>(s.communication ?? {});
   const [jsonErr, setJsonErr] = useState<string | null>(null);
   const toggle = (obj: Record<string, unknown>, setter: (o: Record<string, unknown>) => void, k: string) => setter({ ...obj, [k]: !obj[k] });
+  const commStr = (k: string) => (typeof comm[k] === "string" ? (comm[k] as string) : "");
+  const setCommField = (k: string, v: string) => setComm((c) => ({ ...c, [k]: v.trim() === "" ? null : v.trim() }));
 
   const save = () => {
     let academicStructure: unknown = {};
     try { academicStructure = structure.trim() ? JSON.parse(structure) : {}; setJsonErr(null); }
     catch { setJsonErr("Academic structure must be valid JSON"); return; }
-    onSave(isSchool ? { schoolSettings: school, academicStructure } : { collegeSettings: college, academicStructure });
+    onSave({ ...(isSchool ? { schoolSettings: school } : { collegeSettings: college }), academicStructure, communication: comm });
   };
 
   const Check = ({ obj, setter, k, label }: { obj: Record<string, unknown>; setter: (o: Record<string, unknown>) => void; k: string; label: string }) => (
@@ -261,6 +264,19 @@ function SettingsTab({ t, busy, onSave }: { t: Tenant; busy: boolean; onSave: (b
           <Textarea rows={6} value={structure} onChange={(e) => setStructure(e.target.value)} />
         </Field>
         {jsonErr && <p className="mt-1 text-xs text-red-600">{jsonErr}</p>}
+      </Card>
+      <Card>
+        <p className="mb-1 text-sm font-medium text-slate-700">Communication</p>
+        <p className="mb-3 text-xs text-slate-400">Default sender identity & notification channels for this tenant. Actual delivery still depends on the platform SMTP/SMS configuration.</p>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Email sender name"><Input value={commStr("emailSenderName")} onChange={(e) => setCommField("emailSenderName", e.target.value)} /></Field>
+          <Field label="Reply-to email"><Input value={commStr("replyToEmail")} onChange={(e) => setCommField("replyToEmail", e.target.value)} /></Field>
+          <Field label="SMS sender ID"><Input value={commStr("smsSenderId")} onChange={(e) => setCommField("smsSenderId", e.target.value)} /></Field>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-4">
+          <Check obj={comm} setter={setComm} k="notifyEmail" label="Email notifications" />
+          <Check obj={comm} setter={setComm} k="notifySms" label="SMS notifications" />
+        </div>
       </Card>
       <Button disabled={busy} onClick={save}>Save settings</Button>
     </div>

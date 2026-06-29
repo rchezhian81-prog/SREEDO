@@ -92,11 +92,14 @@ describe("super admin — tenant / institution management", () => {
       academicStructure: { levels: ["class", "section"] },
       enabledModules: { fees: true, library: false },
       schoolSettings: { houseSystem: true, examPattern: "term", attendanceMode: "daily" },
+      communication: { emailSenderName: "GoCampus", notifyEmail: true, notifySms: false },
     });
     expect(upd.status).toBe(200);
     expect(upd.body.settings.enabledModules.fees).toBe(true);
     expect(upd.body.settings.schoolSettings.houseSystem).toBe(true);
     expect(upd.body.settings.academicStructure.levels).toEqual(["class", "section"]);
+    expect(upd.body.settings.communication.emailSenderName).toBe("GoCampus");
+    expect(upd.body.settings.communication.notifyEmail).toBe(true);
   });
 
   it("tracks onboarding progress and completes it (activates a draft)", async () => {

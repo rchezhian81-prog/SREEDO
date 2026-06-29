@@ -68,7 +68,8 @@ supported. Duplicate email → 409.
 - **Create/onboarding** (`/tenants/new`): identity (name/code/type), contact,
   optional primary admin.
 - **Detail** (`/tenants/[id]`): tabbed — Overview, Profile, Academic & Settings
-  (type-based school/college config + academic-structure JSON), Modules
+  (type-based school/college config + academic-structure JSON + communication
+  defaults), Modules
   (enable/disable), Subscription & Billing (read-only + link to invoices), Limits
   & Usage, Branding & Domain (slug + link to branding), Onboarding (checklist +
   %), Compliance/approval, Admins, Notes (CRM), Audit (timeline + link). Lifecycle
@@ -83,8 +84,10 @@ import endpoints.
 ## Deferred (honestly — no faking)
 Custom-domain **DNS/SSL automation** (no infra — slug is stored for routing only);
 a full **import engine** (link to existing import shortcuts only); **backup**
-infrastructure; **WhatsApp** config. Tenant **document upload** UI and a dedicated
-**communication-settings** tab reuse existing modules and are a thin follow-up.
+infrastructure; **WhatsApp** config. Per-tenant **communication defaults** (sender
+name, reply-to, SMS sender ID, channel toggles) are editable in the Academic &
+Settings tab; a tenant **document-upload** UI reuses the documents module and is a
+thin follow-up.
 
 ## Migration
 `0081_tenant_management.sql` — additive columns + backfill (`institution_type =
