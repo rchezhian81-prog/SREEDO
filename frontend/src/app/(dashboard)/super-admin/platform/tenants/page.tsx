@@ -45,6 +45,9 @@ export default function TenantsPage() {
   const [q, setQ] = useState("");
   const [institutionType, setInstitutionType] = useState("");
   const [status, setStatus] = useState("");
+  const [pkg, setPkg] = useState("");
+  const [createdFrom, setCreatedFrom] = useState("");
+  const [createdTo, setCreatedTo] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [sort, setSort] = useState<SortKey>("createdAt");
@@ -55,12 +58,15 @@ export default function TenantsPage() {
     if (q.trim()) p.set("q", q.trim());
     if (institutionType) p.set("institutionType", institutionType);
     if (status) p.set("status", status);
+    if (pkg.trim()) p.set("package", pkg.trim());
+    if (createdFrom) p.set("createdFrom", createdFrom);
+    if (createdTo) p.set("createdTo", createdTo);
     p.set("page", String(page));
     p.set("pageSize", String(pageSize));
     p.set("sort", sort);
     p.set("order", order);
     return p;
-  }, [q, institutionType, status, page, pageSize, sort, order]);
+  }, [q, institutionType, status, pkg, createdFrom, createdTo, page, pageSize, sort, order]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -84,7 +90,7 @@ export default function TenantsPage() {
   }, [qInput]);
   useEffect(() => {
     setPage(1);
-  }, [q, institutionType, status, pageSize, sort, order]);
+  }, [q, institutionType, status, pkg, createdFrom, createdTo, pageSize, sort, order]);
 
   const toggleSort = (key: SortKey) => {
     if (sort === key) setOrder((o) => (o === "asc" ? "desc" : "asc"));
@@ -129,7 +135,7 @@ export default function TenantsPage() {
         }
       />
 
-      <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         <Input placeholder="Search name / code / email / slug…" value={qInput} onChange={(e) => setQInput(e.target.value)} />
         <Select value={institutionType} onChange={(e) => setInstitutionType(e.target.value)}>
           <option value="">All types</option>
@@ -139,10 +145,13 @@ export default function TenantsPage() {
         </Select>
         <Select value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="">All statuses</option>
-          {["draft", "trial", "active", "suspended", "expired", "archived"].map((s) => (
+          {["draft", "trial", "active", "suspended", "expired", "archived", "closed"].map((s) => (
             <option key={s} value={s}>{s[0].toUpperCase() + s.slice(1)}</option>
           ))}
         </Select>
+        <Input placeholder="Package name…" value={pkg} onChange={(e) => setPkg(e.target.value)} />
+        <Input type="date" title="Created from" value={createdFrom} onChange={(e) => setCreatedFrom(e.target.value)} />
+        <Input type="date" title="Created to" value={createdTo} onChange={(e) => setCreatedTo(e.target.value)} />
       </div>
 
       {error && <ErrorNote message={error} />}

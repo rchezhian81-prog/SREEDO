@@ -172,11 +172,11 @@ export default function PlatformDashboardPage() {
 
       {/* Quick actions */}
       <div className="mb-6 flex flex-wrap gap-2">
-        <Link href="/super-admin/platform/institutions/new">
-          <Button>Add institution</Button>
+        <Link href="/super-admin/platform/tenants/new">
+          <Button>Add tenant</Button>
         </Link>
-        <Link href="/super-admin/platform/institutions">
-          <Button variant="secondary">View institutions</Button>
+        <Link href="/super-admin/platform/tenants">
+          <Button variant="secondary">View tenants</Button>
         </Link>
         <Link href="/super-admin/platform/audit">
           <Button variant="secondary">Audit logs</Button>

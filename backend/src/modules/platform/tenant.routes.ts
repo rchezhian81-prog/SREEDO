@@ -5,10 +5,17 @@ import { uuidParam } from "../../utils/params";
 import { authenticate, authorize } from "../../middleware/auth";
 import { requirePermission } from "../../middleware/permissions";
 import { toCsv, toXlsx, type Cell } from "../../utils/spreadsheet";
+import { uploadSingle } from "../../utils/upload";
+import { ApiError } from "../../utils/api-error";
 import * as tenants from "./tenant.service";
 import {
+  brandingSchema,
   complianceSchema,
+  completeOnboardingSchema,
   createTenantSchema,
+  crmSchema,
+  documentMetaSchema,
+  documentVerifySchema,
   LIFECYCLE_STATUSES,
   noteSchema,
   onboardingStepSchema,
@@ -151,7 +158,8 @@ tenantRouter.post("/tenants/:id/onboarding/step", requirePermission("platform:ma
   res.json(await tenants.setOnboardingStep(uuidParam(req), step, done, actor(req)));
 });
 tenantRouter.post("/tenants/:id/onboarding/complete", requirePermission("platform:manage_institutions"), async (req, res) => {
-  res.json(await tenants.completeOnboarding(uuidParam(req), actor(req)));
+  const parsed = completeOnboardingSchema.parse(req.body);
+  res.json(await tenants.completeOnboarding(uuidParam(req), parsed?.override === true, actor(req)));
 });
 
 /**
@@ -193,4 +201,103 @@ tenantRouter.get("/tenants/:id/notes", requirePermission("platform:read"), async
 });
 tenantRouter.post("/tenants/:id/notes", requirePermission("platform:manage_institutions"), async (req, res) => {
   res.json(await tenants.addNote(uuidParam(req), noteSchema.parse(req.body), actor(req)));
+});
+
+/**
+ * @openapi
+ * /platform/tenants/{id}/crm:
+ *   patch: { tags: [Platform], summary: "Update CRM fields (account manager, last contacted)", security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Tenant } } }
+ * /platform/tenants/{id}/branding:
+ *   patch: { tags: [Platform], summary: "Update tenant branding (display name, logo URL, colour, tagline)", security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Tenant } } }
+ */
+tenantRouter.patch("/tenants/:id/crm", requirePermission("platform:manage_institutions"), async (req, res) => {
+  res.json(await tenants.updateCrm(uuidParam(req), crmSchema.parse(req.body), actor(req)));
+});
+tenantRouter.patch("/tenants/:id/branding", requirePermission("platform:manage_institutions"), async (req, res) => {
+  res.json(await tenants.updateBranding(uuidParam(req), brandingSchema.parse(req.body), actor(req)));
+});
+
+/**
+ * @openapi
+ * /platform/tenants/{id}/admin/{userId}/reset-link:
+ *   post: { tags: [Platform], summary: "Email a password-setup / reset link to a tenant admin (no-op if SMTP off)", security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }, { in: path, name: userId, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: "{ emailSent }" } } }
+ */
+tenantRouter.post("/tenants/:id/admin/:userId/reset-link", requirePermission("platform:manage_institutions"), async (req, res) => {
+  res.json(await tenants.sendAdminSetupLink(uuidParam(req), uuidParam(req, "userId"), actor(req)));
+});
+
+/**
+ * @openapi
+ * /platform/tenants/{id}/health:
+ *   get: { tags: [Platform], summary: "Per-tenant health/usage dashboard (real metrics only)", security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Health snapshot } } }
+ */
+tenantRouter.get("/tenants/:id/health", requirePermission("platform:read"), async (req, res) => {
+  res.json(await tenants.tenantHealth(uuidParam(req)));
+});
+
+/**
+ * @openapi
+ * /platform/tenants/{id}/export:
+ *   get: { tags: [Platform], summary: "Export a tenant's basic profile (CSV/XLSX)", security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }, { in: query, name: format, schema: { type: string, enum: [csv, xlsx] } }], responses: { 200: { description: File } } }
+ * /platform/tenants/{id}/users/export:
+ *   get: { tags: [Platform], summary: "Export a tenant's users list (CSV/XLSX)", security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }, { in: query, name: format, schema: { type: string, enum: [csv, xlsx] } }], responses: { 200: { description: File } } }
+ */
+tenantRouter.get("/tenants/:id/export", requirePermission("platform:read"), async (req, res) => {
+  const fmt = req.query.format === "xlsx" ? "xlsx" : "csv";
+  const { columns, rows } = await tenants.exportTenantProfile(uuidParam(req));
+  sendSpreadsheet(res, fmt, "tenant-profile", columns, rows);
+});
+tenantRouter.get("/tenants/:id/users/export", requirePermission("platform:read"), async (req, res) => {
+  const fmt = req.query.format === "xlsx" ? "xlsx" : "csv";
+  const { columns, rows } = await tenants.exportTenantUsers(uuidParam(req));
+  sendSpreadsheet(res, fmt, "tenant-users", columns, rows);
+});
+
+/**
+ * @openapi
+ * /platform/tenants/{id}/documents:
+ *   get: { tags: [Platform], summary: "List a tenant's documents", security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Documents } } }
+ *   post: { tags: [Platform], summary: "Upload a tenant document (multipart: file + category)", security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Documents }, 400: { description: Invalid file } } }
+ */
+tenantRouter.get("/tenants/:id/documents", requirePermission("platform:read"), async (req, res) => {
+  res.json(await tenants.listDocuments(uuidParam(req)));
+});
+tenantRouter.post(
+  "/tenants/:id/documents",
+  requirePermission("platform:manage_institutions"),
+  uploadSingle("file"),
+  async (req, res) => {
+    const id = uuidParam(req);
+    const { category } = documentMetaSchema.parse(req.body);
+    const file = req.file;
+    if (!file) throw ApiError.badRequest("A file is required (multipart field 'file')");
+    res.json(await tenants.addDocument(id, category, file, actor(req)));
+  }
+);
+
+/**
+ * @openapi
+ * /platform/tenants/{id}/documents/{docId}/download:
+ *   get: { tags: [Platform], summary: "Download a tenant document", security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }, { in: path, name: docId, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: File bytes } } }
+ * /platform/tenants/{id}/documents/{docId}/verify:
+ *   patch: { tags: [Platform], summary: "Set a document's verification status + remarks", security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }, { in: path, name: docId, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Documents } } }
+ * /platform/tenants/{id}/documents/{docId}/archive:
+ *   post: { tags: [Platform], summary: "Soft-archive a document (file retained)", security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }, { in: path, name: docId, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Documents } } }
+ * /platform/tenants/{id}/documents/{docId}:
+ *   delete: { tags: [Platform], summary: "Delete a single document (file + row; not the tenant)", security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }, { in: path, name: docId, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Documents } } }
+ */
+tenantRouter.get("/tenants/:id/documents/:docId/download", requirePermission("platform:read"), async (req, res) => {
+  const { buffer, mimeType, originalName } = await tenants.getDocumentForDownload(uuidParam(req), uuidParam(req, "docId"));
+  res.setHeader("Content-Type", mimeType);
+  res.setHeader("Content-Disposition", `inline; filename="${originalName.replace(/[^\w.\- ]/g, "_")}"`);
+  res.send(buffer);
+});
+tenantRouter.patch("/tenants/:id/documents/:docId/verify", requirePermission("platform:manage_institutions"), async (req, res) => {
+  res.json(await tenants.verifyDocument(uuidParam(req), uuidParam(req, "docId"), documentVerifySchema.parse(req.body), actor(req)));
+});
+tenantRouter.post("/tenants/:id/documents/:docId/archive", requirePermission("platform:manage_institutions"), async (req, res) => {
+  res.json(await tenants.archiveDocument(uuidParam(req), uuidParam(req, "docId"), actor(req)));
+});
+tenantRouter.delete("/tenants/:id/documents/:docId", requirePermission("platform:manage_institutions"), async (req, res) => {
+  res.json(await tenants.deleteDocument(uuidParam(req), uuidParam(req, "docId"), actor(req)));
 });
