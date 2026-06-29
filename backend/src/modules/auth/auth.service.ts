@@ -256,12 +256,29 @@ export async function revokeSession(
   if (!rowCount) throw ApiError.notFound("Session not found");
 }
 
+/**
+ * Normalise the tenant's `enabledModules` setting to a list of enabled module
+ * keys. Tolerates both shapes in use across the app: an array of keys (admin
+ * console) or an object map `{key: boolean}` (tenant module). Returns null when
+ * unset → callers treat that as "all modules enabled" (backward compatible).
+ */
+function normalizeEnabledModules(raw: unknown): string[] | null {
+  if (Array.isArray(raw)) return raw.filter((x): x is string => typeof x === "string");
+  if (raw && typeof raw === "object") {
+    return Object.entries(raw as Record<string, unknown>)
+      .filter(([, v]) => v !== false)
+      .map(([k]) => k);
+  }
+  return null;
+}
+
 export async function getProfile(userId: string) {
   const { rows } = await query<
-    UserRow & { institution_type: "school" | "college" | null }
+    UserRow & { institution_type: "school" | "college" | null; enabled_modules: unknown }
   >(
     `SELECT u.id, u.email, u.full_name, u.role, u.phone, u.is_active,
-            u.institution_id, u.totp_enabled, i.type AS institution_type
+            u.institution_id, u.totp_enabled, i.type AS institution_type,
+            i.settings -> 'enabledModules' AS enabled_modules
      FROM users u
      LEFT JOIN institutions i ON i.id = u.institution_id
      WHERE u.id = $1`,
@@ -279,6 +296,7 @@ export async function getProfile(userId: string) {
     phone: user.phone,
     institutionId: user.institution_id ?? null,
     institutionType: user.institution_type ?? null,
+    enabledModules: normalizeEnabledModules(user.enabled_modules),
     twoFactorEnabled: user.totp_enabled,
   };
 }

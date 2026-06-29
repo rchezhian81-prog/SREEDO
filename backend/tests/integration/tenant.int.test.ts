@@ -311,6 +311,21 @@ describe("super admin — tenant / institution management", () => {
     expect(users.body.toString("utf8")).toContain("u@exp.edu");
   });
 
+  it("exposes normalized enabledModules via /auth/me for sidebar gating", async () => {
+    const t = await createTenant({ name: "Mods", code: "MODS", institutionType: "school" });
+    const id = t.body.id;
+    await patch(`/api/v1/platform/tenants/${id}/settings`, tok.root, {
+      enabledModules: { fees: true, library: false, students: true },
+    });
+    await createUser({ email: "modadmin@x.dev", password: PW, role: "admin", institutionId: id });
+    const token = await tokenFor("modadmin@x.dev", PW);
+    const me = await get("/api/v1/auth/me", token);
+    expect(me.status).toBe(200);
+    expect(Array.isArray(me.body.enabledModules)).toBe(true);
+    expect(me.body.enabledModules).toEqual(expect.arrayContaining(["fees", "students"]));
+    expect(me.body.enabledModules).not.toContain("library");
+  });
+
   it("filters the directory by package and created-date range", async () => {
     const a = await createTenant({ name: "PkgCo", code: "PKGCO", institutionType: "school" });
     await createTenant({ name: "NoPkg", code: "NOPKG", institutionType: "school" });

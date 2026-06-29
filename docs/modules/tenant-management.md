@@ -79,20 +79,26 @@ Duplicate email → 409. A true pending-**invite** flow is deferred (no infra).
   created-date filters, sort, pagination, CSV/XLSX export, create.
 - **Create/onboarding** (`/tenants/new`): identity (name/code/type), contact,
   optional primary admin.
-- **Detail** (`/tenants/[id]`): 17 tabs — Overview (KPIs + export/exit), Profile,
+- **Detail** (`/tenants/[id]`): 18 tabs — Overview (KPIs + export/exit), Profile,
   Onboarding (checklist/%/required/override), Academic Structure (per-type presets
   + JSON), Settings (full school/college type-based config), Modules, Admins
   (status, last-active, add, enable/disable, setup-link), Subscription & Billing
-  (read-only summary + assign/change package + status/events + invoices link),
-  Limits & Usage (editable overrides + near/over-limit + overdue warnings),
-  Branding & Domain (slug + URL preview/open + display name/logo/colour/tagline),
-  Documents (upload/verify/archive/delete/download), Communication (sender identity
+  (read-only summary + assign/change package + status/events + **create draft
+  invoice** + invoices link), Limits & Usage (editable overrides + near/over-limit +
+  overdue warnings), Branding & Domain (slug + URL preview/open + display
+  name/logo/colour/tagline), Documents (upload/verify/archive/delete/download),
+  **Import** (templates + tenant-workspace shortcuts), Communication (sender identity
   + channels + test email), Health (live metrics), Compliance (terms/agreement/
-  consent/KYC/approval), Notes (CRM owner + internal notes), Support (inline user
-  search + reason + start/end impersonation), Audit (timeline + link). Lifecycle
-  actions (activate/trial/suspend/expire/reactivate/archive/close) in the header.
+  consent/KYC/approval), Notes (CRM owner + internal notes, **inline edit**), Support
+  (inline user search + reason + start/end impersonation), Audit (timeline + link).
+  Lifecycle actions (activate/trial/suspend/expire/reactivate/archive/close) use a
+  styled confirm + reason modal (with a **closure checklist** for archive/close);
+  success notices auto-dismiss (toast-like).
 - The legacy `/super-admin/platform/institutions[/new|/:id]` pages now **redirect**
   here so there is **one** entry point.
+- **Module gating**: `GET /auth/me` returns the tenant's normalized `enabledModules`,
+  and the dashboard sidebar **hides modules a tenant has disabled** (untagged/core
+  items and the unset default always show — navigation can never disappear).
 
 ## Linked (not rebuilt)
 Branding table (`institution_branding`), the shared storage layer + file validator
@@ -102,13 +108,14 @@ billing summary), platform audit + support access/impersonation (#106),
 students/staff import endpoints, the email service (`mailer`).
 
 ## Deferred (honestly — no faking)
-Custom-domain **DNS/SSL automation** (no infra — slug is stored for routing only);
-a full **import engine** (students/staff import exist and are linked; classes/fees
-import don't) and **CSV→JSON parsing**; **backup** infrastructure; a real pending
-**invite** flow (setup/reset links are used instead); **logo file upload** from the
-super-admin surface (set logo URL here; file upload runs in the tenant app); and
-metrics with **no backing data** (per-user last-login, SMS/email send counts,
-failed-login history) — intentionally omitted from Health rather than faked.
+A full cross-tenant **import engine** (the Import tab ships templates + tenant-workspace
+shortcuts because bulk import must map to the tenant's own classes/courses; classes/fees
+bulk import don't exist) and **CSV→JSON parsing**; custom-domain **DNS/SSL automation**
+(slug stored for routing only); **backup** infrastructure; a real pending **invite**
+flow (setup/reset links are used instead); **logo file upload** from the super-admin
+surface (set logo URL here; file upload runs in the tenant app); and metrics with **no
+backing data** (per-user last-login, SMS/email send counts, failed-login history) —
+intentionally omitted from Health rather than faked.
 
 ## Migration
 `0081_tenant_management.sql` — additive columns + backfill (`institution_type =

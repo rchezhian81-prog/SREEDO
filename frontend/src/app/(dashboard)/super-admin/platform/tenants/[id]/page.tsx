@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth-store";
-import { Badge, Button, Card, ErrorNote, Field, Input, PageHeader, Select, Spinner, Textarea } from "@/components/ui";
+import { Badge, Button, Card, ErrorNote, Field, Input, Modal, PageHeader, Select, Spinner, Textarea } from "@/components/ui";
 import { usePlatformGuard } from "../../_guard";
 import { formatBytes, formatNumber, limitLabel } from "../../_utils";
 
@@ -38,7 +38,7 @@ interface Tenant {
 const TABS = [
   "Overview", "Profile", "Onboarding", "Academic Structure", "Settings", "Modules",
   "Admins", "Subscription & Billing", "Limits & Usage", "Branding & Domain", "Documents",
-  "Communication", "Health", "Compliance", "Notes", "Support", "Audit",
+  "Import", "Communication", "Health", "Compliance", "Notes", "Support", "Audit",
 ] as const;
 type Tab = (typeof TABS)[number];
 
@@ -65,6 +65,8 @@ export default function TenantDetailPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<Tab>("Overview");
+  const [pendingStatus, setPendingStatus] = useState<string | null>(null);
+  const [actionReason, setActionReason] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -82,15 +84,19 @@ export default function TenantDetailPage() {
     catch (err) { setError(err instanceof ApiError ? err.message : "Action failed"); }
     finally { setBusy(false); }
   };
+  // Toast-like auto-dismiss for success notices.
+  useEffect(() => { if (!notice) return; const x = setTimeout(() => setNotice(null), 4500); return () => clearTimeout(x); }, [notice]);
 
+  const reasonRequired = (s: string) => s === "suspended" || s === "archived" || s === "closed";
   const lifecycle = (status: string) => {
-    let reason: string | undefined;
-    if (status === "suspended" || status === "archived" || status === "closed") {
-      const r = window.prompt(`Reason to ${status} this tenant (recorded in the audit log):`);
-      if (r === null) return;
-      reason = r;
-    }
-    act(() => api.post(`/platform/tenants/${id}/lifecycle`, { status, reason }), `Tenant ${status}.`);
+    if (reasonRequired(status)) { setActionReason(""); setPendingStatus(status); return; }
+    act(() => api.post(`/platform/tenants/${id}/lifecycle`, { status }), `Tenant ${status}.`);
+  };
+  const confirmLifecycle = () => {
+    const status = pendingStatus;
+    if (!status) return;
+    setPendingStatus(null);
+    act(() => api.post(`/platform/tenants/${id}/lifecycle`, { status, reason: actionReason }), `Tenant ${status}.`);
   };
 
   const completeOnboarding = () => {
@@ -159,12 +165,39 @@ export default function TenantDetailPage() {
         onSaveSlug={(slug) => act(() => api.patch(`/platform/tenants/${id}`, { slug }), "Slug saved.")}
         onSaveBranding={(b) => act(() => api.patch(`/platform/tenants/${id}/branding`, b), "Branding saved.")} />}
       {tab === "Documents" && <DocumentsTab id={id} />}
+      {tab === "Import" && <ImportTab t={t} />}
       {tab === "Communication" && <CommunicationTab t={t} busy={busy} onSave={(communication) => act(() => api.patch(`/platform/tenants/${id}/settings`, { communication }), "Communication saved.")} />}
       {tab === "Health" && <HealthTab id={id} t={t} />}
       {tab === "Compliance" && <ComplianceTab t={t} busy={busy} onSave={(b) => act(() => api.patch(`/platform/tenants/${id}/compliance`, b), "Compliance saved.")} />}
       {tab === "Notes" && <NotesTab id={id} t={t} busy={busy} onSaveCrm={(b) => act(() => api.patch(`/platform/tenants/${id}/crm`, b), "CRM saved.")} />}
       {tab === "Support" && <SupportTab id={id} setNotice={setNotice} setError={setError} />}
       {tab === "Audit" && <AuditTab t={t} />}
+
+      <Modal title={`Confirm: ${pendingStatus ?? ""}`} open={pendingStatus !== null} onClose={() => setPendingStatus(null)}>
+        <div className="space-y-4">
+          {(pendingStatus === "archived" || pendingStatus === "closed") && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              <p className="mb-1 font-medium">Closure checklist (recommended before {pendingStatus}):</p>
+              <ul className="list-inside list-disc space-y-0.5 text-xs">
+                <li>Export the tenant profile &amp; users (Overview → Export &amp; safe exit)</li>
+                <li>Confirm outstanding invoices are settled or written off</li>
+                <li>Notify the tenant admin</li>
+                <li>Download any required documents</li>
+              </ul>
+              <p className="mt-2 text-xs">Data is preserved — {pendingStatus === "closed" ? "closing" : "archiving"} never deletes invoices, users, records, documents or audit history.</p>
+            </div>
+          )}
+          <Field label="Reason (required — recorded in the audit log)">
+            <Textarea rows={3} value={actionReason} onChange={(e) => setActionReason(e.target.value)} />
+          </Field>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setPendingStatus(null)}>Cancel</Button>
+            <Button variant="danger" disabled={busy || actionReason.trim().length === 0} onClick={confirmLifecycle}>
+              Confirm {pendingStatus}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </>
   );
 }
@@ -464,6 +497,14 @@ function SubscriptionTab({ t, busy, onChanged, setNotice, setError }: { t: Tenan
     } catch (err) { setError(err instanceof ApiError ? err.message : "Failed to assign subscription"); }
     finally { setSaving(false); }
   };
+  const createInvoice = async () => {
+    setSaving(true); setError(null); setNotice(null);
+    try {
+      await api.post(`/platform/institutions/${t.id}/invoices`, {}); // blank draft; lines/issue done in the invoice flow
+      setNotice("Draft invoice created — open invoices to add lines & issue."); onChanged();
+    } catch (err) { setError(err instanceof ApiError ? err.message : "Failed to create invoice"); }
+    finally { setSaving(false); }
+  };
   return (
     <div className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-4">
@@ -494,7 +535,10 @@ function SubscriptionTab({ t, busy, onChanged, setNotice, setError }: { t: Tenan
         {b.latest ? (
           <div className="text-sm text-slate-600">{String(b.latest.number)} · {String(b.latest.status)} · {t.currency ?? "INR"} {String(b.latest.total)} · {String(b.latest.createdAt)}</div>
         ) : <p className="text-sm text-slate-400">No invoices yet.</p>}
-        <div className="mt-3"><Link href={`/super-admin/invoices?institutionId=${t.id}`} className="text-sm font-medium text-brand-600 hover:text-brand-700">Open this tenant&apos;s invoices →</Link></div>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <Button disabled={saving || busy} onClick={createInvoice}>+ Create draft invoice</Button>
+          <Link href={`/super-admin/invoices?institutionId=${t.id}`} className="text-sm font-medium text-brand-600 hover:text-brand-700">Open this tenant&apos;s invoices →</Link>
+        </div>
       </Card>
       <Card>
         <p className="mb-2 text-sm font-medium text-slate-700">Subscription history</p>
@@ -661,6 +705,44 @@ function DocumentsTab({ id }: { id: string }) {
   );
 }
 
+function ImportTab({ t }: { t: Tenant }) {
+  const csvTemplate = (headers: string[], name: string) => {
+    const blob = new Blob(["﻿" + headers.join(",") + "\n"], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  };
+  return (
+    <div className="space-y-4">
+      <Card>
+        <p className="mb-1 text-sm font-medium text-slate-700">Import &amp; setup shortcuts</p>
+        <p className="mb-3 text-xs text-slate-400">
+          Bulk import runs inside the <b>tenant workspace</b> (rows must map to the tenant&apos;s own
+          classes/courses), so it isn&apos;t performed cross-tenant from here. Use the
+          <b> Support</b> tab to open a session as a tenant admin and run Students → Import / Staff → Import,
+          or send these starter templates to the tenant admin.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={() => csvTemplate(["fullName", "gender", "dateOfBirth", "guardianName", "guardianPhone", "className", "sectionName"], "students-import-template.csv")}>Download students template</Button>
+          <Button variant="secondary" onClick={() => csvTemplate(["fullName", "email", "phone", "designation", "department"], "staff-import-template.csv")}>Download staff template</Button>
+        </div>
+        <p className="mt-2 text-xs text-slate-400">Templates are a starting point — match the columns shown on the tenant&apos;s own import screen.</p>
+      </Card>
+      <Card>
+        <p className="mb-2 text-sm font-medium text-slate-700">Availability</p>
+        <ul className="space-y-1 text-sm text-slate-600">
+          <li>✓ Students bulk import (tenant workspace)</li>
+          <li>✓ Staff / teachers bulk import (tenant workspace)</li>
+          <li className="text-slate-400">— Classes / courses &amp; fee-structure import: not available yet (no bulk endpoint)</li>
+          <li className="text-slate-400">— Import history / error report: not tracked</li>
+        </ul>
+        {t.slug && <p className="mt-3 text-xs text-slate-400">Tenant workspace: <span className="font-mono">https://{t.slug}.gocampusos.com</span></p>}
+      </Card>
+    </div>
+  );
+}
+
 function CommunicationTab({ t, busy, onSave }: { t: Tenant; busy: boolean; onSave: (c: Record<string, unknown>) => void }) {
   const c = ((t.settings?.communication as Record<string, unknown>) ?? {});
   const [comm, setComm] = useState<Record<string, unknown>>(c);
@@ -762,12 +844,16 @@ function NotesTab({ id, t, busy, onSaveCrm }: { id: string; t: Tenant; busy: boo
   const [body, setBody] = useState("");
   const [followUp, setFollowUp] = useState("");
   const [nbusy, setNbusy] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editBody, setEditBody] = useState("");
   const [accountManager, setAccountManager] = useState(t.accountManager ?? "");
   const [lastContacted, setLastContacted] = useState(t.lastContactedAt ? String(t.lastContactedAt).slice(0, 10) : "");
   const load = useCallback(async () => { setNotes(await api.get<Note[]>(`/platform/tenants/${id}/notes`).catch(() => [])); }, [id]);
   useEffect(() => { load(); }, [load]);
   const add = async () => { if (!body.trim()) return; setNbusy(true); try { setNotes(await api.post<Note[]>(`/platform/tenants/${id}/notes`, { noteType, body: body.trim(), followUpDate: followUp || null })); setBody(""); setFollowUp(""); } finally { setNbusy(false); } };
   const del = async (noteId: string) => { setNbusy(true); try { setNotes(await api.delete<Note[]>(`/platform/tenants/notes/${noteId}`)); } finally { setNbusy(false); } };
+  const startEdit = (n: Note) => { setEditId(n.id); setEditBody(n.body); };
+  const saveEdit = async () => { if (!editId || !editBody.trim()) return; setNbusy(true); try { setNotes(await api.patch<Note[]>(`/platform/tenants/notes/${editId}`, { body: editBody.trim() })); setEditId(null); setEditBody(""); } finally { setNbusy(false); } };
   return (
     <div className="space-y-4">
       <Card>
@@ -792,8 +878,21 @@ function NotesTab({ id, t, busy, onSaveCrm }: { id: string; t: Tenant; busy: boo
           <ul className="divide-y divide-slate-100">
             {notes.map((n) => (
               <li key={n.id} className="flex items-start justify-between gap-2 py-2 text-sm">
-                <span><Badge tone="slate">{n.noteType}</Badge> <span className="text-slate-700">{n.body}</span>{n.followUpDate && <span className="ml-2 text-xs text-amber-600">follow-up {n.followUpDate}</span>}<span className="ml-2 text-xs text-slate-400">{n.authorEmail} · {new Date(n.createdAt).toLocaleDateString()}</span></span>
-                <button className="text-xs text-red-600 hover:text-red-700" disabled={nbusy} onClick={() => del(n.id)}>Delete</button>
+                {editId === n.id ? (
+                  <span className="flex flex-1 items-center gap-2">
+                    <Input value={editBody} onChange={(e) => setEditBody(e.target.value)} />
+                    <button className="text-xs text-emerald-600 hover:text-emerald-700 disabled:opacity-50" disabled={nbusy || !editBody.trim()} onClick={saveEdit}>Save</button>
+                    <button className="text-xs text-slate-500 hover:text-slate-700" onClick={() => setEditId(null)}>Cancel</button>
+                  </span>
+                ) : (
+                  <>
+                    <span><Badge tone="slate">{n.noteType}</Badge> <span className="text-slate-700">{n.body}</span>{n.followUpDate && <span className="ml-2 text-xs text-amber-600">follow-up {n.followUpDate}</span>}<span className="ml-2 text-xs text-slate-400">{n.authorEmail} · {new Date(n.createdAt).toLocaleDateString()}</span></span>
+                    <span className="flex shrink-0 gap-3">
+                      <button className="text-xs text-brand-600 hover:text-brand-700 disabled:opacity-50" disabled={nbusy} onClick={() => startEdit(n)}>Edit</button>
+                      <button className="text-xs text-red-600 hover:text-red-700 disabled:opacity-50" disabled={nbusy} onClick={() => del(n.id)}>Delete</button>
+                    </span>
+                  </>
+                )}
               </li>
             ))}
           </ul>
