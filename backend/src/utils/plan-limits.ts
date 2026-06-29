@@ -32,16 +32,55 @@ export async function activePlan(institutionId: string): Promise<ActivePlan> {
   };
 }
 
+export interface EffectiveLimits {
+  packageName: string | null;
+  maxStudents: number | null;
+  maxStaff: number | null;
+  maxBranches: number | null;
+  storageLimitMb: number | null;
+  reportsQuota: number | null;
+  smsQuota: number | null;
+}
+
 /**
- * Enforces a plan's student/staff cap before creating a record. No active plan
- * or a NULL limit means "unlimited" — the guard degrades to allow.
+ * The institution's EFFECTIVE limits: per-institution overrides (stored in
+ * institutions.settings.limits by the platform console) take precedence over the
+ * active subscription package, which in turn falls back to its `features`. A null
+ * override means "no override" → fall through to the plan. This is the single
+ * source of truth for both display (institutionLimits) and enforcement
+ * (assertWithinPlanLimit), so overrides actually round-trip and apply.
+ */
+export async function effectiveLimits(institutionId: string): Promise<EffectiveLimits> {
+  const plan = await activePlan(institutionId);
+  const { rows } = await query<{ limits: Record<string, number | null> | null }>(
+    `SELECT settings->'limits' AS limits FROM institutions WHERE id = $1`,
+    [institutionId]
+  );
+  const o = rows[0]?.limits ?? {};
+  const num = (v: unknown): number | null => (typeof v === "number" ? v : null);
+  const f = plan.features ?? {};
+  return {
+    packageName: plan.packageName,
+    maxStudents: num(o.maxStudents) ?? plan.maxStudents,
+    maxStaff: num(o.maxStaff) ?? plan.maxStaff,
+    maxBranches: num(o.maxBranches),
+    storageLimitMb: num(o.storageLimitMb) ?? (f.storageLimitMb as number | undefined) ?? null,
+    reportsQuota: num(o.reportsQuota),
+    smsQuota: (f.smsQuota as number | undefined) ?? null,
+  };
+}
+
+/**
+ * Enforces an institution's EFFECTIVE student/staff cap before creating a record
+ * (per-institution override wins over the plan). No cap (NULL) means "unlimited"
+ * — the guard degrades to allow.
  */
 export async function assertWithinPlanLimit(
   institutionId: string,
   kind: "students" | "staff"
 ): Promise<void> {
-  const plan = await activePlan(institutionId);
-  const max = kind === "students" ? plan.maxStudents : plan.maxStaff;
+  const limits = await effectiveLimits(institutionId);
+  const max = kind === "students" ? limits.maxStudents : limits.maxStaff;
   if (max == null) return;
   const table = kind === "students" ? "students" : "teachers";
   const { rows } = await query<{ c: number }>(

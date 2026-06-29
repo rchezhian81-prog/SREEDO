@@ -16,6 +16,7 @@ import {
   Spinner,
 } from "@/components/ui";
 import type {
+  PlatformAuditRow,
   PlatformInstitutionDetail,
   SubscriptionPackage,
 } from "@/types";
@@ -38,6 +39,7 @@ export default function PlatformInstitutionDetailPage() {
 
   const [detail, setDetail] = useState<PlatformInstitutionDetail | null>(null);
   const [packages, setPackages] = useState<SubscriptionPackage[]>([]);
+  const [activity, setActivity] = useState<PlatformAuditRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -80,6 +82,10 @@ export default function PlatformInstitutionDetailPage() {
       );
       setDetail(d);
       syncForms(d);
+      api
+        .get<PlatformAuditRow[]>(`/platform/institutions/${id}/activity`)
+        .then(setActivity)
+        .catch(() => setActivity([]));
     } catch (err) {
       setDetail(null);
       if (err instanceof ApiError && err.status === 404) {
@@ -204,6 +210,17 @@ export default function PlatformInstitutionDetailPage() {
 
   return (
     <>
+      <nav className="mb-2 text-xs text-slate-400">
+        <Link href="/super-admin/platform" className="hover:text-slate-600">
+          Platform
+        </Link>{" "}
+        /{" "}
+        <Link href="/super-admin/platform/institutions" className="hover:text-slate-600">
+          Institutions
+        </Link>{" "}
+        / <span className="text-slate-600">{detail.code}</span>
+      </nav>
+
       <PageHeader
         title={detail.name}
         subtitle={detail.code}
@@ -397,8 +414,8 @@ export default function PlatformInstitutionDetailPage() {
                   onChange={(e) => setSubStatus(e.target.value)}
                 >
                   <option value="active">Active</option>
-                  <option value="trial">Trial</option>
-                  <option value="past_due">Past due</option>
+                  <option value="trialing">Trial</option>
+                  <option value="suspended">Suspended</option>
                   <option value="cancelled">Cancelled</option>
                 </Select>
               </Field>
@@ -479,6 +496,31 @@ export default function PlatformInstitutionDetailPage() {
               </ul>
             </Card>
           )}
+
+          <Card>
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-slate-900">Recent activity</h2>
+              <Link
+                href={`/super-admin/platform/audit?institutionId=${id}`}
+                className="text-xs font-medium text-brand-600 hover:text-brand-700"
+              >
+                View all →
+              </Link>
+            </div>
+            {activity.length === 0 ? (
+              <p className="text-sm text-slate-400">No recorded activity yet.</p>
+            ) : (
+              <ul className="space-y-2 text-sm">
+                {activity.map((a) => (
+                  <li key={a.id} className="flex flex-wrap items-center gap-2 border-b border-slate-100 pb-2 last:border-0">
+                    <Badge tone="blue">{a.action}</Badge>
+                    <span className="text-slate-400">{new Date(a.createdAt).toLocaleString()}</span>
+                    {a.actorEmail && <span className="text-slate-600">· {a.actorEmail}</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
         </div>
       </div>
     </>

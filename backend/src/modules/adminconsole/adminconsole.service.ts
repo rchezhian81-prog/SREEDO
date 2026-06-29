@@ -1,7 +1,7 @@
 import { pool, query } from "../../db/postgres";
 import { getMongoDb } from "../../db/mongo";
 import { ApiError } from "../../utils/api-error";
-import { activePlan } from "../../utils/plan-limits";
+import { effectiveLimits } from "../../utils/plan-limits";
 import type { z } from "zod";
 import type { auditQuerySchema, updateSettingsSchema } from "./adminconsole.schema";
 
@@ -65,24 +65,32 @@ export async function updateInstitutionSettings(
 
 export async function institutionLimits(id: string) {
   await assertInstitution(id);
-  const plan = await activePlan(id);
-  const counts = await query<{ students: number; staff: number }>(
+  // EFFECTIVE limits = per-institution overrides (settings.limits) over the plan,
+  // so caps set in the platform console actually display and enforce.
+  const limits = await effectiveLimits(id);
+  const counts = await query<{ students: number; staff: number; branches: number }>(
     `SELECT (SELECT count(*)::int FROM students WHERE institution_id = $1) AS students,
-            (SELECT count(*)::int FROM teachers WHERE institution_id = $1) AS staff`,
+            (SELECT count(*)::int FROM teachers WHERE institution_id = $1) AS staff,
+            (SELECT count(*)::int FROM branches WHERE institution_id = $1) AS branches`,
     [id]
   );
-  const { students, staff } = counts.rows[0];
-  const features = plan.features ?? {};
+  const { students, staff, branches } = counts.rows[0];
   const within = (max: number | null, used: number) => max == null || used <= max;
   return {
-    packageName: plan.packageName,
-    maxStudents: plan.maxStudents,
+    packageName: limits.packageName,
+    maxStudents: limits.maxStudents,
     students,
-    maxStaff: plan.maxStaff,
+    maxStaff: limits.maxStaff,
     staff,
-    storageLimitMb: (features.storageLimitMb as number | undefined) ?? null,
-    smsQuota: (features.smsQuota as number | undefined) ?? null,
-    withinLimits: within(plan.maxStudents, students) && within(plan.maxStaff, staff),
+    maxBranches: limits.maxBranches,
+    branches,
+    storageLimitMb: limits.storageLimitMb,
+    reportsQuota: limits.reportsQuota,
+    smsQuota: limits.smsQuota,
+    withinLimits:
+      within(limits.maxStudents, students) &&
+      within(limits.maxStaff, staff) &&
+      within(limits.maxBranches, branches),
   };
 }
 

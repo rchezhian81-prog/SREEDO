@@ -99,10 +99,10 @@ describe("global user-role management (RBAC console)", () => {
     await grant("teacher", "jobs:read", tok.root, "ticket-42");
     await revoke("teacher", "jobs:read", tok.root, "done");
     const granted = await get("/api/v1/platform/audit?action=rbac.grant", tok.root);
-    expect(granted.body.some((a: { detail: { role: string; permission: string } }) =>
+    expect(granted.body.rows.some((a: { detail: { role: string; permission: string } }) =>
       a.detail.role === "teacher" && a.detail.permission === "jobs:read")).toBe(true);
     const revoked = await get("/api/v1/platform/audit?action=rbac.revoke", tok.root);
-    expect(revoked.body.length).toBeGreaterThanOrEqual(1);
+    expect(revoked.body.rows.length).toBeGreaterThanOrEqual(1);
   });
 
   it("denies tenant admins and all tenant users (super-admin boundary)", async () => {

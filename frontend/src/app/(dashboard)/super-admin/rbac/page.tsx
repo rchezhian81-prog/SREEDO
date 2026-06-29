@@ -117,11 +117,13 @@ export default function RbacConsolePage() {
     setAuditLoading(true);
     setAuditError(null);
     try {
+      // The platform audit endpoint is paginated ({ rows, total, ... }); RBAC
+      // only needs the rows for its grant/revoke trail.
       const [grants, revokes] = await Promise.all([
-        api.get<PlatformAuditEntry[]>("/platform/audit?action=rbac.grant"),
-        api.get<PlatformAuditEntry[]>("/platform/audit?action=rbac.revoke"),
+        api.get<{ rows: PlatformAuditEntry[] }>("/platform/audit?action=rbac.grant&pageSize=200"),
+        api.get<{ rows: PlatformAuditEntry[] }>("/platform/audit?action=rbac.revoke&pageSize=200"),
       ]);
-      const merged = [...grants, ...revokes].sort(
+      const merged = [...grants.rows, ...revokes.rows].sort(
         (a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );

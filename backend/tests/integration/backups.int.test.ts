@@ -119,7 +119,7 @@ describe("scheduled backup / restore automation", () => {
     expect((await get("/api/v1/backups", tok.root)).status).toBe(200);
     // The restore attempt is durably audited.
     const audit = await get("/api/v1/platform/audit?action=restore.success", tok.root);
-    expect(audit.body.length).toBeGreaterThanOrEqual(1);
+    expect(audit.body.rows.length).toBeGreaterThanOrEqual(1);
   });
 
   it("rejects restoring an institution-scoped backup", async () => {
@@ -171,8 +171,8 @@ describe("scheduled backup / restore automation", () => {
     await makeBackup();
     const audit = await get("/api/v1/platform/audit?action=backup.create", tok.root);
     expect(audit.status).toBe(200);
-    expect(audit.body.length).toBeGreaterThanOrEqual(1);
-    expect(audit.body[0].targetType).toBe("backup");
+    expect(audit.body.rows.length).toBeGreaterThanOrEqual(1);
+    expect(audit.body.rows[0].targetType).toBe("backup");
   });
 
   it("exposes backup/restore metrics and overview without secrets", async () => {
