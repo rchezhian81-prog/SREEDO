@@ -13,6 +13,7 @@ import { useModeStore } from "@/stores/mode-store";
 import { useI18n } from "@/i18n/I18nProvider";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { RuntimeBanner } from "@/components/RuntimeBanner";
+import { Toaster } from "@/components/toast";
 
 type NavItem = {
   href: string;
@@ -491,6 +492,7 @@ export default function DashboardLayout({
           {children}
         </main>
       </div>
+      <Toaster />
     </div>
   );
 }

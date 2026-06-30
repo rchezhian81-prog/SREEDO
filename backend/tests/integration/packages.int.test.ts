@@ -63,6 +63,20 @@ describe("super admin C: package / plan management", () => {
     expect((await createPkg({ name: "Bad2", taxPercent: 250 })).status).toBe(400);
   });
 
+  it("supports the half-yearly billing cycle and a package tax category", async () => {
+    const created = await createPkg({ name: "HY", billingCycle: "half_yearly", taxCategory: "standard" });
+    expect(created.status).toBe(201);
+    expect(created.body.billingCycle).toBe("half_yearly");
+    expect(created.body.taxCategory).toBe("standard");
+
+    const list = await request(app).get("/api/v1/packages?billingCycle=half_yearly").set(auth(superToken));
+    expect(list.body.map((p: { name: string }) => p.name)).toEqual(["HY"]);
+
+    const upd = await request(app).patch(`/api/v1/packages/${created.body.id}`).set(auth(superToken)).send({ taxCategory: "exempt" });
+    expect(upd.status).toBe(200);
+    expect(upd.body.taxCategory).toBe("exempt");
+  });
+
   it("edits a package and records a versioned before/after diff + audit", async () => {
     const id = (await createPkg({ name: "Base", price: 100 })).body.id;
     const upd = await request(app).patch(`/api/v1/packages/${id}`).set(auth(superToken)).send({ price: 250, badge: "Popular" });
