@@ -544,21 +544,37 @@ function UsersTab({ id }: { id: string }) {
 
 function SubscriptionTab({ t, busy, onChanged, setNotice, setError }: { t: Tenant; busy: boolean; onChanged: () => void; setNotice: (s: string | null) => void; setError: (s: string | null) => void }) {
   const b = t.billing;
-  const [packages, setPackages] = useState<{ id: string; name: string; billingCycle: string }[]>([]);
+  const [packages, setPackages] = useState<{ id: string; name: string; billingCycle: string; applicableTypes: string[] }[]>([]);
   const [events, setEvents] = useState<{ event: string; fromStatus: string | null; toStatus: string | null; createdAt: string }[]>([]);
   const [packageId, setPackageId] = useState("");
   const [subStatus, setSubStatus] = useState("active");
+  const [override, setOverride] = useState(false);
+  const [overrideReason, setOverrideReason] = useState("");
   const [saving, setSaving] = useState(false);
   useEffect(() => {
-    api.get<{ id: string; name: string; billingCycle: string }[]>("/packages").then(setPackages).catch(() => setPackages([]));
+    api.get<{ id: string; name: string; billingCycle: string; applicableTypes: string[] }[]>("/packages").then(setPackages).catch(() => setPackages([]));
     api.get<{ event: string; fromStatus: string | null; toStatus: string | null; createdAt: string }[]>(`/platform/institutions/${t.id}/subscription/events`).then(setEvents).catch(() => setEvents([]));
   }, [t.id]);
+  const packageApplies = (p?: { applicableTypes: string[] }) =>
+    !p || p.applicableTypes.length === 0 || p.applicableTypes.includes(t.institutionType);
+  const selectedPackage = packages.find((p) => p.id === packageId);
+  const applies = packageApplies(selectedPackage);
   const assign = async () => {
     if (!packageId) { setError("Choose a package"); return; }
+    if (!applies && !override) {
+      setError(`This package isn't marked for ${t.institutionType} institutions. Tick "Assign anyway" to override.`);
+      return;
+    }
+    if (!applies && override && !overrideReason.trim()) {
+      setError("A reason is required to override package applicability.");
+      return;
+    }
     setSaving(true); setError(null); setNotice(null);
     try {
-      await api.post(`/platform/institutions/${t.id}/subscription`, { packageId, status: subStatus });
-      setNotice("Subscription assigned."); onChanged();
+      const body: Record<string, unknown> = { packageId, status: subStatus };
+      if (!applies && override) { body.override = true; body.reason = overrideReason.trim(); }
+      await api.post(`/platform/institutions/${t.id}/subscription`, body);
+      setNotice("Subscription assigned."); setOverride(false); setOverrideReason(""); onChanged();
     } catch (err) { setError(err instanceof ApiError ? err.message : "Failed to assign subscription"); }
     finally { setSaving(false); }
   };
@@ -590,10 +606,24 @@ function SubscriptionTab({ t, busy, onChanged, setNotice, setError }: { t: Tenan
       <Card>
         <p className="mb-2 text-sm font-medium text-slate-700">Assign / change package</p>
         <div className="grid grid-cols-3 gap-3">
-          <Field label="Package"><Select value={packageId} onChange={(e) => setPackageId(e.target.value)}><option value="">Choose…</option>{packages.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.billingCycle})</option>)}</Select></Field>
+          <Field label="Package"><Select value={packageId} onChange={(e) => setPackageId(e.target.value)}><option value="">Choose…</option>{packages.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.billingCycle}){packageApplies(p) ? "" : ` — not for ${t.institutionType}`}</option>)}</Select></Field>
           <Field label="Status"><Select value={subStatus} onChange={(e) => setSubStatus(e.target.value)}>{["active", "trialing", "suspended", "cancelled"].map((x) => <option key={x} value={x}>{x}</option>)}</Select></Field>
           <div className="flex items-end"><Button disabled={saving || busy} onClick={assign}>Assign</Button></div>
         </div>
+        {selectedPackage && !applies && (
+          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
+            <p className="text-amber-800">
+              <strong>{selectedPackage.name}</strong> is restricted to {selectedPackage.applicableTypes.join(", ")} institutions, but this tenant is a {t.institutionType}.
+            </p>
+            <label className="mt-2 flex items-center gap-2 font-medium text-amber-900">
+              <input type="checkbox" className="h-4 w-4 rounded border-slate-300" checked={override} onChange={(e) => setOverride(e.target.checked)} />
+              Assign anyway (super-admin override — audited)
+            </label>
+            {override && (
+              <div className="mt-2"><Field label="Override reason (required)"><Input value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} placeholder="Why is this exception justified?" /></Field></div>
+            )}
+          </div>
+        )}
       </Card>
       <Card>
         <p className="mb-2 text-sm font-medium text-slate-700">Latest invoice</p>

@@ -1,4 +1,5 @@
-import { query } from "../../db/postgres";
+import { query, withTransaction } from "../../db/postgres";
+import type { QueryResult } from "pg";
 import { ApiError } from "../../utils/api-error";
 import type { z } from "zod";
 import type {
@@ -254,23 +255,30 @@ function packageDiff(
   return diff;
 }
 
+/** A query runner: the pooled `query` by default, or a transaction client's `query`. */
+type Executor = (text: string, params?: unknown[]) => Promise<QueryResult>;
+
 async function recordPackageVersion(
   packageId: string,
   action: string,
   snapshot: unknown,
   diff: unknown,
   actor: Actor,
-  reason?: string | null
+  reason: string | null = null,
+  exec: Executor = query
 ): Promise<void> {
-  const v = await query<{ n: number }>(
+  // version_no = MAX+1. Callers that mutate an existing package take a FOR UPDATE lock
+  // on that row first (updatePackage/setPackageStatus), serialising concurrent writers
+  // so two simultaneous edits can never land the same version_no.
+  const v = await exec(
     `SELECT COALESCE(MAX(version_no), 0) + 1 AS n FROM package_versions WHERE package_id = $1`,
     [packageId]
   );
-  await query(
+  await exec(
     `INSERT INTO package_versions
        (package_id, version_no, action, snapshot, diff, actor_id, actor_email, reason)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-    [packageId, v.rows[0].n, action, JSON.stringify(snapshot), JSON.stringify(diff), actor.id, actor.email, reason ?? null]
+    [packageId, v.rows[0].n, action, JSON.stringify(snapshot), JSON.stringify(diff), actor.id, actor.email, reason]
   );
 }
 
@@ -278,9 +286,10 @@ async function auditPackage(
   action: string,
   packageId: string,
   detail: Record<string, unknown>,
-  actor: Actor
+  actor: Actor,
+  exec: Executor = query
 ): Promise<void> {
-  await query(
+  await exec(
     `INSERT INTO platform_audit_log
        (action, target_type, target_id, institution_id, actor_id, actor_email, actor_role, detail, ip)
      VALUES ($1, 'package', $2, NULL, $3, $4, $5, $6::jsonb, $7)`,
@@ -315,8 +324,11 @@ export async function listPackages(filter: z.infer<typeof packageListQuerySchema
   return rows;
 }
 
-export async function getPackage(id: string) {
-  const { rows } = await query(`SELECT ${PACKAGE_COLUMNS} FROM subscription_packages WHERE id = $1`, [id]);
+export async function getPackage(id: string, exec: Executor = query, lock = false) {
+  const { rows } = await exec(
+    `SELECT ${PACKAGE_COLUMNS} FROM subscription_packages WHERE id = $1${lock ? " FOR UPDATE" : ""}`,
+    [id]
+  );
   if (!rows[0]) throw ApiError.notFound("Package not found");
   return rows[0];
 }
@@ -337,20 +349,25 @@ export async function createPackage(input: z.infer<typeof createPackageSchema>, 
   }
   const ia = isActiveFromInput(data);
   if (ia !== undefined) { params.push(ia); cols.push("is_active"); vals.push(`$${params.length}`); }
+  // keep archived_at consistent if a package is created directly in the archived state
+  if ((data.status ?? "active") === "archived") { cols.push("archived_at"); vals.push("now()"); }
   params.push(actor.id); cols.push("updated_by"); vals.push(`$${params.length}`);
-  const { rows } = await query(
-    `INSERT INTO subscription_packages (${cols.join(", ")}) VALUES (${vals.join(", ")})
-     RETURNING ${PACKAGE_COLUMNS}`,
-    params
-  );
-  const pkg = rows[0];
-  await recordPackageVersion(pkg.id, "created", pkg, {}, actor);
-  await auditPackage("package.created", pkg.id, { name: pkg.name, status: pkg.status }, actor);
-  return pkg;
+  // row + version + audit commit together — never a package row without its history/audit trail
+  return withTransaction(async (client) => {
+    const exec: Executor = (text, p = []) => client.query(text, p as never[]);
+    const { rows } = await exec(
+      `INSERT INTO subscription_packages (${cols.join(", ")}) VALUES (${vals.join(", ")})
+       RETURNING ${PACKAGE_COLUMNS}`,
+      params
+    );
+    const pkg = rows[0];
+    await recordPackageVersion(pkg.id, "created", pkg, {}, actor, null, exec);
+    await auditPackage("package.created", pkg.id, { name: pkg.name, status: pkg.status }, actor, exec);
+    return pkg;
+  });
 }
 
 export async function updatePackage(id: string, input: z.infer<typeof updatePackageSchema>, actor: Actor) {
-  const before = await getPackage(id);
   const data = input as Record<string, unknown>;
   const sets: string[] = [];
   const params: unknown[] = [];
@@ -362,18 +379,22 @@ export async function updatePackage(id: string, input: z.infer<typeof updatePack
   params.push(actor.id);
   sets.push(`updated_at = now()`, `updated_by = $${params.length}`);
   params.push(id);
-  const { rows } = await query(
-    `UPDATE subscription_packages SET ${sets.join(", ")} WHERE id = $${params.length}
-     RETURNING ${PACKAGE_COLUMNS}`,
-    params
-  );
-  const after = rows[0];
-  const diff = packageDiff(before as Record<string, unknown>, after as Record<string, unknown>);
-  if (Object.keys(diff).length) {
-    await recordPackageVersion(id, "updated", after, diff, actor);
-    await auditPackage("package.updated", id, { fields: Object.keys(diff), diff }, actor);
-  }
-  return after;
+  return withTransaction(async (client) => {
+    const exec: Executor = (text, p = []) => client.query(text, p as never[]);
+    const before = await getPackage(id, exec, true); // lock the row → serialises concurrent edits + version_no
+    const { rows } = await exec(
+      `UPDATE subscription_packages SET ${sets.join(", ")} WHERE id = $${params.length}
+       RETURNING ${PACKAGE_COLUMNS}`,
+      params
+    );
+    const after = rows[0];
+    const diff = packageDiff(before as Record<string, unknown>, after as Record<string, unknown>);
+    if (Object.keys(diff).length) {
+      await recordPackageVersion(id, "updated", after, diff, actor, null, exec);
+      await auditPackage("package.updated", id, { fields: Object.keys(diff), diff }, actor, exec);
+    }
+    return after;
+  });
 }
 
 export async function setPackageStatus(
@@ -381,37 +402,41 @@ export async function setPackageStatus(
   input: z.infer<typeof packageStatusSchema>,
   actor: Actor
 ) {
-  const before = await getPackage(id);
   if ((input.status === "archived" || input.status === "deprecated") && !input.reason?.trim()) {
     throw ApiError.badRequest("A reason is required to deprecate or archive a package");
   }
   const isActive = input.status === "active";
   const archivedAt = input.status === "archived" ? "now()" : "NULL";
-  const { rows } = await query(
-    `UPDATE subscription_packages
-       SET status = $1, is_active = $2, archived_at = ${archivedAt}, updated_at = now(), updated_by = $3
-     WHERE id = $4 RETURNING ${PACKAGE_COLUMNS}`,
-    [input.status, isActive, actor.id, id]
-  );
-  const after = rows[0];
-  const impact = await packageImpact(id);
-  const fromStatus = (before as Record<string, unknown>).status;
-  await recordPackageVersion(
-    id,
-    input.status === "archived" ? "archived" : "status_change",
-    after,
-    { status: { from: fromStatus, to: input.status } },
-    actor,
-    input.reason
-  );
-  await auditPackage("package.status_change", id, {
-    from: fromStatus,
-    to: input.status,
-    reason: input.reason ?? null,
-    affectedTenants: impact.tenants.length,
-    activeSubscriptions: impact.activeSubscriptions,
-  }, actor);
-  return after;
+  const impact = await packageImpact(id); // validates existence (404 before the tx) + counts for the audit detail
+  return withTransaction(async (client) => {
+    const exec: Executor = (text, p = []) => client.query(text, p as never[]);
+    const before = await getPackage(id, exec, true);
+    const { rows } = await exec(
+      `UPDATE subscription_packages
+         SET status = $1, is_active = $2, archived_at = ${archivedAt}, updated_at = now(), updated_by = $3
+       WHERE id = $4 RETURNING ${PACKAGE_COLUMNS}`,
+      [input.status, isActive, actor.id, id]
+    );
+    const after = rows[0];
+    const fromStatus = (before as Record<string, unknown>).status;
+    await recordPackageVersion(
+      id,
+      input.status === "archived" ? "archived" : "status_change",
+      after,
+      { status: { from: fromStatus, to: input.status } },
+      actor,
+      input.reason ?? null,
+      exec
+    );
+    await auditPackage("package.status_change", id, {
+      from: fromStatus,
+      to: input.status,
+      reason: input.reason ?? null,
+      affectedTenants: impact.tenants.length,
+      activeSubscriptions: impact.activeSubscriptions,
+    }, actor, exec);
+    return after;
+  });
 }
 
 export async function duplicatePackage(
@@ -422,28 +447,31 @@ export async function duplicatePackage(
   const src = (await getPackage(id)) as Record<string, unknown>;
   const dup = await query("SELECT 1 FROM subscription_packages WHERE name = $1", [input.name]);
   if (dup.rows[0]) throw ApiError.conflict("A package with this name already exists");
-  const { rows } = await query(
-    `INSERT INTO subscription_packages
-       (name, description, currency, price, setup_fee, billing_cycle, status, visibility,
-        badge, display_order, applicable_types, max_students, max_staff, limits, features,
-        tax_percent, invoice_due_days, payment_terms, sac_hsn, billing_start_rule, auto_renew,
-        grace_days, is_trial, trial_days, trial_expiry_behavior, is_active, updated_by)
-     VALUES ($1,$2,$3,$4,$5,$6,'draft','internal',$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,false,$24)
-     RETURNING ${PACKAGE_COLUMNS}`,
-    [
-      input.name, src.description ?? null, src.currency ?? "INR", src.price ?? 0,
-      src.setupFee ?? 0, src.billingCycle ?? "annual", src.badge ?? null,
-      src.displayOrder ?? 0, src.applicableTypes ?? [], src.maxStudents ?? null,
-      src.maxStaff ?? null, src.limits ?? {}, src.features ?? {}, src.taxPercent ?? 0,
-      src.invoiceDueDays ?? null, src.paymentTerms ?? null, src.sacHsn ?? null,
-      src.billingStartRule ?? "immediate", src.autoRenew ?? true, src.graceDays ?? null,
-      src.isTrial ?? false, src.trialDays ?? null, src.trialExpiryBehavior ?? null, actor.id,
-    ]
-  );
-  const pkg = rows[0];
-  await recordPackageVersion(pkg.id, "duplicated", pkg, { copiedFrom: id }, actor);
-  await auditPackage("package.duplicated", pkg.id, { name: pkg.name, copiedFrom: id }, actor);
-  return pkg;
+  return withTransaction(async (client) => {
+    const exec: Executor = (text, p = []) => client.query(text, p as never[]);
+    const { rows } = await exec(
+      `INSERT INTO subscription_packages
+         (name, description, currency, price, setup_fee, billing_cycle, status, visibility,
+          badge, display_order, applicable_types, max_students, max_staff, limits, features,
+          tax_percent, invoice_due_days, payment_terms, sac_hsn, billing_start_rule, auto_renew,
+          grace_days, is_trial, trial_days, trial_expiry_behavior, is_active, updated_by)
+       VALUES ($1,$2,$3,$4,$5,$6,'draft','internal',$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,false,$24)
+       RETURNING ${PACKAGE_COLUMNS}`,
+      [
+        input.name, src.description ?? null, src.currency ?? "INR", src.price ?? 0,
+        src.setupFee ?? 0, src.billingCycle ?? "annual", src.badge ?? null,
+        src.displayOrder ?? 0, src.applicableTypes ?? [], src.maxStudents ?? null,
+        src.maxStaff ?? null, src.limits ?? {}, src.features ?? {}, src.taxPercent ?? 0,
+        src.invoiceDueDays ?? null, src.paymentTerms ?? null, src.sacHsn ?? null,
+        src.billingStartRule ?? "immediate", src.autoRenew ?? true, src.graceDays ?? null,
+        src.isTrial ?? false, src.trialDays ?? null, src.trialExpiryBehavior ?? null, actor.id,
+      ]
+    );
+    const pkg = rows[0];
+    await recordPackageVersion(pkg.id, "duplicated", pkg, { copiedFrom: id }, actor, null, exec);
+    await auditPackage("package.duplicated", pkg.id, { name: pkg.name, copiedFrom: id }, actor, exec);
+    return pkg;
+  });
 }
 
 export async function packageHistory(id: string) {
