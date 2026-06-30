@@ -32,23 +32,97 @@ export const updateBranchSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
-export const createPackageSchema = z.object({
+// --- Packages / Plans -------------------------------------------------------
+// billing_cycle stays monthly/quarterly/annual (the existing DB CHECK + billing
+// logic); half-yearly / one-time are documented as future to avoid disturbing
+// the subscription lifecycle.
+export const PACKAGE_STATUSES = ["active", "draft", "deprecated", "archived"] as const;
+export const PACKAGE_VISIBILITIES = ["public", "internal", "hidden"] as const;
+export const INSTITUTION_TYPES = ["school", "college", "university", "coaching", "other"] as const;
+
+const limitMap = z.record(z.number().int().nonnegative().nullable());
+
+const packageBase = z.object({
   name: z.string().min(1).max(120),
-  maxStudents: z.number().int().nonnegative().nullable().optional(),
-  maxStaff: z.number().int().nonnegative().nullable().optional(),
-  price: z.number().nonnegative().optional(),
-  billingCycle: z.enum(["monthly", "quarterly", "annual"]).optional(),
-  features: z.record(z.unknown()).optional(),
+  description: z.string().max(2000).nullable(),
+  currency: z.string().trim().min(1).max(8),
+  price: z.number().nonnegative(),
+  setupFee: z.number().nonnegative(),
+  billingCycle: z.enum(["monthly", "quarterly", "annual"]),
+  status: z.enum(PACKAGE_STATUSES),
+  visibility: z.enum(PACKAGE_VISIBILITIES),
+  badge: z.string().max(40).nullable(),
+  displayOrder: z.number().int(),
+  applicableTypes: z.array(z.enum(INSTITUTION_TYPES)).max(5),
+  maxStudents: z.number().int().nonnegative().nullable(),
+  maxStaff: z.number().int().nonnegative().nullable(),
+  limits: limitMap,
+  features: z.record(z.unknown()),
+  taxPercent: z.number().nonnegative().max(100),
+  invoiceDueDays: z.number().int().nonnegative().nullable(),
+  paymentTerms: z.string().max(500).nullable(),
+  sacHsn: z.string().max(40).nullable(),
+  billingStartRule: z.enum(["immediate", "after_trial", "custom"]),
+  autoRenew: z.boolean(),
+  graceDays: z.number().int().nonnegative().nullable(),
+  isTrial: z.boolean(),
+  trialDays: z.number().int().nonnegative().nullable(),
+  trialExpiryBehavior: z.enum(["expire", "suspend", "convert_manual"]).nullable(),
+  trialConversionPackageId: z.string().uuid().nullable(),
 });
 
-export const updatePackageSchema = z.object({
-  name: z.string().min(1).max(120).optional(),
-  maxStudents: z.number().int().nonnegative().nullable().optional(),
-  maxStaff: z.number().int().nonnegative().nullable().optional(),
-  price: z.number().nonnegative().optional(),
+// Create: name required, everything else optional (backward compatible with the
+// old 5-field create). Status changes after creation go through the dedicated
+// status endpoint (with impact + reason).
+export const createPackageSchema = packageBase.partial().required({ name: true });
+
+// status (and therefore is_active) is changed only via the dedicated /status
+// endpoint, so it is intentionally omitted here to keep status ↔ is_active in lock-step.
+export const updatePackageSchema = packageBase
+  .omit({ status: true })
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, { message: "No fields to update" });
+
+export const packageStatusSchema = z.object({
+  status: z.enum(PACKAGE_STATUSES),
+  reason: z.string().max(500).optional(),
+});
+
+export const duplicatePackageSchema = z.object({
+  name: z.string().min(1).max(120),
+});
+
+export const packageListQuerySchema = z.object({
+  q: z.string().max(120).optional(),
+  status: z.enum(PACKAGE_STATUSES).optional(),
+  institutionType: z.enum(INSTITUTION_TYPES).optional(),
   billingCycle: z.enum(["monthly", "quarterly", "annual"]).optional(),
-  features: z.record(z.unknown()).optional(),
-  isActive: z.boolean().optional(),
+  visibility: z.enum(PACKAGE_VISIBILITIES).optional(),
+  sort: z.enum(["name", "price", "displayOrder", "status", "createdAt"]).optional(),
+  order: z.enum(["asc", "desc"]).optional(),
+});
+
+export const packageExportQuerySchema = packageListQuerySchema.extend({
+  format: z.enum(["csv", "xlsx"]).default("csv"),
+});
+
+export const packageUsageQuerySchema = z.object({
+  packageId: z.string().uuid().optional(),
+  institutionType: z.enum(INSTITUTION_TYPES).optional(),
+  status: z.string().max(20).optional(),
+  billingCycle: z.enum(["monthly", "quarterly", "annual"]).optional(),
+  dateFrom: z.string().date().optional(),
+  dateTo: z.string().date().optional(),
+  format: z.enum(["csv", "xlsx"]).optional(),
+});
+
+export const packageCompareQuerySchema = z.object({
+  // comma-separated package UUIDs → validated string[] (bad UUID ⇒ 400, not a DB 500)
+  ids: z
+    .string()
+    .min(1)
+    .transform((s) => s.split(",").map((x) => x.trim()).filter(Boolean))
+    .pipe(z.array(z.string().uuid()).min(1).max(8)),
 });
 
 export const assignSubscriptionSchema = z.object({
@@ -56,4 +130,7 @@ export const assignSubscriptionSchema = z.object({
   status: z.enum(["active", "trialing", "suspended", "cancelled"]).optional(),
   startsAt: z.string().date().optional(),
   endsAt: z.string().date().nullable().optional(),
+  // super-admin override to assign a package to an unsupported institution type
+  override: z.boolean().optional(),
+  reason: z.string().max(500).optional(),
 });

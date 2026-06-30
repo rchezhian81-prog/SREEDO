@@ -318,13 +318,14 @@ export async function assignSubscription(
   input: z.infer<typeof assignSubscriptionSchema>,
   actor: Actor
 ) {
-  const subscription = await superadmin.assignSubscription(id, input);
+  // Forward the actor so a type-applicability override is audited on this path too.
+  const subscription = await superadmin.assignSubscription(id, input, actor);
   await recordAudit(actor, {
     action: "subscription.assign",
     targetType: "subscription",
     targetId: subscription.id as string,
     institutionId: id,
-    detail: { packageId: input.packageId, status: input.status ?? "active" },
+    detail: { packageId: input.packageId, status: input.status ?? "active", override: input.override ?? false },
   });
   return subscription;
 }
