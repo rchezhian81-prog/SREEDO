@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -210,6 +211,11 @@ export default function TimetableSetupPage() {
 
   return (
     <>
+      <div className="mb-2">
+        <Link href="/timetable" className="text-sm text-brand-600 hover:underline">
+          ← Back to timetable
+        </Link>
+      </div>
       <PageHeader title="Timetable setup" subtitle="Periods & rooms" />
 
       {loading ? (

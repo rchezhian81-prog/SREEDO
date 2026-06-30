@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth-store";
 import {
@@ -223,6 +224,11 @@ export default function ClassTimetablePage() {
 
   return (
     <>
+      <div className="mb-2">
+        <Link href="/timetable" className="text-sm text-brand-600 hover:underline">
+          ← Back to timetable
+        </Link>
+      </div>
       <PageHeader
         title="Class timetable"
         subtitle="Weekly schedule by section"
