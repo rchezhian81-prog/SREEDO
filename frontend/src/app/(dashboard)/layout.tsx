@@ -114,6 +114,7 @@ const SUPER_ADMIN_NAV: NavItem[] = [
   { href: "/super-admin/packages", label: "Packages", icon: "package" },
   { href: "/super-admin/subscriptions", label: "Subscriptions", icon: "receipt" },
   { href: "/super-admin/invoices", label: "Invoices", icon: "file" },
+  { href: "/super-admin/coupons", label: "Coupons", icon: "tag" },
   { href: "/super-admin/settings", label: "Settings", icon: "gear" },
   { href: "/super-admin/audit-logs", label: "Audit Logs", icon: "file" },
   { href: "/super-admin/exports", label: "Data Exports", icon: "package" },

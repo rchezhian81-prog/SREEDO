@@ -94,6 +94,8 @@ const TABLES = [
   "saas_invoice_note_lines",
   "saas_invoice_notes",
   "saas_invoice_lines",
+  "coupon_redemptions",
+  "coupons",
   "saas_invoices",
   "subscription_events",
   "institution_subscriptions",
