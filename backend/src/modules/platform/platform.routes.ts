@@ -40,6 +40,11 @@ import {
   voidInvoiceSchema,
 } from "../billing/invoices.schema";
 import { applyCouponSchema } from "../billing/coupons.schema";
+import * as saasPayments from "../saaspayments/saaspayments.service";
+import {
+  gatewaySettingsSchema,
+  transactionsQuerySchema,
+} from "../saaspayments/saaspayments.schema";
 import {
   createNoteSchema,
   noteLineSchema,
@@ -657,6 +662,88 @@ platformRouter.patch("/invoice-settings", requirePermission("platform:manage_sub
     fields: Object.keys(body),
   }, "invoice_settings");
   res.json(updated);
+});
+
+/**
+ * @openapi
+ * /platform/payment-gateway:
+ *   get:
+ *     tags: [Platform]
+ *     summary: "Get the SaaS payment-gateway (Razorpay) settings. Secrets are masked, never returned raw."
+ *     security: [{ bearerAuth: [] }]
+ *     responses: { 200: { description: "Masked gateway settings" } }
+ *   patch:
+ *     tags: [Platform]
+ *     summary: "Update the SaaS payment-gateway settings. Blank key/webhook secrets are left unchanged."
+ *     security: [{ bearerAuth: [] }]
+ *     responses: { 200: { description: "Updated (masked) gateway settings" } }
+ */
+platformRouter.get("/payment-gateway", requirePermission("platform:read"), async (_req, res) => {
+  res.json(await saasPayments.getGatewaySettings());
+});
+platformRouter.patch("/payment-gateway", requirePermission("platform:manage_subscriptions"), async (req, res) => {
+  const body = gatewaySettingsSchema.parse(req.body);
+  const updated = await saasPayments.updateGatewaySettings(body, req.user!.id);
+  // Audit which fields changed WITHOUT logging any secret value.
+  await invoiceAudit(req, "payment_gateway.settings_changed", null, null, {
+    fields: Object.keys(body).filter((k) => k !== "keySecret" && k !== "webhookSecret"),
+    keySecretChanged: typeof body.keySecret === "string" && body.keySecret.trim() !== "",
+    webhookSecretChanged: typeof body.webhookSecret === "string" && body.webhookSecret.trim() !== "",
+  }, "payment_gateway");
+  res.json(updated);
+});
+
+/**
+ * @openapi
+ * /platform/invoices/{id}/payment-link:
+ *   post:
+ *     tags: [Platform]
+ *     summary: "Generate a Razorpay payment link for an issued SaaS invoice (reuses an open link if one exists)."
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: "Payment link" }
+ *       400: { description: "Gateway not configured, or invoice not issued / already paid" }
+ */
+platformRouter.post("/invoices/:id/payment-link", requirePermission("platform:manage_subscriptions"), async (req, res) => {
+  const invoiceId = uuidParam(req);
+  const result = await saasPayments.createPaymentLink(invoiceId, req.user!.id);
+  await invoiceAudit(req, "invoice.payment_link_created", invoiceId, null, {
+    gatewayOrderId: result.gatewayOrderId,
+    reused: result.reused ?? false,
+  }, "saas_payment");
+  res.json(result);
+});
+
+/**
+ * @openapi
+ * /platform/payment-transactions:
+ *   get:
+ *     tags: [Platform]
+ *     summary: "List / report SaaS payment transactions (filters + JSON or CSV/XLSX export)."
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [
+ *       { in: query, name: invoiceId, schema: { type: string, format: uuid } },
+ *       { in: query, name: institutionId, schema: { type: string, format: uuid } },
+ *       { in: query, name: status, schema: { type: string, enum: [created, pending, paid, failed, cancelled, expired, refunded] } },
+ *       { in: query, name: from, schema: { type: string, format: date } },
+ *       { in: query, name: to, schema: { type: string, format: date } },
+ *       { in: query, name: format, schema: { type: string, enum: [json, csv, xlsx] } }
+ *     ]
+ *     responses: { 200: { description: "Transactions { columns, rows, totals } or a spreadsheet download" } }
+ */
+platformRouter.get("/payment-transactions", requirePermission("platform:read"), async (req, res) => {
+  const q = transactionsQuerySchema.parse(req.query);
+  const result = await saasPayments.listTransactions(q);
+  if (q.format === "json") {
+    res.json(result);
+    return;
+  }
+  await invoiceAudit(req, "payment_transactions_exported", null, q.institutionId ?? null, {
+    format: q.format,
+    rows: result.rows.length,
+  }, "saas_payment");
+  sendSpreadsheet(res, q.format, "saas-payment-transactions", result.columns, result.rows, result.totals);
 });
 
 /**
