@@ -331,13 +331,17 @@ export async function updateFeatureFlag(
   }
   const after = (await getFlagOrThrow(id)) as unknown as Record<string, unknown>;
   const diff = diffOf(before, after, Object.keys(FLAG_COLUMN_MAP).filter((k) => k in data));
-  await recordAudit(actor, {
-    action: "platform.feature_flag_update",
-    targetType: "feature_flag",
-    targetId: id,
-    institutionId: null,
-    detail: { key: after.key, fields: Object.keys(diff), diff },
-  });
+  // Only audit a real change (keeps the settings-history trail clean — matches
+  // updateSettings / rollbackSettings).
+  if (Object.keys(diff).length) {
+    await recordAudit(actor, {
+      action: "platform.feature_flag_update",
+      targetType: "feature_flag",
+      targetId: id,
+      institutionId: null,
+      detail: { key: after.key, fields: Object.keys(diff), diff },
+    });
+  }
   return after as unknown as FeatureFlag;
 }
 
