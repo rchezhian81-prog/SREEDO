@@ -190,9 +190,25 @@ export async function updateBranch(
   return rows[0];
 }
 
-export async function removeBranch(id: string): Promise<void> {
-  const { rowCount } = await query("DELETE FROM branches WHERE id = $1", [id]);
-  if (!rowCount) throw ApiError.notFound("Branch not found");
+/**
+ * SAFE deactivate — replaces the former branch hard delete. A `DELETE FROM
+ * branches` could cascade/orphan linked academic, user and history data, so the
+ * branch is instead marked inactive and the action is audited. All linked data
+ * is preserved.
+ */
+export async function archiveBranch(id: string, reason: string, actor: Actor) {
+  const { rows } = await query<{ id: string; institution_id: string }>(
+    `UPDATE branches SET is_active = false WHERE id = $1 RETURNING id, institution_id`,
+    [id]
+  );
+  if (!rows[0]) throw ApiError.notFound("Branch not found");
+  await query(
+    `INSERT INTO platform_audit_log
+       (action, target_type, target_id, institution_id, actor_id, actor_email, actor_role, detail, ip)
+     VALUES ('tenant.branch_archived','branch',$1,$2,$3,$4,$5,$6::jsonb,$7)`,
+    [id, rows[0].institution_id, actor.id, actor.email, actor.role, JSON.stringify({ reason, via: "legacy /branches/:id" }), actor.ip]
+  );
+  return { id: rows[0].id, archived: true };
 }
 
 // --- Subscription packages ---

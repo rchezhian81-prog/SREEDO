@@ -216,3 +216,17 @@ export const tenantListQuerySchema = z.object({
 export const tenantExportQuerySchema = tenantListQuerySchema
   .omit({ page: true, pageSize: true })
   .extend({ format: z.enum(["csv", "xlsx"]).default("csv") });
+
+// Bulk lifecycle across selected tenants (each transition still goes through the
+// per-tenant guard — suspend/archive/close require a reason).
+export const bulkLifecycleSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1).max(200),
+  status: z.enum(LIFECYCLE_STATUSES),
+  reason: z.string().trim().max(500).optional(),
+});
+
+// Full tenant user directory filters.
+export const tenantUsersQuerySchema = z.object({
+  role: z.enum(["admin", "teacher", "accountant", "student", "parent"]).optional(),
+  status: z.enum(["active", "disabled", "locked"]).optional(),
+});

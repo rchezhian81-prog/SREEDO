@@ -347,4 +347,52 @@ describe("super admin — tenant / institution management", () => {
     const past = await get("/api/v1/platform/tenants?createdFrom=2000-01-01", tok.root);
     expect(past.body.total).toBeGreaterThanOrEqual(2);
   });
+
+  it("runs bulk lifecycle across selected tenants (reason guard + audit)", async () => {
+    const a = await createTenant({ name: "B1", code: "B1", institutionType: "school" });
+    const b = await createTenant({ name: "B2", code: "B2", institutionType: "college" });
+    const ids = [a.body.id, b.body.id];
+    const activated = await post("/api/v1/platform/tenants/bulk", tok.root, { ids, status: "active" });
+    expect(activated.status).toBe(200);
+    expect(activated.body.succeeded).toBe(2);
+    // archive without a reason → each transition fails its guard (0 succeed)
+    const noReason = await post("/api/v1/platform/tenants/bulk", tok.root, { ids, status: "archived" });
+    expect(noReason.body.succeeded).toBe(0);
+    // archive with a reason → both archived
+    const archived = await post("/api/v1/platform/tenants/bulk", tok.root, { ids, status: "archived", reason: "End-of-term cleanup" });
+    expect(archived.body.succeeded).toBe(2);
+    const list = await get("/api/v1/platform/tenants?status=archived", tok.root);
+    expect(list.body.rows.filter((r: { id: string }) => ids.includes(r.id))).toHaveLength(2);
+  });
+
+  it("resets a tenant admin's two-factor auth (audited; no secret remains)", async () => {
+    const t = await createTenant({ name: "Tfa", code: "TFA", institutionType: "school" });
+    const id = t.body.id;
+    const add = await post(`/api/v1/platform/tenants/${id}/admin`, tok.root, { fullName: "A", email: "tfa@a.dev" });
+    const adminId = add.body.admins.find((u: { email: string }) => u.email === "tfa@a.dev").id;
+    await query("UPDATE users SET totp_enabled = true, totp_secret = 'seed' WHERE id = $1", [adminId]);
+    const res = await post(`/api/v1/platform/tenants/${id}/admin/${adminId}/reset-2fa`, tok.root);
+    expect(res.status).toBe(200);
+    const row = await query<{ totp_enabled: boolean; totp_secret: string | null }>(
+      "SELECT totp_enabled, totp_secret FROM users WHERE id = $1",
+      [adminId]
+    );
+    expect(row.rows[0].totp_enabled).toBe(false);
+    expect(row.rows[0].totp_secret).toBeNull();
+  });
+
+  it("lists the full tenant user directory with role + status filters", async () => {
+    const t = await createTenant({ name: "Dir", code: "DIR", institutionType: "school" });
+    const id = t.body.id;
+    await post(`/api/v1/platform/tenants/${id}/admin`, tok.root, { fullName: "Admin One", email: "a1@dir.dev" });
+    await createUser({ email: "teach@dir.dev", password: PW, role: "teacher", institutionId: id });
+    const all = await get(`/api/v1/platform/tenants/${id}/users`, tok.root);
+    expect(all.status).toBe(200);
+    expect(all.body.length).toBeGreaterThanOrEqual(2);
+    const admins = await get(`/api/v1/platform/tenants/${id}/users?role=admin`, tok.root);
+    expect(admins.body.every((u: { role: string }) => u.role === "admin")).toBe(true);
+    expect(admins.body.find((u: { email: string }) => u.email === "a1@dir.dev")).toBeTruthy();
+    // tenant admins cannot read the directory
+    expect((await get(`/api/v1/platform/tenants/${id}/users`, tok.admin)).status).toBe(403);
+  });
 });

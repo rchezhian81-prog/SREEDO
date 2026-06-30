@@ -148,4 +148,22 @@ describe("super admin: tenancy management", () => {
     const audit = await query("SELECT 1 FROM platform_audit_log WHERE institution_id = $1 AND action = 'tenant.archived'", [id]);
     expect(audit.rows.length).toBeGreaterThan(0);
   });
+
+  it("disables branch hard delete — deactivates with a reason + audit, row preserved", async () => {
+    const inst = await request(app).post("/api/v1/institutions").set(auth(superToken)).send({ name: "BranchCo", code: "BRC" });
+    const branch = await request(app).post(`/api/v1/institutions/${inst.body.id}/branches`).set(auth(superToken)).send({ name: "Main Campus" });
+    const branchId = branch.body.id;
+    // no reason → 400, branch preserved
+    expect((await request(app).delete(`/api/v1/branches/${branchId}`).set(auth(superToken))).status).toBe(400);
+    expect((await query("SELECT 1 FROM branches WHERE id = $1", [branchId])).rows).toHaveLength(1);
+    // with reason → soft-deactivate (is_active=false), row preserved, audited
+    const arch = await request(app).delete(`/api/v1/branches/${branchId}`).set(auth(superToken)).send({ reason: "Campus merged" });
+    expect(arch.status).toBe(200);
+    expect(arch.body.archived).toBe(true);
+    const row = await query<{ is_active: boolean }>("SELECT is_active FROM branches WHERE id = $1", [branchId]);
+    expect(row.rows).toHaveLength(1);
+    expect(row.rows[0].is_active).toBe(false);
+    const audit = await query("SELECT 1 FROM platform_audit_log WHERE target_id = $1 AND action = 'tenant.branch_archived'", [branchId]);
+    expect(audit.rows.length).toBeGreaterThan(0);
+  });
 });

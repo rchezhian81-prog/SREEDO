@@ -11,7 +11,7 @@ import { formatBytes, formatNumber, limitLabel } from "../../_utils";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
 
-interface Admin { id: string; fullName: string; email: string; isActive: boolean; lastActiveAt: string | null }
+interface Admin { id: string; fullName: string; email: string; isActive: boolean; twoFactorEnabled: boolean; lastActiveAt: string | null }
 interface Branding { displayName: string | null; logoUrl: string | null; primaryColor: string | null; tagline: string | null; letterhead: string | null; footer: string | null }
 interface OnboardingStep { key: string; label: string; required: boolean; done: boolean }
 interface Tenant {
@@ -37,7 +37,7 @@ interface Tenant {
 
 const TABS = [
   "Overview", "Profile", "Onboarding", "Academic Structure", "Settings", "Modules",
-  "Admins", "Subscription & Billing", "Limits & Usage", "Branding & Domain", "Documents",
+  "Admins", "Users", "Subscription & Billing", "Limits & Usage", "Branding & Domain", "Documents",
   "Import", "Communication", "Health", "Compliance", "Notes", "Support", "Audit",
 ] as const;
 type Tab = (typeof TABS)[number];
@@ -158,7 +158,9 @@ export default function TenantDetailPage() {
       {tab === "Admins" && <AdminsTab t={t} busy={busy} id={id}
         onAdd={(b) => act(() => api.post(`/platform/tenants/${id}/admin`, b), "Admin added — a setup link was emailed if SMTP is configured.")}
         onToggle={(uid, active) => act(() => api.patch(`/platform/tenants/${id}/admin/${uid}`, { active }))}
-        onResetLink={(uid) => act(async () => { const r = await api.post<{ emailSent: boolean }>(`/platform/tenants/${id}/admin/${uid}/reset-link`, {}); setNotice(r.emailSent ? "Setup/reset link emailed." : "Email is not configured — link not delivered."); })} />}
+        onResetLink={(uid) => act(async () => { const r = await api.post<{ emailSent: boolean }>(`/platform/tenants/${id}/admin/${uid}/reset-link`, {}); setNotice(r.emailSent ? "Setup/reset link emailed." : "Email is not configured — link not delivered."); })}
+        onReset2fa={(uid) => act(() => api.post(`/platform/tenants/${id}/admin/${uid}/reset-2fa`, {}), "Two-factor reset for admin.")} />}
+      {tab === "Users" && <UsersTab id={id} />}
       {tab === "Subscription & Billing" && <SubscriptionTab t={t} busy={busy} onChanged={load} setNotice={setNotice} setError={setError} />}
       {tab === "Limits & Usage" && <LimitsTab t={t} busy={busy} onSave={(limits) => act(() => api.patch(`/platform/institutions/${id}/limits`, limits), "Limits saved.")} />}
       {tab === "Branding & Domain" && <BrandingTab t={t} busy={busy}
@@ -442,7 +444,7 @@ function ModulesTab({ t, busy, onSave }: { t: Tenant; busy: boolean; onSave: (m:
   );
 }
 
-function AdminsTab({ t, busy, onAdd, onToggle, onResetLink }: { t: Tenant; busy: boolean; id: string; onAdd: (b: Record<string, unknown>) => void; onToggle: (uid: string, active: boolean) => void; onResetLink: (uid: string) => void }) {
+function AdminsTab({ t, busy, onAdd, onToggle, onResetLink, onReset2fa }: { t: Tenant; busy: boolean; id: string; onAdd: (b: Record<string, unknown>) => void; onToggle: (uid: string, active: boolean) => void; onResetLink: (uid: string) => void; onReset2fa: (uid: string) => void }) {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   return (
@@ -456,10 +458,12 @@ function AdminsTab({ t, busy, onAdd, onToggle, onResetLink }: { t: Tenant; busy:
                 <span>
                   <span className="font-medium text-slate-900">{a.fullName}</span> <span className="text-slate-500">{a.email}</span>{" "}
                   {a.isActive ? <Badge tone="green">active</Badge> : <Badge tone="red">disabled</Badge>}
+                  {a.twoFactorEnabled && <Badge tone="blue">2FA</Badge>}
                   <span className="ml-2 text-xs text-slate-400">last active: {a.lastActiveAt ? new Date(a.lastActiveAt).toLocaleString() : "never"}</span>
                 </span>
-                <span className="flex gap-3">
+                <span className="flex flex-wrap gap-3">
                   <button className="text-xs text-brand-600 hover:text-brand-700 disabled:opacity-50" disabled={busy} onClick={() => onResetLink(a.id)}>Send setup/reset link</button>
+                  {a.twoFactorEnabled && <button className="text-xs text-amber-600 hover:text-amber-700 disabled:opacity-50" disabled={busy} onClick={() => onReset2fa(a.id)}>Reset 2FA</button>}
                   <button className="text-xs text-brand-600 hover:text-brand-700 disabled:opacity-50" disabled={busy} onClick={() => onToggle(a.id, !a.isActive)}>{a.isActive ? "Disable" : "Enable"}</button>
                 </span>
               </li>
@@ -477,6 +481,52 @@ function AdminsTab({ t, busy, onAdd, onToggle, onResetLink }: { t: Tenant; busy:
         <div className="mt-3"><Button disabled={busy || !fullName.trim() || !email.trim()} onClick={() => { onAdd({ fullName: fullName.trim(), email: email.trim() }); setFullName(""); setEmail(""); }}>Add admin</Button></div>
       </Card>
     </div>
+  );
+}
+
+function UsersTab({ id }: { id: string }) {
+  interface U { id: string; fullName: string; email: string; role: string; isActive: boolean; twoFactorEnabled: boolean; locked: boolean; lastActiveAt: string | null }
+  const [users, setUsers] = useState<U[]>([]);
+  const [role, setRole] = useState("");
+  const [status, setStatus] = useState("");
+  const [loading, setLoading] = useState(true);
+  const load = useCallback(async () => {
+    setLoading(true);
+    const p = new URLSearchParams();
+    if (role) p.set("role", role);
+    if (status) p.set("status", status);
+    try { setUsers(await api.get<U[]>(`/platform/tenants/${id}/users?${p.toString()}`)); } catch { setUsers([]); }
+    finally { setLoading(false); }
+  }, [id, role, status]);
+  useEffect(() => { load(); }, [load]);
+  return (
+    <Card>
+      <p className="mb-2 text-sm font-medium text-slate-700">Tenant users ({users.length})</p>
+      <div className="mb-3 flex flex-wrap gap-2">
+        <Select value={role} onChange={(e) => setRole(e.target.value)} className="w-44"><option value="">All roles</option>{["admin", "teacher", "accountant", "student", "parent"].map((r) => <option key={r} value={r}>{r}</option>)}</Select>
+        <Select value={status} onChange={(e) => setStatus(e.target.value)} className="w-44"><option value="">All statuses</option>{["active", "disabled", "locked"].map((s) => <option key={s} value={s}>{s}</option>)}</Select>
+      </div>
+      {loading ? <Spinner /> : users.length === 0 ? <p className="text-sm text-slate-400">No users match these filters.</p> : (
+        <div className="overflow-x-auto rounded-xl border border-slate-200">
+          <table className="w-full text-left text-sm">
+            <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+              <tr><th className="px-3 py-2">Name</th><th className="px-3 py-2">Email</th><th className="px-3 py-2">Role</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Last active</th></tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {users.map((u) => (
+                <tr key={u.id} className="hover:bg-slate-50">
+                  <td className="px-3 py-2 font-medium text-slate-900">{u.fullName}</td>
+                  <td className="px-3 py-2 text-slate-500">{u.email}</td>
+                  <td className="px-3 py-2 capitalize">{u.role}</td>
+                  <td className="px-3 py-2">{u.isActive ? <Badge tone="green">active</Badge> : <Badge tone="red">disabled</Badge>}{u.locked && <Badge tone="amber">locked</Badge>}{u.twoFactorEnabled && <Badge tone="blue">2FA</Badge>}</td>
+                  <td className="px-3 py-2 text-slate-400">{u.lastActiveAt ? new Date(u.lastActiveAt).toLocaleDateString() : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
   );
 }
 

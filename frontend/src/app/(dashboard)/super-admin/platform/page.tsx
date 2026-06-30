@@ -172,18 +172,15 @@ export default function PlatformDashboardPage() {
 
       {/* Quick actions */}
       <div className="mb-6 flex flex-wrap gap-2">
-        <Link href="/super-admin/platform/tenants/new">
-          <Button>Add tenant</Button>
-        </Link>
-        <Link href="/super-admin/platform/tenants">
-          <Button variant="secondary">View tenants</Button>
-        </Link>
-        <Link href="/super-admin/platform/audit">
-          <Button variant="secondary">Audit logs</Button>
-        </Link>
-        <Link href="/super-admin/platform/support">
-          <Button variant="secondary">Support access</Button>
-        </Link>
+        <Link href="/super-admin/platform/tenants/new"><Button>+ Add tenant</Button></Link>
+        <Link href="/super-admin/platform/tenants"><Button variant="secondary">Tenants</Button></Link>
+        <Link href="/super-admin/invoices"><Button variant="secondary">Invoices</Button></Link>
+        <Link href="/super-admin/packages"><Button variant="secondary">Packages</Button></Link>
+        <Link href="/super-admin/subscriptions"><Button variant="secondary">Subscriptions</Button></Link>
+        <Link href="/super-admin/platform/audit"><Button variant="secondary">Audit</Button></Link>
+        <Link href="/super-admin/platform/support"><Button variant="secondary">Support</Button></Link>
+        <Link href="/super-admin/backups"><Button variant="secondary">Backups</Button></Link>
+        <Link href="/super-admin/health"><Button variant="secondary">Health</Button></Link>
       </div>
 
       {loading ? (

@@ -52,6 +52,8 @@ export default function TenantsPage() {
   const [pageSize, setPageSize] = useState(20);
   const [sort, setSort] = useState<SortKey>("createdAt");
   const [order, setOrder] = useState<"asc" | "desc">("desc");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const buildQuery = useCallback(() => {
     const p = new URLSearchParams();
@@ -91,6 +93,38 @@ export default function TenantsPage() {
   useEffect(() => {
     setPage(1);
   }, [q, institutionType, status, pkg, createdFrom, createdTo, pageSize, sort, order]);
+  // Clear selection whenever the visible set changes (filters/page/sort).
+  useEffect(() => {
+    setSelected(new Set());
+  }, [q, institutionType, status, pkg, createdFrom, createdTo, page, pageSize, sort, order]);
+
+  const toggleSel = (id: string) =>
+    setSelected((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+  const bulkLifecycle = async (newStatus: string) => {
+    const ids = [...selected];
+    if (!ids.length) return;
+    let reason: string | undefined;
+    if (newStatus === "suspended" || newStatus === "archived") {
+      const r = window.prompt(`Reason to ${newStatus} ${ids.length} tenant(s) (recorded in the audit log):`);
+      if (r === null) return;
+      reason = r;
+    }
+    setBulkBusy(true);
+    setError(null);
+    try {
+      await api.post("/platform/tenants/bulk", { ids, status: newStatus, reason });
+      setSelected(new Set());
+      await load();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Bulk action failed");
+    } finally {
+      setBulkBusy(false);
+    }
+  };
 
   const toggleSort = (key: SortKey) => {
     if (sort === key) setOrder((o) => (o === "asc" ? "desc" : "asc"));
@@ -162,10 +196,24 @@ export default function TenantsPage() {
         <EmptyState message={q || institutionType || status ? "No tenants match these filters." : "No tenants yet. Create one to get started."} />
       ) : (
         <>
+          {selected.size > 0 && (
+            <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm">
+              <span className="font-medium text-brand-700">{selected.size} selected</span>
+              <Button variant="secondary" disabled={bulkBusy} onClick={() => bulkLifecycle("active")}>Activate</Button>
+              <Button variant="secondary" disabled={bulkBusy} onClick={() => bulkLifecycle("suspended")}>Suspend</Button>
+              <Button variant="danger" disabled={bulkBusy} onClick={() => bulkLifecycle("archived")}>Archive</Button>
+              <button className="text-xs text-slate-500 hover:text-slate-700" onClick={() => setSelected(new Set())}>Clear</button>
+            </div>
+          )}
           <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
             <table className="w-full text-left text-sm">
               <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
                 <tr>
+                  <th className="px-3 py-3">
+                    <input type="checkbox" className="h-4 w-4 rounded border-slate-300" aria-label="Select all on page"
+                      checked={rows.length > 0 && rows.every((r) => selected.has(r.id))}
+                      onChange={(e) => setSelected(e.target.checked ? new Set(rows.map((r) => r.id)) : new Set())} />
+                  </th>
                   {([["name", "Name"], ["code", "Code"], ["institutionType", "Type"], ["status", "Status"], ["students", "Students"], ["staff", "Staff"], ["createdAt", "Created"]] as [SortKey, string][]).map(([k, l]) => (
                     <th key={k} className="cursor-pointer select-none px-4 py-3 hover:text-slate-700" onClick={() => toggleSort(k)}>{l}{arrow(k)}</th>
                   ))}
@@ -175,6 +223,9 @@ export default function TenantsPage() {
               <tbody className="divide-y divide-slate-100">
                 {rows.map((t) => (
                   <tr key={t.id} className="hover:bg-slate-50">
+                    <td className="px-3 py-3">
+                      <input type="checkbox" className="h-4 w-4 rounded border-slate-300" aria-label={`Select ${t.code}`} checked={selected.has(t.id)} onChange={() => toggleSel(t.id)} />
+                    </td>
                     <td className="px-4 py-3 font-medium text-slate-900">
                       <Link href={`/super-admin/platform/tenants/${t.id}`} className="text-brand-600 hover:text-brand-700">{t.name}</Link>
                     </td>
