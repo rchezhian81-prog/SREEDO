@@ -44,6 +44,8 @@ export interface InvoicePdfData {
   paymentMethod: string | null;
   paymentReference: string | null;
   subtotal: string | number;
+  discountAmount?: string | number;
+  couponCode?: string | null;
   taxPercent: string | number;
   taxAmount: string | number;
   roundOff?: string | number;
@@ -246,6 +248,8 @@ export function invoicePdf(data: InvoicePdfData): Promise<Buffer> {
       doc.font("Helvetica");
     };
     totalsRow("Subtotal", money(cur, data.subtotal));
+    if (Number(data.discountAmount) > 0)
+      totalsRow(`Discount${data.couponCode ? ` (${data.couponCode})` : ""}`, `- ${money(cur, data.discountAmount ?? 0)}`);
     totalsRow(`Tax (${Number(data.taxPercent).toFixed(2)}%)`, money(cur, data.taxAmount));
     if (Number(data.roundOff) !== 0) totalsRow("Round off", money(cur, data.roundOff ?? 0));
     totalsRow("Total", money(cur, data.total), true);

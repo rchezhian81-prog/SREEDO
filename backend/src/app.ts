@@ -66,6 +66,7 @@ import {
   idCardsRouter,
 } from "./modules/pdfs/pdfs.routes";
 import { payrollRouter } from "./modules/payroll/payroll.routes";
+import { couponsRouter } from "./modules/billing/coupons.routes";
 import { platformRouter } from "./modules/platform/platform.routes";
 import { platformSettingsRouter } from "./modules/platform/platform-settings.routes";
 import { tenantRouter } from "./modules/platform/tenant.routes";
@@ -230,6 +231,7 @@ export function createApp(): express.Express {
   // super-admin-guarded routers below.
   api.use("/platform", platformSettingsRouter); // global platform settings + feature flags
   api.use("/platform", platformRouter); // super-admin platform hardening
+  api.use("/platform", couponsRouter); // super-admin coupon / promotion management
   api.use("/platform", tenantRouter); // super-admin tenant/institution management
   api.use("/", superAdminRouter); // /institutions, /branches, /packages
   app.use("/api/v1", api);

@@ -63,6 +63,9 @@ interface Invoice {
   taxPercent: string;
   taxAmount: string;
   total: string;
+  discountAmount: string;
+  couponCode: string | null;
+  couponId: string | null;
   gstin: string | null;
   billingName: string | null;
   billingAddress: string | null;
@@ -193,6 +196,7 @@ export default function InvoiceDetailPage() {
     load();
   }, [load]);
 
+  const [couponInput, setCouponInput] = useState("");
   const act = async (fn: () => Promise<unknown>) => {
     setBusy(true);
     setError(null);
@@ -572,6 +576,12 @@ export default function InvoiceDetailPage() {
             <span>Subtotal</span>
             <span>{money(inv.subtotal)}</span>
           </div>
+          {Number(inv.discountAmount) > 0 && (
+            <div className="flex justify-between text-emerald-600">
+              <span>Discount{inv.couponCode ? ` (${inv.couponCode})` : ""}</span>
+              <span>− {money(inv.discountAmount)}</span>
+            </div>
+          )}
           <div className="flex justify-between text-muted">
             <span>Tax ({Number(inv.taxPercent).toFixed(2)}%)</span>
             <span>{money(inv.taxAmount)}</span>
@@ -581,6 +591,21 @@ export default function InvoiceDetailPage() {
             <span>{money(inv.total)}</span>
           </div>
         </div>
+        {isDraft && (
+          <div className="mt-4 ml-auto flex w-64 flex-wrap items-center gap-2 border-t border-line pt-3 text-sm">
+            {inv.couponId ? (
+              <>
+                <span className="text-muted">Coupon <strong className="text-ink">{inv.couponCode}</strong></span>
+                <button onClick={() => act(() => api.delete(`/platform/invoices/${id}/coupon`))} disabled={busy} className="text-xs font-medium text-red-600 hover:text-red-700 disabled:opacity-50">Remove</button>
+              </>
+            ) : (
+              <>
+                <div className="flex-1"><Input value={couponInput} onChange={(e) => setCouponInput(e.target.value.toUpperCase())} placeholder="Coupon code" /></div>
+                <Button variant="secondary" disabled={busy || !couponInput.trim()} onClick={() => act(() => api.post(`/platform/invoices/${id}/coupon`, { code: couponInput.trim() }))}>Apply</Button>
+              </>
+            )}
+          </div>
+        )}
         {inv.notes && <p className="mt-3 text-sm text-muted">Notes: {inv.notes}</p>}
       </Card>
 

@@ -4,6 +4,7 @@ import { ApiError } from "../../utils/api-error";
 import { sendMail, mailerConfigured } from "../../utils/mailer";
 import { getSettings } from "./invoice-settings.service";
 import { invoicePdf, type InvoicePdfData } from "./invoices.pdf";
+import * as coupons from "./coupons.service";
 import type { z } from "zod";
 import type {
   createInvoiceSchema,
@@ -36,6 +37,7 @@ const INVOICE_COLS = `
   to_char(i.due_date, 'YYYY-MM-DD') AS "dueDate",
   (i.status = 'issued' AND i.due_date IS NOT NULL AND i.due_date < CURRENT_DATE) AS "isOverdue",
   i.subtotal, i.tax_percent AS "taxPercent", i.tax_amount AS "taxAmount",
+  i.discount_amount AS "discountAmount", i.coupon_id AS "couponId", i.coupon_code AS "couponCode",
   i.round_off AS "roundOff", i.total,
   i.gstin, i.billing_name AS "billingName", i.billing_address AS "billingAddress",
   i.tax_notes AS "taxNotes", i.notes,
@@ -62,6 +64,8 @@ interface InvoiceRecord {
   institutionId: string;
   number: string | null;
   total: string;
+  couponCode: string | null;
+  discountAmount: string | number;
   [key: string]: unknown;
 }
 
@@ -94,13 +98,21 @@ async function assertDraft(invoiceId: string, action: string): Promise<void> {
   }
 }
 
-/** Recompute subtotal/tax/total from the invoice's lines (NUMERIC math in SQL). */
+/**
+ * Recompute subtotal/tax/total from the invoice's lines (NUMERIC math in SQL).
+ * A coupon discount (if any) is applied PRE-TAX and capped at the subtotal, so the
+ * taxable base = subtotal - discount. When discount_amount = 0 this is identical to
+ * the original formula, so non-coupon invoices are unaffected.
+ */
 async function recomputeTotals(invoiceId: string): Promise<void> {
   await query(
     `UPDATE saas_invoices i SET
        subtotal = c.subtotal,
-       tax_amount = round(c.subtotal * i.tax_percent / 100, 2),
-       total = c.subtotal + round(c.subtotal * i.tax_percent / 100, 2) + i.round_off
+       discount_amount = least(i.discount_amount, c.subtotal),
+       tax_amount = round((c.subtotal - least(i.discount_amount, c.subtotal)) * i.tax_percent / 100, 2),
+       total = (c.subtotal - least(i.discount_amount, c.subtotal))
+               + round((c.subtotal - least(i.discount_amount, c.subtotal)) * i.tax_percent / 100, 2)
+               + i.round_off
      FROM (
        SELECT coalesce(sum(amount), 0)::numeric(12,2) AS subtotal
        FROM saas_invoice_lines WHERE invoice_id = $1
@@ -125,6 +137,50 @@ export async function getInvoice(invoiceId: string) {
     [invoiceId]
   );
   return { ...rows[0], lines: lines.rows, emails: emails.rows };
+}
+
+/**
+ * Apply a coupon to a DRAFT invoice: validate against the invoice context
+ * (package / institution type / billing cycle / amount / usage limits), then
+ * snapshot coupon_id + code + discount and recompute totals (pre-tax discount).
+ */
+export async function applyCoupon(invoiceId: string, code: string) {
+  await assertDraft(invoiceId, "have a coupon applied");
+  const { rows } = await query<{
+    subtotal: string; packageId: string | null; institutionId: string;
+    institutionType: string | null; billingCycle: string | null;
+  }>(
+    `SELECT i.subtotal, i.package_id AS "packageId", i.institution_id AS "institutionId",
+            inst.institution_type AS "institutionType", p.billing_cycle AS "billingCycle"
+     FROM saas_invoices i
+     JOIN institutions inst ON inst.id = i.institution_id
+     LEFT JOIN subscription_packages p ON p.id = i.package_id
+     WHERE i.id = $1`,
+    [invoiceId]
+  );
+  if (!rows[0]) throw ApiError.notFound("Invoice not found");
+  const ctx = rows[0];
+  const { coupon, discount } = await coupons.validateCoupon({
+    code, subtotal: Number(ctx.subtotal), packageId: ctx.packageId,
+    institutionType: ctx.institutionType, billingCycle: ctx.billingCycle, institutionId: ctx.institutionId,
+  });
+  await query(
+    `UPDATE saas_invoices SET coupon_id = $2, coupon_code = $3, discount_amount = $4, updated_at = now() WHERE id = $1`,
+    [invoiceId, coupon.id, coupon.code, discount]
+  );
+  await recomputeTotals(invoiceId);
+  return getInvoice(invoiceId);
+}
+
+/** Remove a coupon from a DRAFT invoice and recompute (discount back to 0). */
+export async function removeCoupon(invoiceId: string) {
+  await assertDraft(invoiceId, "have its coupon removed");
+  await query(
+    `UPDATE saas_invoices SET coupon_id = NULL, coupon_code = NULL, discount_amount = 0, updated_at = now() WHERE id = $1`,
+    [invoiceId]
+  );
+  await recomputeTotals(invoiceId);
+  return getInvoice(invoiceId);
 }
 
 /** Invoice money-action audit timeline (reads the shared platform_audit_log). */
@@ -490,6 +546,9 @@ const EXPORT_COLUMNS: ReportColumn[] = [
   { key: "paymentReference", label: "Payment reference" },
   { key: "period", label: "Billing period" },
   { key: "subtotal", label: "Subtotal", numeric: true },
+  { key: "couponCode", label: "Coupon" },
+  { key: "discount", label: "Discount", numeric: true },
+  { key: "netTaxable", label: "Net taxable", numeric: true },
   { key: "taxPercent", label: "Tax %", numeric: true },
   { key: "taxAmount", label: "Tax amount", numeric: true },
   { key: "total", label: "Grand total", numeric: true },
@@ -531,6 +590,9 @@ export async function exportInvoices(q: ExportQuery) {
     paymentReference: r.paymentReference ?? "",
     period: r.periodStart || r.periodEnd ? `${r.periodStart ?? ""}..${r.periodEnd ?? ""}` : "",
     subtotal: Number(r.subtotal),
+    couponCode: (r.couponCode as string) ?? "",
+    discount: Number(r.discountAmount ?? 0),
+    netTaxable: Number(r.subtotal) - Number(r.discountAmount ?? 0),
     taxPercent: Number(r.taxPercent),
     taxAmount: Number(r.taxAmount),
     total: Number(r.total),
@@ -804,6 +866,20 @@ export async function issueInvoice(invoiceId: string, issuedBy?: string) {
         settings.supplierStateCode ?? null,
       ]
     );
+    // Record the coupon redemption (usage) when an issued invoice carries a coupon.
+    const cp = await client.query<{ couponId: string | null; code: string | null; discount: string; institutionId: string }>(
+      `SELECT coupon_id AS "couponId", coupon_code AS "code",
+              discount_amount AS "discount", institution_id AS "institutionId"
+       FROM saas_invoices WHERE id = $1`,
+      [invoiceId]
+    );
+    const cpRow = cp.rows[0];
+    if (cpRow?.couponId && Number(cpRow.discount) > 0) {
+      await coupons.recordRedemption((t, p) => client.query(t, (p ?? []) as never[]), {
+        couponId: cpRow.couponId, invoiceId, institutionId: cpRow.institutionId,
+        code: cpRow.code ?? "", discount: Number(cpRow.discount),
+      });
+    }
   });
   await notifyInvoiceIssued(invoiceId, issuedBy ?? null);
   return getInvoice(invoiceId);
@@ -950,6 +1026,7 @@ export async function invoicePdfBuffer(invoiceId: string): Promise<Buffer> {
             i.payment_method AS "paymentMethod", i.payment_reference AS "paymentReference",
             i.subtotal::text AS subtotal, i.tax_percent::text AS "taxPercent",
             i.tax_amount::text AS "taxAmount", i.round_off::text AS "roundOff",
+            i.discount_amount::text AS "discountAmount", i.coupon_code AS "couponCode",
             i.total::text AS total,
             i.sac_code AS "sacCode", i.place_of_supply AS "placeOfSupply",
             i.reverse_charge AS "reverseCharge",

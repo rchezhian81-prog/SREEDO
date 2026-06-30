@@ -39,6 +39,7 @@ import {
   updateLineSchema,
   voidInvoiceSchema,
 } from "../billing/invoices.schema";
+import { applyCouponSchema } from "../billing/coupons.schema";
 import {
   createNoteSchema,
   noteLineSchema,
@@ -564,6 +565,26 @@ platformRouter.post("/invoices/:id/issue", requirePermission("platform:manage_su
     number: inv.number,
     total: inv.total,
   });
+  res.json(inv);
+});
+
+/**
+ * @openapi
+ * /platform/invoices/{id}/coupon:
+ *   post: { tags: [Platform], summary: Apply a coupon to a draft invoice (validated; pre-tax discount; audited), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Updated draft }, 400: { description: Invalid/inapplicable coupon or not a draft } } }
+ *   delete: { tags: [Platform], summary: Remove the coupon from a draft invoice (audited), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Updated draft } } }
+ */
+platformRouter.post("/invoices/:id/coupon", requirePermission("platform:manage_subscriptions"), async (req, res) => {
+  const { code } = applyCouponSchema.parse(req.body);
+  const inv = await invoices.applyCoupon(uuidParam(req), code);
+  await invoiceAudit(req, "invoice.coupon_applied", inv.id, inv.institutionId, {
+    coupon: inv.couponCode, discount: inv.discountAmount,
+  });
+  res.json(inv);
+});
+platformRouter.delete("/invoices/:id/coupon", requirePermission("platform:manage_subscriptions"), async (req, res) => {
+  const inv = await invoices.removeCoupon(uuidParam(req));
+  await invoiceAudit(req, "invoice.coupon_removed", inv.id, inv.institutionId, {});
   res.json(inv);
 });
 
