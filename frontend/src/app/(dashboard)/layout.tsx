@@ -12,6 +12,7 @@ import { useThemeStore } from "@/stores/theme-store";
 import { useModeStore } from "@/stores/mode-store";
 import { useI18n } from "@/i18n/I18nProvider";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { RuntimeBanner } from "@/components/RuntimeBanner";
 
 type NavItem = {
   href: string;
@@ -481,6 +482,7 @@ export default function DashboardLayout({
           onMenu={() => setSidebarOpen(true)}
           onLogout={handleLogout}
         />
+        <RuntimeBanner />
         <main
           id="main-content"
           tabIndex={-1}

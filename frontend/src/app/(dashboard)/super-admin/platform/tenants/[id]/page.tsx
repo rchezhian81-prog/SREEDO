@@ -42,6 +42,9 @@ const TABS = [
 ] as const;
 type Tab = (typeof TABS)[number];
 
+// URL-friendly slug for a tab name, e.g. "Branding & Domain" -> "branding-domain".
+const tabSlug = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+
 const MODULE_KEYS = ["admissions", "students", "staff", "attendance", "fees", "exams", "transport", "hostel", "library", "inventory", "communication", "reports", "documents", "certificates", "timetable", "payroll", "hr"];
 const statusTone = (s: string) =>
   s === "active" ? "green" : s === "trial" ? "blue" : s === "suspended" || s === "expired" || s === "closed" ? "red" : s === "archived" ? "slate" : "amber";
@@ -65,6 +68,15 @@ export default function TenantDetailPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<Tab>("Overview");
+  // Deep-link: open a specific tab from ?tab= (e.g. ?tab=modules, ?tab=branding-domain).
+  // Client-only (avoids the useSearchParams Suspense requirement).
+  useEffect(() => {
+    const raw = new URLSearchParams(window.location.search).get("tab");
+    if (!raw) return;
+    const key = raw.toLowerCase();
+    const match = TABS.find((tb) => tabSlug(tb) === key || tb.toLowerCase() === key);
+    if (match) setTab(match);
+  }, []);
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
   const [actionReason, setActionReason] = useState("");
 
