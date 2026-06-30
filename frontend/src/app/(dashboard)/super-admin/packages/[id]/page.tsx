@@ -7,9 +7,12 @@ import { api, ApiError } from "@/lib/api";
 import {
   Badge, Button, Card, ConfirmDialog, EmptyState, ErrorNote, Field, Input, PageHeader, Select, Spinner, Textarea,
 } from "@/components/ui";
+import { toast } from "@/components/toast";
 import { usePlatformGuard } from "../../platform/_guard";
 
 const INSTITUTION_TYPES = ["school", "college", "university", "coaching", "other"] as const;
+const BILLING_CYCLES: [string, string][] = [["monthly", "Monthly"], ["quarterly", "Quarterly"], ["half_yearly", "Half-yearly"], ["annual", "Annual"]];
+const cycleLabel = (c: string) => BILLING_CYCLES.find(([v]) => v === c)?.[1] ?? c;
 const MODULE_GROUPS = [
   "admissions", "students", "staff", "attendance", "fees", "exams", "transport", "hostel",
   "library", "inventory", "communication", "reports", "documents", "certificates", "timetable",
@@ -28,7 +31,7 @@ interface Package {
   setupFee: string | number; billingCycle: string; status: string; visibility: string; badge: string | null;
   displayOrder: number; applicableTypes: string[]; maxStudents: number | null; maxStaff: number | null;
   limits: Record<string, number | null>; features: Record<string, unknown>;
-  taxPercent: string | number; invoiceDueDays: number | null; paymentTerms: string | null; sacHsn: string | null;
+  taxPercent: string | number; invoiceDueDays: number | null; paymentTerms: string | null; sacHsn: string | null; taxCategory: string | null;
   billingStartRule: string; autoRenew: boolean; graceDays: number | null;
   isTrial: boolean; trialDays: number | null; trialExpiryBehavior: string | null;
   createdAt: string; updatedAt: string;
@@ -47,14 +50,7 @@ export default function PackageDetailPage() {
   const [pkg, setPkg] = useState<Package | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("Overview");
-
-  useEffect(() => {
-    if (!notice) return;
-    const x = setTimeout(() => setNotice(null), 4000);
-    return () => clearTimeout(x);
-  }, [notice]);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -73,9 +69,10 @@ export default function PackageDetailPage() {
     setError(null);
     try {
       setPkg(await api.patch<Package>(`/packages/${id}`, patch));
-      setNotice(msg);
+      toast.success(msg);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to save");
+      const m = err instanceof ApiError ? err.message : "Failed to save";
+      setError(m); toast.error(m);
     }
   };
 
@@ -89,11 +86,10 @@ export default function PackageDetailPage() {
       </nav>
       <PageHeader
         title={pkg?.name ?? "Package"}
-        subtitle={pkg ? `${pkg.status} · ${pkg.visibility} · ${pkg.currency} ${Number(pkg.price).toLocaleString()} / ${pkg.billingCycle}` : ""}
+        subtitle={pkg ? `${pkg.status} · ${pkg.visibility} · ${pkg.currency} ${Number(pkg.price).toLocaleString()} / ${cycleLabel(pkg.billingCycle)}` : ""}
         action={<Link href="/super-admin/packages"><Button variant="secondary">← Back to packages</Button></Link>}
       />
 
-      {notice && <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{notice}</p>}
       {error && <ErrorNote message={error} />}
 
       {loading || !pkg ? (
@@ -110,7 +106,7 @@ export default function PackageDetailPage() {
             ))}
           </div>
 
-          {tab === "Overview" && <OverviewTab key={pkg.updatedAt} pkg={pkg} onSave={save} onStatus={() => load()} onError={setError} onNotice={setNotice} />}
+          {tab === "Overview" && <OverviewTab key={pkg.updatedAt} pkg={pkg} onSave={save} onStatus={() => load()} onError={setError} onNotice={toast.success} />}
           {tab === "Feature Matrix" && <FeatureMatrixTab pkg={pkg} onSave={save} />}
           {tab === "Limits" && <LimitsTab pkg={pkg} onSave={save} />}
           {tab === "Tenants" && <TenantsTab id={pkg.id} />}
@@ -133,7 +129,7 @@ function OverviewTab({ pkg, onSave, onStatus, onError, onNotice }: {
     maxStudents: pkg.maxStudents == null ? "" : String(pkg.maxStudents),
     maxStaff: pkg.maxStaff == null ? "" : String(pkg.maxStaff),
     taxPercent: String(pkg.taxPercent), invoiceDueDays: pkg.invoiceDueDays == null ? "" : String(pkg.invoiceDueDays),
-    paymentTerms: pkg.paymentTerms ?? "", sacHsn: pkg.sacHsn ?? "", billingStartRule: pkg.billingStartRule,
+    paymentTerms: pkg.paymentTerms ?? "", sacHsn: pkg.sacHsn ?? "", taxCategory: pkg.taxCategory ?? "", billingStartRule: pkg.billingStartRule,
     autoRenew: pkg.autoRenew, graceDays: pkg.graceDays == null ? "" : String(pkg.graceDays),
     isTrial: pkg.isTrial, trialDays: pkg.trialDays == null ? "" : String(pkg.trialDays),
     trialExpiryBehavior: pkg.trialExpiryBehavior ?? "",
@@ -154,7 +150,7 @@ function OverviewTab({ pkg, onSave, onStatus, onError, onNotice }: {
       visibility: f.visibility, badge: f.badge.trim() || null, displayOrder: Number(f.displayOrder) || 0,
       applicableTypes: [...types], maxStudents: num(f.maxStudents), maxStaff: num(f.maxStaff),
       taxPercent: Number(f.taxPercent) || 0, invoiceDueDays: num(f.invoiceDueDays),
-      paymentTerms: f.paymentTerms.trim() || null, sacHsn: f.sacHsn.trim() || null,
+      paymentTerms: f.paymentTerms.trim() || null, sacHsn: f.sacHsn.trim() || null, taxCategory: f.taxCategory.trim() || null,
       billingStartRule: f.billingStartRule, autoRenew: f.autoRenew, graceDays: num(f.graceDays),
       isTrial: f.isTrial, trialDays: f.isTrial ? num(f.trialDays) : null,
       trialExpiryBehavior: f.trialExpiryBehavior || null,
@@ -202,12 +198,13 @@ function OverviewTab({ pkg, onSave, onStatus, onError, onNotice }: {
           <Field label="Currency"><Input value={f.currency} onChange={(e) => set("currency", e.target.value.toUpperCase())} /></Field>
           <Field label="Billing cycle">
             <Select value={f.billingCycle} onChange={(e) => set("billingCycle", e.target.value)}>
-              <option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annual">Annual</option>
+              {BILLING_CYCLES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </Select>
           </Field>
           <Field label="Setup fee"><Input type="number" min={0} step="0.01" value={f.setupFee} onChange={(e) => set("setupFee", e.target.value)} /></Field>
           <Field label="Tax % (flat)"><Input type="number" min={0} step="0.01" value={f.taxPercent} onChange={(e) => set("taxPercent", e.target.value)} /></Field>
           <Field label="SAC / HSN"><Input value={f.sacHsn} onChange={(e) => set("sacHsn", e.target.value)} /></Field>
+          <Field label="Tax category"><Input value={f.taxCategory} onChange={(e) => set("taxCategory", e.target.value)} placeholder="standard / exempt / zero-rated" /></Field>
           <Field label="Invoice due days"><Input type="number" min={0} value={f.invoiceDueDays} onChange={(e) => set("invoiceDueDays", e.target.value)} /></Field>
           <Field label="Grace days"><Input type="number" min={0} value={f.graceDays} onChange={(e) => set("graceDays", e.target.value)} /></Field>
           <Field label="Billing start">

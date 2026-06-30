@@ -30,7 +30,7 @@ const PACKAGE_COLUMNS = `
   display_order AS "displayOrder", applicable_types AS "applicableTypes",
   max_students AS "maxStudents", max_staff AS "maxStaff", limits, features,
   tax_percent AS "taxPercent", invoice_due_days AS "invoiceDueDays",
-  payment_terms AS "paymentTerms", sac_hsn AS "sacHsn",
+  payment_terms AS "paymentTerms", sac_hsn AS "sacHsn", tax_category AS "taxCategory",
   billing_start_rule AS "billingStartRule", auto_renew AS "autoRenew",
   grace_days AS "graceDays", is_trial AS "isTrial", trial_days AS "trialDays",
   trial_expiry_behavior AS "trialExpiryBehavior",
@@ -46,6 +46,7 @@ const PACKAGE_COLUMN_MAP: Record<string, string> = {
   applicableTypes: "applicable_types", maxStudents: "max_students", maxStaff: "max_staff",
   limits: "limits", features: "features", taxPercent: "tax_percent",
   invoiceDueDays: "invoice_due_days", paymentTerms: "payment_terms", sacHsn: "sac_hsn",
+  taxCategory: "tax_category",
   billingStartRule: "billing_start_rule", autoRenew: "auto_renew", graceDays: "grace_days",
   isTrial: "is_trial", trialDays: "trial_days", trialExpiryBehavior: "trial_expiry_behavior",
   trialConversionPackageId: "trial_conversion_package_id",
@@ -453,9 +454,9 @@ export async function duplicatePackage(
       `INSERT INTO subscription_packages
          (name, description, currency, price, setup_fee, billing_cycle, status, visibility,
           badge, display_order, applicable_types, max_students, max_staff, limits, features,
-          tax_percent, invoice_due_days, payment_terms, sac_hsn, billing_start_rule, auto_renew,
+          tax_percent, invoice_due_days, payment_terms, sac_hsn, tax_category, billing_start_rule, auto_renew,
           grace_days, is_trial, trial_days, trial_expiry_behavior, is_active, updated_by)
-       VALUES ($1,$2,$3,$4,$5,$6,'draft','internal',$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,false,$24)
+       VALUES ($1,$2,$3,$4,$5,$6,'draft','internal',$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,false,$25)
        RETURNING ${PACKAGE_COLUMNS}`,
       [
         input.name, src.description ?? null, src.currency ?? "INR", src.price ?? 0,
@@ -463,8 +464,9 @@ export async function duplicatePackage(
         src.displayOrder ?? 0, src.applicableTypes ?? [], src.maxStudents ?? null,
         src.maxStaff ?? null, src.limits ?? {}, src.features ?? {}, src.taxPercent ?? 0,
         src.invoiceDueDays ?? null, src.paymentTerms ?? null, src.sacHsn ?? null,
-        src.billingStartRule ?? "immediate", src.autoRenew ?? true, src.graceDays ?? null,
-        src.isTrial ?? false, src.trialDays ?? null, src.trialExpiryBehavior ?? null, actor.id,
+        src.taxCategory ?? null, src.billingStartRule ?? "immediate", src.autoRenew ?? true,
+        src.graceDays ?? null, src.isTrial ?? false, src.trialDays ?? null,
+        src.trialExpiryBehavior ?? null, actor.id,
       ]
     );
     const pkg = rows[0];

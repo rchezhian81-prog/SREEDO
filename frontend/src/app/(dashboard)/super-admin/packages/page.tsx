@@ -7,10 +7,13 @@ import { useAuthStore } from "@/stores/auth-store";
 import {
   Badge, Button, EmptyState, ErrorNote, Field, Input, Modal, PageHeader, Select, Spinner, Textarea,
 } from "@/components/ui";
+import { toast } from "@/components/toast";
 import { usePlatformGuard } from "../platform/_guard";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
 const INSTITUTION_TYPES = ["school", "college", "university", "coaching", "other"] as const;
+const BILLING_CYCLES: [string, string][] = [["monthly", "Monthly"], ["quarterly", "Quarterly"], ["half_yearly", "Half-yearly"], ["annual", "Annual"]];
+const cycleLabel = (c: string) => BILLING_CYCLES.find(([v]) => v === c)?.[1] ?? c;
 
 interface Package {
   id: string;
@@ -18,7 +21,7 @@ interface Package {
   description: string | null;
   currency: string;
   price: string | number;
-  billingCycle: "monthly" | "quarterly" | "annual";
+  billingCycle: "monthly" | "quarterly" | "half_yearly" | "annual";
   status: "active" | "draft" | "deprecated" | "archived";
   visibility: "public" | "internal" | "hidden";
   badge: string | null;
@@ -49,7 +52,6 @@ export default function PackagesPage() {
   const [packages, setPackages] = useState<Package[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
 
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
@@ -59,12 +61,6 @@ export default function PackagesPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [compareOpen, setCompareOpen] = useState(false);
-
-  useEffect(() => {
-    if (!notice) return;
-    const x = setTimeout(() => setNotice(null), 4000);
-    return () => clearTimeout(x);
-  }, [notice]);
 
   const buildQuery = useCallback(() => {
     const p = new URLSearchParams();
@@ -120,7 +116,6 @@ export default function PackagesPage() {
         }
       />
 
-      {notice && <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{notice}</p>}
       {error && <ErrorNote message={error} />}
 
       <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
@@ -135,7 +130,7 @@ export default function PackagesPage() {
         </Select>
         <Select value={billingCycle} onChange={(e) => setBillingCycle(e.target.value)}>
           <option value="">All cycles</option>
-          {["monthly", "quarterly", "annual"].map((b) => <option key={b} value={b}>{b[0].toUpperCase() + b.slice(1)}</option>)}
+          {BILLING_CYCLES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </Select>
         <Select value={sort} onChange={(e) => setSort(e.target.value)}>
           <option value="displayOrder">Sort: Order</option>
@@ -185,7 +180,7 @@ export default function PackagesPage() {
                   <td className="px-4 py-3"><Badge tone={statusTone(p.status)}>{p.status}</Badge></td>
                   <td className="px-4 py-3 capitalize text-slate-500">{p.visibility}</td>
                   <td className="px-4 py-3">{p.currency} {Number(p.price).toLocaleString()}</td>
-                  <td className="px-4 py-3 capitalize">{p.billingCycle}</td>
+                  <td className="px-4 py-3">{cycleLabel(p.billingCycle)}</td>
                   <td className="px-4 py-3 text-xs text-slate-500">{p.applicableTypes.length ? p.applicableTypes.join(", ") : "all"}</td>
                   <td className="px-4 py-3">{p.maxStudents ?? "∞"}</td>
                   <td className="px-4 py-3">{p.maxStaff ?? "∞"}</td>
@@ -202,7 +197,7 @@ export default function PackagesPage() {
       {createOpen && (
         <CreatePackageModal
           onClose={() => setCreateOpen(false)}
-          onCreated={(msg) => { setCreateOpen(false); setNotice(msg); load(); }}
+          onCreated={(msg) => { setCreateOpen(false); toast.success(msg); load(); }}
         />
       )}
       {compareOpen && <CompareModal ids={[...selected]} onClose={() => setCompareOpen(false)} />}
@@ -214,7 +209,7 @@ function CreatePackageModal({ onClose, onCreated }: { onClose: () => void; onCre
   const [form, setForm] = useState({
     name: "", description: "", currency: "INR", price: "0", billingCycle: "annual",
     status: "draft", visibility: "public", badge: "", maxStudents: "", maxStaff: "",
-    isTrial: false, trialDays: "",
+    taxCategory: "", isTrial: false, trialDays: "",
   });
   const [types, setTypes] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -237,6 +232,7 @@ function CreatePackageModal({ onClose, onCreated }: { onClose: () => void; onCre
         maxStudents: num(form.maxStudents),
         maxStaff: num(form.maxStaff),
         applicableTypes: [...types],
+        taxCategory: form.taxCategory.trim() || null,
         isTrial: form.isTrial,
         trialDays: form.isTrial ? num(form.trialDays) : null,
       });
@@ -256,7 +252,7 @@ function CreatePackageModal({ onClose, onCreated }: { onClose: () => void; onCre
           <Field label="Currency"><Input value={form.currency} onChange={(e) => set("currency", e.target.value.toUpperCase())} /></Field>
           <Field label="Billing cycle">
             <Select value={form.billingCycle} onChange={(e) => set("billingCycle", e.target.value)}>
-              <option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annual">Annual</option>
+              {BILLING_CYCLES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </Select>
           </Field>
         </div>
@@ -273,9 +269,10 @@ function CreatePackageModal({ onClose, onCreated }: { onClose: () => void; onCre
           </Field>
           <Field label="Badge"><Input value={form.badge} onChange={(e) => set("badge", e.target.value)} placeholder="Popular" /></Field>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <Field label="Max students (blank = ∞)"><Input type="number" min={0} value={form.maxStudents} onChange={(e) => set("maxStudents", e.target.value)} /></Field>
           <Field label="Max staff (blank = ∞)"><Input type="number" min={0} value={form.maxStaff} onChange={(e) => set("maxStaff", e.target.value)} /></Field>
+          <Field label="Tax category"><Input value={form.taxCategory} onChange={(e) => set("taxCategory", e.target.value)} placeholder="standard / exempt" /></Field>
         </div>
         <div>
           <p className="mb-1.5 text-sm font-medium text-ink">Applies to (none = all types)</p>
@@ -313,7 +310,7 @@ function CompareModal({ ids, onClose }: { ids: string[]; onClose: () => void }) 
     { label: "Status", get: (p) => p.status },
     { label: "Visibility", get: (p) => p.visibility },
     { label: "Price", get: (p) => `${p.currency} ${Number(p.price).toLocaleString()}` },
-    { label: "Billing", get: (p) => p.billingCycle },
+    { label: "Billing", get: (p) => cycleLabel(p.billingCycle) },
     { label: "Applies to", get: (p) => (p.applicableTypes.length ? p.applicableTypes.join(", ") : "all") },
     { label: "Max students", get: (p) => (p.maxStudents ?? "∞").toString() },
     { label: "Max staff", get: (p) => (p.maxStaff ?? "∞").toString() },

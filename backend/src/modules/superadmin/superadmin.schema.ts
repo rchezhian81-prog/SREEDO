@@ -33,12 +33,11 @@ export const updateBranchSchema = z.object({
 });
 
 // --- Packages / Plans -------------------------------------------------------
-// billing_cycle stays monthly/quarterly/annual (the existing DB CHECK + billing
-// logic); half-yearly / one-time are documented as future to avoid disturbing
-// the subscription lifecycle.
+// billing_cycle is a stored label (no lifecycle/invoice date math branches on it).
 export const PACKAGE_STATUSES = ["active", "draft", "deprecated", "archived"] as const;
 export const PACKAGE_VISIBILITIES = ["public", "internal", "hidden"] as const;
 export const INSTITUTION_TYPES = ["school", "college", "university", "coaching", "other"] as const;
+export const BILLING_CYCLES = ["monthly", "quarterly", "half_yearly", "annual"] as const;
 
 const limitMap = z.record(z.number().int().nonnegative().nullable());
 
@@ -48,7 +47,7 @@ const packageBase = z.object({
   currency: z.string().trim().min(1).max(8),
   price: z.number().nonnegative(),
   setupFee: z.number().nonnegative(),
-  billingCycle: z.enum(["monthly", "quarterly", "annual"]),
+  billingCycle: z.enum(BILLING_CYCLES),
   status: z.enum(PACKAGE_STATUSES),
   visibility: z.enum(PACKAGE_VISIBILITIES),
   badge: z.string().max(40).nullable(),
@@ -62,6 +61,7 @@ const packageBase = z.object({
   invoiceDueDays: z.number().int().nonnegative().nullable(),
   paymentTerms: z.string().max(500).nullable(),
   sacHsn: z.string().max(40).nullable(),
+  taxCategory: z.string().max(40).nullable(),
   billingStartRule: z.enum(["immediate", "after_trial", "custom"]),
   autoRenew: z.boolean(),
   graceDays: z.number().int().nonnegative().nullable(),
@@ -96,7 +96,7 @@ export const packageListQuerySchema = z.object({
   q: z.string().max(120).optional(),
   status: z.enum(PACKAGE_STATUSES).optional(),
   institutionType: z.enum(INSTITUTION_TYPES).optional(),
-  billingCycle: z.enum(["monthly", "quarterly", "annual"]).optional(),
+  billingCycle: z.enum(BILLING_CYCLES).optional(),
   visibility: z.enum(PACKAGE_VISIBILITIES).optional(),
   sort: z.enum(["name", "price", "displayOrder", "status", "createdAt"]).optional(),
   order: z.enum(["asc", "desc"]).optional(),
@@ -110,7 +110,7 @@ export const packageUsageQuerySchema = z.object({
   packageId: z.string().uuid().optional(),
   institutionType: z.enum(INSTITUTION_TYPES).optional(),
   status: z.string().max(20).optional(),
-  billingCycle: z.enum(["monthly", "quarterly", "annual"]).optional(),
+  billingCycle: z.enum(BILLING_CYCLES).optional(),
   dateFrom: z.string().date().optional(),
   dateTo: z.string().date().optional(),
   format: z.enum(["csv", "xlsx"]).optional(),

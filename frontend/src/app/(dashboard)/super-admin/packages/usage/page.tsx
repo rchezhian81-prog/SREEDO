@@ -9,6 +9,8 @@ import { usePlatformGuard } from "../../platform/_guard";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
 const INSTITUTION_TYPES = ["school", "college", "university", "coaching", "other"] as const;
+const BILLING_CYCLES: [string, string][] = [["monthly", "Monthly"], ["quarterly", "Quarterly"], ["half_yearly", "Half-yearly"], ["annual", "Annual"]];
+const cycleLabel = (c: string) => BILLING_CYCLES.find(([v]) => v === c)?.[1] ?? c;
 
 interface Row {
   id: string; name: string; status: string; billingCycle: string; price: string | number; currency: string;
@@ -84,7 +86,7 @@ export default function PackageUsageReportPage() {
         </Select>
         <Select value={billingCycle} onChange={(e) => setBillingCycle(e.target.value)}>
           <option value="">All billing cycles</option>
-          {["monthly", "quarterly", "annual"].map((b) => <option key={b} value={b}>{b[0].toUpperCase() + b.slice(1)}</option>)}
+          {BILLING_CYCLES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </Select>
         <Select value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="">All package statuses</option>
@@ -109,7 +111,7 @@ export default function PackageUsageReportPage() {
                 <tr key={r.id} className="hover:bg-slate-50">
                   <td className="px-4 py-3 font-medium text-slate-900">
                     <Link href={`/super-admin/packages/${r.id}`} className="text-brand-600 hover:text-brand-700">{r.name}</Link>
-                    <div className="text-xs text-slate-400">{r.status} · {r.billingCycle}</div>
+                    <div className="text-xs text-slate-400">{r.status} · {cycleLabel(r.billingCycle)}</div>
                   </td>
                   <td className="px-4 py-3">{r.tenants}</td><td className="px-4 py-3">{r.active}</td>
                   <td className="px-4 py-3">{r.trial}</td><td className="px-4 py-3">{r.suspended}</td><td className="px-4 py-3">{r.expired}</td>
