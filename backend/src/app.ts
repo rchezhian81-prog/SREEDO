@@ -67,6 +67,7 @@ import {
 } from "./modules/pdfs/pdfs.routes";
 import { payrollRouter } from "./modules/payroll/payroll.routes";
 import { platformRouter } from "./modules/platform/platform.routes";
+import { platformSettingsRouter } from "./modules/platform/platform-settings.routes";
 import { tenantRouter } from "./modules/platform/tenant.routes";
 import { portalRouter } from "./modules/portal/portal.routes";
 import { reportCenterRouter } from "./modules/reportcenter/reportcenter.routes";
@@ -224,6 +225,10 @@ export function createApp(): express.Express {
   api.use("/branding", brandingRouter); // white-labeling / branding
   api.use("/period-attendance", periodAttendanceRouter); // per-period attendance (admin/teacher)
   api.use("/timetable-gen", timetableGenRouter); // timetable auto-generation (admin)
+  // Settings router first: it uses per-route guards (so /runtime-status is
+  // reachable by any signed-in user) and falls through unmatched paths to the
+  // super-admin-guarded routers below.
+  api.use("/platform", platformSettingsRouter); // global platform settings + feature flags
   api.use("/platform", platformRouter); // super-admin platform hardening
   api.use("/platform", tenantRouter); // super-admin tenant/institution management
   api.use("/", superAdminRouter); // /institutions, /branches, /packages
