@@ -1,5 +1,6 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { uuidParam } from "../../utils/params";
+import { ApiError } from "../../utils/api-error";
 import { authenticate, authorize } from "../../middleware/auth";
 import {
   assignSubscriptionSchema,
@@ -16,6 +17,13 @@ import * as service from "./superadmin.service";
 // institution's admin.
 export const superAdminRouter = Router();
 superAdminRouter.use(authenticate, authorize("super_admin"));
+
+const actor = (req: Request) => ({
+  id: req.user!.id,
+  email: req.user!.email,
+  role: req.user!.role,
+  ip: req.ip ?? null,
+});
 
 /**
  * @openapi
@@ -77,12 +85,14 @@ superAdminRouter.post("/institutions", async (req, res) => {
  *       200: { description: Updated institution }
  *   delete:
  *     tags: [Super Admin]
- *     summary: Delete an institution and its branches/subscriptions
+ *     summary: "Archive an institution (legacy endpoint — hard delete is disabled; soft-archives only, requires a reason)"
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *       - { in: query, name: reason, schema: { type: string }, description: "Archive reason (or send in the JSON body)" }
  *     responses:
- *       204: { description: Deleted }
+ *       200: { description: "Archived ({ archived: true }) — data preserved" }
+ *       400: { description: "Reason required (hard delete disabled)" }
  */
 superAdminRouter.get("/institutions/:id", async (req, res) => {
   res.json(await service.getInstitution(uuidParam(req)));
@@ -93,9 +103,18 @@ superAdminRouter.patch("/institutions/:id", async (req, res) => {
   res.json(await service.updateInstitution(uuidParam(req), input));
 });
 
+// Hard delete is disabled. This legacy endpoint now SOFT-ARCHIVES (requires a
+// reason, audited) so production tenant data is never destroyed.
 superAdminRouter.delete("/institutions/:id", async (req, res) => {
-  await service.removeInstitution(uuidParam(req));
-  res.status(204).end();
+  const raw = (req.body as { reason?: unknown } | undefined)?.reason ?? req.query?.reason;
+  const reason = typeof raw === "string" ? raw.trim() : "";
+  if (!reason) {
+    throw ApiError.badRequest(
+      "Hard delete is disabled. Provide a 'reason' to archive this tenant instead, or use the tenant lifecycle (POST /platform/tenants/:id/lifecycle with { status: 'archived', reason })."
+    );
+  }
+  await service.archiveInstitution(uuidParam(req), reason, actor(req));
+  res.json({ archived: true });
 });
 
 /**

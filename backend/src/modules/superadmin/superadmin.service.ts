@@ -60,10 +60,13 @@ export async function getInstitution(id: string) {
 export async function createInstitution(
   input: z.infer<typeof createInstitutionSchema>
 ) {
+  // Keep the tenant-facing institution_type in sync with the structural type so
+  // the new tenant module never sees a school/college mismatch.
+  const type = input.type ?? "school";
   const { rows } = await query<{ id: string }>(
-    `INSERT INTO institutions (name, code, type, settings)
-     VALUES ($1, $2, $3, $4) RETURNING id`,
-    [input.name, input.code, input.type ?? "school", input.settings ?? {}]
+    `INSERT INTO institutions (name, code, type, institution_type, settings)
+     VALUES ($1, $2, $3, $3, $4) RETURNING id`,
+    [input.name, input.code, type, input.settings ?? {}]
   );
   return getInstitution(rows[0].id);
 }
@@ -87,6 +90,11 @@ export async function updateInstitution(
       sets.push(`${column} = $${params.length}`);
     }
   }
+  // Keep institution_type in lock-step with the structural type on legacy updates.
+  if (input.type !== undefined) {
+    params.push(input.type);
+    sets.push(`institution_type = $${params.length}`);
+  }
   if (!sets.length) throw ApiError.badRequest("No fields to update");
   params.push(id);
   const { rowCount } = await query(
@@ -97,9 +105,30 @@ export async function updateInstitution(
   return getInstitution(id);
 }
 
-export async function removeInstitution(id: string): Promise<void> {
-  const { rowCount } = await query("DELETE FROM institutions WHERE id = $1", [id]);
-  if (!rowCount) throw ApiError.notFound("Institution not found");
+// Audit actor (kept local to avoid a circular import with platform.service,
+// which already imports this module).
+interface Actor { id: string; email: string; role: string; ip: string | null }
+
+/**
+ * SAFE archive — replaces the former hard delete. A production tenant is NEVER
+ * removed (a `DELETE FROM institutions` would cascade-delete its users,
+ * students, invoices, subscriptions, documents and audit history). Instead the
+ * institution is marked archived + inactive, the action is audited, and every
+ * related record is preserved and remains available in billing/audit history.
+ */
+export async function archiveInstitution(id: string, reason: string, actor: Actor): Promise<void> {
+  const { rows } = await query<{ id: string }>(
+    `UPDATE institutions SET status = 'archived', is_active = false WHERE id = $1 RETURNING id`,
+    [id]
+  );
+  if (!rows[0]) throw ApiError.notFound("Institution not found");
+  // Audit inline (same shape as platform.service.recordAudit) — no cross-module import.
+  await query(
+    `INSERT INTO platform_audit_log
+       (action, target_type, target_id, institution_id, actor_id, actor_email, actor_role, detail, ip)
+     VALUES ('tenant.archived','institution',$1,$1,$2,$3,$4,$5::jsonb,$6)`,
+    [id, actor.id, actor.email, actor.role, JSON.stringify({ reason, via: "legacy /institutions/:id" }), actor.ip]
+  );
 }
 
 // --- Branches ---

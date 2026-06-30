@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";
-import { app, createUser, resetDb, tokenFor } from "./helpers";
+import { app, createUser, query, resetDb, tokenFor } from "./helpers";
 
 const SUPER = { email: "super@test.dev", password: "Passw0rd!" };
 const ADMIN = { email: "admin@test.dev", password: "Passw0rd!" };
@@ -95,5 +95,57 @@ describe("super admin: tenancy management", () => {
     expect(detail.status).toBe(200);
     expect(detail.body.branches).toHaveLength(1);
     expect(detail.body.subscription.packageName).toBe("Pro");
+  });
+
+  it("syncs institution_type with the structural type on legacy create + update", async () => {
+    const inst = await request(app)
+      .post("/api/v1/institutions")
+      .set(auth(superToken))
+      .send({ name: "Sync", code: "SYNC", type: "college" });
+    const id = inst.body.id;
+    expect(inst.body.type).toBe("college");
+    // new tenant detail must see institution_type = college (no school/college mismatch)
+    const t1 = await request(app).get(`/api/v1/platform/tenants/${id}`).set(auth(superToken));
+    expect(t1.body.institutionType).toBe("college");
+    // update back to school keeps both in lock-step
+    await request(app).patch(`/api/v1/institutions/${id}`).set(auth(superToken)).send({ type: "school" });
+    const t2 = await request(app).get(`/api/v1/platform/tenants/${id}`).set(auth(superToken));
+    expect(t2.body.type).toBe("school");
+    expect(t2.body.institutionType).toBe("school");
+  });
+
+  it("disables legacy hard delete — archives instead (reason required, audited, data preserved)", async () => {
+    const inst = await request(app)
+      .post("/api/v1/institutions")
+      .set(auth(superToken))
+      .send({ name: "Legacy", code: "LEG", type: "school" });
+    const id = inst.body.id;
+
+    // DELETE without a reason is refused, and the row is NOT removed
+    const noReason = await request(app).delete(`/api/v1/institutions/${id}`).set(auth(superToken));
+    expect(noReason.status).toBe(400);
+    expect((await request(app).get(`/api/v1/institutions/${id}`).set(auth(superToken))).status).toBe(200);
+
+    // a tenant admin cannot reach the endpoint at all
+    expect((await request(app).delete(`/api/v1/institutions/${id}`).set(auth(adminToken)).send({ reason: "x" })).status).toBe(403);
+
+    // DELETE with a reason SOFT-ARCHIVES — row preserved, status archived, inactive
+    const archived = await request(app)
+      .delete(`/api/v1/institutions/${id}`)
+      .set(auth(superToken))
+      .send({ reason: "Account closed at customer request" });
+    expect(archived.status).toBe(200);
+    expect(archived.body.archived).toBe(true);
+
+    const still = await request(app).get(`/api/v1/platform/tenants/${id}`).set(auth(superToken));
+    expect(still.status).toBe(200);
+    expect(still.body.status).toBe("archived");
+    expect(still.body.isActive).toBe(false);
+
+    // the institutions row still exists (no hard delete) and the archive is audited
+    const exists = await query<{ id: string }>("SELECT id FROM institutions WHERE id = $1", [id]);
+    expect(exists.rows).toHaveLength(1);
+    const audit = await query("SELECT 1 FROM platform_audit_log WHERE institution_id = $1 AND action = 'tenant.archived'", [id]);
+    expect(audit.rows.length).toBeGreaterThan(0);
   });
 });
