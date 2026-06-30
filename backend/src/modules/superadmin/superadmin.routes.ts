@@ -1,12 +1,19 @@
-import { Router, type Request } from "express";
+import { Router, type Request, type Response } from "express";
 import { uuidParam } from "../../utils/params";
 import { ApiError } from "../../utils/api-error";
 import { authenticate, authorize } from "../../middleware/auth";
+import { toCsv, toXlsx, type Cell } from "../../utils/spreadsheet";
 import {
   assignSubscriptionSchema,
   createBranchSchema,
   createInstitutionSchema,
   createPackageSchema,
+  duplicatePackageSchema,
+  packageCompareQuerySchema,
+  packageExportQuerySchema,
+  packageListQuerySchema,
+  packageStatusSchema,
+  packageUsageQuerySchema,
   updateBranchSchema,
   updateInstitutionSchema,
   updatePackageSchema,
@@ -24,6 +31,35 @@ const actor = (req: Request) => ({
   role: req.user!.role,
   ip: req.ip ?? null,
 });
+
+function sendSpreadsheet(
+  res: Response,
+  format: "csv" | "xlsx",
+  filename: string,
+  columns: { key: string; label: string }[],
+  rows: Record<string, unknown>[]
+): void {
+  const headers = columns.map((c) => c.label);
+  const data: Cell[][] = rows.map((r) => columns.map((c) => (r[c.key] ?? "") as Cell));
+  if (format === "xlsx") {
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}.xlsx"`);
+    res.send(toXlsx(headers, data));
+  } else {
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}.csv"`);
+    res.send(toCsv(headers, data));
+  }
+}
+
+const PACKAGE_LIST_COLUMNS = [
+  { key: "name", label: "Name" }, { key: "status", label: "Status" },
+  { key: "visibility", label: "Visibility" }, { key: "price", label: "Price" },
+  { key: "currency", label: "Currency" }, { key: "billingCycle", label: "Billing" },
+  { key: "maxStudents", label: "Max students" }, { key: "maxStaff", label: "Max staff" },
+  { key: "isTrial", label: "Trial" }, { key: "displayOrder", label: "Order" },
+  { key: "createdAt", label: "Created" },
+];
 
 /**
  * @openapi
@@ -196,58 +232,156 @@ superAdminRouter.delete("/branches/:id", async (req, res) => {
 
 /**
  * @openapi
+ * /packages-report:
+ *   get:
+ *     tags: [Super Admin]
+ *     summary: Package usage report (tenants by status, usage, revenue/outstanding/overdue)
+ *     description: Returns JSON, or a CSV/XLSX download when format is set.
+ *     security: [{ bearerAuth: [] }]
+ *     responses: { 200: { description: Usage report } }
+ */
+superAdminRouter.get("/packages-report", async (req, res) => {
+  const q = packageUsageQuerySchema.parse(req.query);
+  if (q.format) {
+    const { columns, rows } = await service.exportPackageUsage(q);
+    return sendSpreadsheet(res, q.format, "package-usage", columns, rows);
+  }
+  res.json(await service.packageUsageReport(q));
+});
+
+/**
+ * @openapi
+ * /packages-export:
+ *   get:
+ *     tags: [Super Admin]
+ *     summary: Export the package list as CSV/XLSX
+ *     security: [{ bearerAuth: [] }]
+ *     responses: { 200: { description: Spreadsheet } }
+ */
+superAdminRouter.get("/packages-export", async (req, res) => {
+  const q = packageExportQuerySchema.parse(req.query);
+  const rows = (await service.listPackages(q)) as Record<string, unknown>[];
+  sendSpreadsheet(res, q.format, "packages", PACKAGE_LIST_COLUMNS, rows);
+});
+
+/**
+ * @openapi
+ * /packages-compare:
+ *   get:
+ *     tags: [Super Admin]
+ *     summary: Compare packages side-by-side (ids=comma,separated)
+ *     security: [{ bearerAuth: [] }]
+ *     responses: { 200: { description: Packages to compare } }
+ */
+superAdminRouter.get("/packages-compare", async (req, res) => {
+  const { ids } = packageCompareQuerySchema.parse(req.query);
+  res.json(await service.comparePackages(ids));
+});
+
+/**
+ * @openapi
  * /packages:
  *   get:
  *     tags: [Super Admin]
- *     summary: List subscription packages
+ *     summary: List subscription packages (search/filter/sort)
  *     security: [{ bearerAuth: [] }]
- *     responses:
- *       200: { description: Packages }
+ *     responses: { 200: { description: Packages } }
  *   post:
  *     tags: [Super Admin]
- *     summary: Create a subscription package
+ *     summary: Create a subscription package (audited, versioned)
  *     security: [{ bearerAuth: [] }]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [name]
- *             properties:
- *               name: { type: string }
- *               maxStudents: { type: integer }
- *               maxStaff: { type: integer }
- *               price: { type: number }
- *               billingCycle: { type: string, enum: [monthly, quarterly, annual] }
- *               features: { type: object }
- *     responses:
- *       201: { description: Created package }
+ *     responses: { 201: { description: Created package } }
  */
-superAdminRouter.get("/packages", async (_req, res) => {
-  res.json(await service.listPackages());
+superAdminRouter.get("/packages", async (req, res) => {
+  res.json(await service.listPackages(packageListQuerySchema.parse(req.query)));
 });
 
 superAdminRouter.post("/packages", async (req, res) => {
   const input = createPackageSchema.parse(req.body);
-  res.status(201).json(await service.createPackage(input));
+  res.status(201).json(await service.createPackage(input, actor(req)));
 });
 
 /**
  * @openapi
  * /packages/{id}:
+ *   get:
+ *     tags: [Super Admin]
+ *     summary: Get a subscription package
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses: { 200: { description: Package }, 404: { description: Not found } }
  *   patch:
  *     tags: [Super Admin]
- *     summary: Update a subscription package
+ *     summary: Update a subscription package (audited, versioned, diffed)
  *     security: [{ bearerAuth: [] }]
- *     parameters:
- *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
- *     responses:
- *       200: { description: Updated package }
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses: { 200: { description: Updated package } }
  */
+superAdminRouter.get("/packages/:id", async (req, res) => {
+  res.json(await service.getPackage(uuidParam(req)));
+});
+
 superAdminRouter.patch("/packages/:id", async (req, res) => {
   const input = updatePackageSchema.parse(req.body);
-  res.json(await service.updatePackage(uuidParam(req), input));
+  res.json(await service.updatePackage(uuidParam(req), input, actor(req)));
+});
+
+/**
+ * @openapi
+ * /packages/{id}/duplicate:
+ *   post:
+ *     tags: [Super Admin]
+ *     summary: Duplicate a package (copy starts as draft)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses: { 201: { description: Duplicated package } }
+ */
+superAdminRouter.post("/packages/:id/duplicate", async (req, res) => {
+  const input = duplicatePackageSchema.parse(req.body);
+  res.status(201).json(await service.duplicatePackage(uuidParam(req), input, actor(req)));
+});
+
+/**
+ * @openapi
+ * /packages/{id}/status:
+ *   post:
+ *     tags: [Super Admin]
+ *     summary: Change package status (deprecate/archive require a reason; never hard-deleted)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses: { 200: { description: Updated package } }
+ */
+superAdminRouter.post("/packages/:id/status", async (req, res) => {
+  const input = packageStatusSchema.parse(req.body);
+  res.json(await service.setPackageStatus(uuidParam(req), input, actor(req)));
+});
+
+/**
+ * @openapi
+ * /packages/{id}/history:
+ *   get:
+ *     tags: [Super Admin]
+ *     summary: Package change/version history (before/after diff)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses: { 200: { description: Version history } }
+ */
+superAdminRouter.get("/packages/:id/history", async (req, res) => {
+  res.json(await service.packageHistory(uuidParam(req)));
+});
+
+/**
+ * @openapi
+ * /packages/{id}/impact:
+ *   get:
+ *     tags: [Super Admin]
+ *     summary: Assignment impact (affected tenants, active subscriptions, open invoices)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses: { 200: { description: Impact summary } }
+ */
+superAdminRouter.get("/packages/:id/impact", async (req, res) => {
+  res.json(await service.packageImpact(uuidParam(req)));
 });
 
 /**
@@ -276,5 +410,5 @@ superAdminRouter.patch("/packages/:id", async (req, res) => {
  */
 superAdminRouter.post("/institutions/:id/subscription", async (req, res) => {
   const input = assignSubscriptionSchema.parse(req.body);
-  res.status(201).json(await service.assignSubscription(uuidParam(req), input));
+  res.status(201).json(await service.assignSubscription(uuidParam(req), input, actor(req)));
 });
