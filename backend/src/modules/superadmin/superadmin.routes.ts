@@ -170,21 +170,28 @@ superAdminRouter.post("/institutions/:id/branches", async (req, res) => {
  *       200: { description: Updated branch }
  *   delete:
  *     tags: [Super Admin]
- *     summary: Delete a branch
+ *     summary: "Deactivate/archive a branch (hard delete disabled; requires a reason, soft only)"
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *       - { in: query, name: reason, schema: { type: string }, description: "Reason (or send in the JSON body)" }
  *     responses:
- *       204: { description: Deleted }
+ *       200: { description: "Deactivated ({ archived: true }) — data preserved" }
+ *       400: { description: "Reason required (hard delete disabled)" }
  */
 superAdminRouter.patch("/branches/:id", async (req, res) => {
   const input = updateBranchSchema.parse(req.body);
   res.json(await service.updateBranch(uuidParam(req), input));
 });
 
+// Hard delete is disabled — deactivate (soft) with a reason, audited.
 superAdminRouter.delete("/branches/:id", async (req, res) => {
-  await service.removeBranch(uuidParam(req));
-  res.status(204).end();
+  const raw = (req.body as { reason?: unknown } | undefined)?.reason ?? req.query?.reason;
+  const reason = typeof raw === "string" ? raw.trim() : "";
+  if (!reason) {
+    throw ApiError.badRequest("Hard delete is disabled. Provide a 'reason' to deactivate/archive this branch instead.");
+  }
+  res.json(await service.archiveBranch(uuidParam(req), reason, actor(req)));
 });
 
 /**

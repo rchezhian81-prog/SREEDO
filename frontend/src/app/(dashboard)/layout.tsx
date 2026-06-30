@@ -104,7 +104,6 @@ const COLLEGE_NAV: NavItem[] = SCHOOL_NAV.flatMap((item) =>
 );
 
 const SUPER_ADMIN_NAV: NavItem[] = [
-  { href: "/super-admin", label: "Institutions", icon: "building" },
   { href: "/super-admin/platform", label: "Platform Overview", icon: "grid" },
   { href: "/super-admin/platform/tenants", label: "Tenants", icon: "building" },
   { href: "/super-admin/platform/audit", label: "Platform Audit", icon: "file" },
@@ -377,7 +376,7 @@ export default function DashboardLayout({
     // school dashboard. Keep each role on its own side.
     const inSuperArea = pathname.startsWith("/super-admin");
     if (user?.role === "super_admin" && !inSuperArea) {
-      router.replace("/super-admin");
+      router.replace("/super-admin/platform");
     } else if (user && user.role !== "super_admin" && inSuperArea) {
       router.replace("/dashboard");
     }

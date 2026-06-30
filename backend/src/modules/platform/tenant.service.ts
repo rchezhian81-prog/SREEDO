@@ -267,6 +267,7 @@ export async function getTenant(id: string) {
     tenantBilling(id),
     query<Record<string, unknown>>(
       `SELECT u.id, u.full_name AS "fullName", u.email, u.is_active AS "isActive",
+              u.totp_enabled AS "twoFactorEnabled",
               (SELECT max(rt.last_used_at) FROM refresh_tokens rt WHERE rt.user_id = u.id) AS "lastActiveAt"
        FROM users u WHERE u.institution_id = $1 AND u.role = 'admin' ORDER BY u.created_at ASC`,
       [id]
@@ -348,6 +349,9 @@ export async function createTenant(input: CreateTenant, actor: Actor) {
 export async function updateTenant(id: string, input: UpdateTenant, actor: Actor) {
   await assertTenant(id);
   const data = input as Record<string, unknown>;
+  // Capture the prior values of the changed fields for a before/after audit diff.
+  const beforeRow =
+    (await query<Record<string, unknown>>(`SELECT ${TENANT_COLS} FROM institutions i WHERE i.id = $1`, [id])).rows[0] ?? {};
   const sets: string[] = [];
   const params: unknown[] = [];
   for (const [field, col] of Object.entries(PROFILE_COL_MAP)) {
@@ -367,9 +371,13 @@ export async function updateTenant(id: string, input: UpdateTenant, actor: Actor
     params.push(id);
     await query(`UPDATE institutions SET ${sets.join(", ")} WHERE id = $${params.length}`, params);
   }
+  const diff: Record<string, { from: unknown; to: unknown }> = {};
+  for (const field of Object.keys(data)) {
+    if (field in beforeRow && beforeRow[field] !== data[field]) diff[field] = { from: beforeRow[field], to: data[field] };
+  }
   await recordAudit(actor, {
     action: "tenant.update", targetType: "institution", targetId: id, institutionId: id,
-    detail: { fields: Object.keys(data) },
+    detail: { fields: Object.keys(data), diff },
   });
   return getTenant(id);
 }
@@ -404,15 +412,22 @@ export async function setLifecycle(id: string, status: string, reason: string | 
 
 export async function updateSettings(id: string, input: SettingsInput, actor: Actor) {
   await assertTenant(id);
+  const before = (
+    (await query<{ settings: Record<string, unknown> }>(`SELECT settings FROM institutions WHERE id = $1`, [id])).rows[0]
+      ?.settings ?? {}
+  ) as Record<string, unknown>;
   // Shallow-merge each provided settings sub-object into institutions.settings.
   const { rows } = await query(
     `UPDATE institutions SET settings = COALESCE(settings,'{}'::jsonb) || $2::jsonb WHERE id = $1 RETURNING id`,
     [id, JSON.stringify(input)]
   );
   if (!rows[0]) throw ApiError.notFound("Institution not found");
+  const sections = Object.keys(input);
+  const diff: Record<string, { from: unknown; to: unknown }> = {};
+  for (const k of sections) diff[k] = { from: before[k], to: (input as Record<string, unknown>)[k] };
   await recordAudit(actor, {
     action: "tenant.settings_update", targetType: "institution", targetId: id, institutionId: id,
-    detail: { sections: Object.keys(input) },
+    detail: { sections, diff },
   });
   return getTenant(id);
 }
@@ -868,4 +883,59 @@ export async function exportTenantUsers(id: string) {
   ];
   const data = rows.map((r) => ({ ...r, isActive: r.isActive ? "yes" : "no" }));
   return { columns, rows: data };
+}
+
+// ---- Full tenant user directory (all roles, with filters) ----
+
+export async function listTenantUsers(id: string, filters: { role?: string; status?: string }) {
+  await assertTenant(id);
+  const where: string[] = ["u.institution_id = $1"];
+  const params: unknown[] = [id];
+  if (filters.role) {
+    params.push(filters.role);
+    where.push(`u.role = $${params.length}`);
+  }
+  if (filters.status === "active") where.push("u.is_active = true");
+  else if (filters.status === "disabled") where.push("u.is_active = false");
+  else if (filters.status === "locked") where.push("u.locked_until IS NOT NULL AND u.locked_until > now()");
+  const { rows } = await query(
+    `SELECT u.id, u.full_name AS "fullName", u.email, u.role, u.is_active AS "isActive",
+            u.totp_enabled AS "twoFactorEnabled",
+            (u.locked_until IS NOT NULL AND u.locked_until > now()) AS "locked",
+            (SELECT max(rt.last_used_at) FROM refresh_tokens rt WHERE rt.user_id = u.id) AS "lastActiveAt"
+     FROM users u WHERE ${where.join(" AND ")} ORDER BY u.role, u.full_name`,
+    params
+  );
+  return rows;
+}
+
+// ---- Reset a tenant admin's two-factor auth (audited; no secret exposed) ----
+
+export async function resetAdmin2fa(id: string, adminUserId: string, actor: Actor) {
+  await assertTenant(id);
+  const { rows } = await query<{ id: string }>(
+    `UPDATE users SET totp_enabled = false, totp_secret = NULL
+     WHERE id = $2 AND institution_id = $1 AND role = 'admin' RETURNING id`,
+    [id, adminUserId]
+  );
+  if (!rows[0]) throw ApiError.notFound("Tenant admin not found");
+  await recordAudit(actor, {
+    action: "tenant.admin_2fa_reset", targetType: "user", targetId: adminUserId, institutionId: id, detail: {},
+  });
+  return getTenant(id);
+}
+
+// ---- Bulk lifecycle (reuses setLifecycle: per-tenant reason guard + audit) ----
+
+export async function bulkLifecycle(ids: string[], status: string, reason: string | undefined, actor: Actor) {
+  const results: { id: string; ok: boolean; error?: string }[] = [];
+  for (const id of ids) {
+    try {
+      await setLifecycle(id, status, reason, actor);
+      results.push({ id, ok: true });
+    } catch (err) {
+      results.push({ id, ok: false, error: err instanceof ApiError ? err.message : "Action failed" });
+    }
+  }
+  return { status, requested: ids.length, succeeded: results.filter((r) => r.ok).length, results };
 }

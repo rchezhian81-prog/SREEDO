@@ -10,6 +10,7 @@ import { ApiError } from "../../utils/api-error";
 import * as tenants from "./tenant.service";
 import {
   brandingSchema,
+  bulkLifecycleSchema,
   complianceSchema,
   completeOnboardingSchema,
   createTenantSchema,
@@ -23,6 +24,7 @@ import {
   settingsSchema,
   tenantExportQuerySchema,
   tenantListQuerySchema,
+  tenantUsersQuerySchema,
   updateNoteSchema,
   updateTenantSchema,
 } from "./tenant.schema";
@@ -90,6 +92,16 @@ tenantRouter.get("/tenants/export", requirePermission("platform:read"), async (r
   const q = tenantExportQuerySchema.parse(req.query);
   const { columns, rows } = await tenants.exportTenants(q);
   sendSpreadsheet(res, q.format, "tenants", columns, rows);
+});
+
+/**
+ * @openapi
+ * /platform/tenants/bulk:
+ *   post: { tags: [Platform], summary: "Bulk lifecycle across selected tenants (each transition keeps its reason guard + audit)", security: [{ bearerAuth: [] }], responses: { 200: { description: "{ status, requested, succeeded, results }" } } }
+ */
+tenantRouter.post("/tenants/bulk", requirePermission("platform:manage_institutions"), async (req, res) => {
+  const { ids, status, reason } = bulkLifecycleSchema.parse(req.body);
+  res.json(await tenants.bulkLifecycle(ids, status, reason, actor(req)));
 });
 
 /**
@@ -224,6 +236,20 @@ tenantRouter.patch("/tenants/:id/branding", requirePermission("platform:manage_i
  */
 tenantRouter.post("/tenants/:id/admin/:userId/reset-link", requirePermission("platform:manage_institutions"), async (req, res) => {
   res.json(await tenants.sendAdminSetupLink(uuidParam(req), uuidParam(req, "userId"), actor(req)));
+});
+
+/**
+ * @openapi
+ * /platform/tenants/{id}/users:
+ *   get: { tags: [Platform], summary: "Full tenant user directory (filter by role + status)", security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }, { in: query, name: role, schema: { type: string } }, { in: query, name: status, schema: { type: string, enum: [active, disabled, locked] } }], responses: { 200: { description: Users } } }
+ * /platform/tenants/{id}/admin/{userId}/reset-2fa:
+ *   post: { tags: [Platform], summary: "Reset a tenant admin's two-factor auth (audited; no secret exposed)", security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }, { in: path, name: userId, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Tenant } } }
+ */
+tenantRouter.get("/tenants/:id/users", requirePermission("platform:read"), async (req, res) => {
+  res.json(await tenants.listTenantUsers(uuidParam(req), tenantUsersQuerySchema.parse(req.query)));
+});
+tenantRouter.post("/tenants/:id/admin/:userId/reset-2fa", requirePermission("platform:manage_institutions"), async (req, res) => {
+  res.json(await tenants.resetAdmin2fa(uuidParam(req), uuidParam(req, "userId"), actor(req)));
 });
 
 /**
