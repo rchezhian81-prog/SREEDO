@@ -28,6 +28,22 @@ const nextConfig = {
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
+  // HTTP-level redirects for retired routes. These must live here (not as a
+  // page-level redirect()) because the (dashboard) layout is a Client Component
+  // that doesn't render its children during server render — so a redirect() in a
+  // page under it never runs at build/SSR time and the route is served as a
+  // static 200 shell. Config redirects run at the routing layer before any
+  // layout/page renders, emitting a real 307. Legacy "institutions" tenant
+  // management was replaced by "tenants"; /super-admin home is the platform
+  // dashboard.
+  async redirects() {
+    return [
+      { source: "/super-admin", destination: "/super-admin/platform", permanent: false },
+      { source: "/super-admin/platform/institutions", destination: "/super-admin/platform/tenants", permanent: false },
+      { source: "/super-admin/platform/institutions/new", destination: "/super-admin/platform/tenants/new", permanent: false },
+      { source: "/super-admin/platform/institutions/:id", destination: "/super-admin/platform/tenants/:id", permanent: false },
+    ];
+  },
 };
 
 export default nextConfig;
