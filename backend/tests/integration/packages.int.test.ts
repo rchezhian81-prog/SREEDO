@@ -148,6 +148,39 @@ describe("super admin C: package / plan management", () => {
     expect(audit.rows.length).toBeGreaterThan(0);
   });
 
+  it("applies the same applicability guard + audited override on the platform tenant-assign path", async () => {
+    const inst = await request(app).post("/api/v1/institutions").set(auth(superToken)).send({ name: "School P", code: "SCHP", type: "school" });
+    const pkgId = (await createPkg({ name: "College Only P", status: "active", applicableTypes: ["college"] })).body.id;
+    const path = `/api/v1/platform/institutions/${inst.body.id}/subscription`;
+
+    const blocked = await request(app).post(path).set(auth(superToken)).send({ packageId: pkgId, status: "active" });
+    expect(blocked.status).toBe(400);
+
+    const ok = await request(app).post(path).set(auth(superToken)).send({ packageId: pkgId, status: "active", override: true, reason: "Pilot exception" });
+    expect(ok.status).toBe(201);
+    const audit = await query("SELECT 1 FROM platform_audit_log WHERE action = 'package.assign_override' AND target_id = $1", [pkgId]);
+    expect(audit.rows.length).toBeGreaterThan(0);
+  });
+
+  it("sets archived_at when a package is created directly as archived", async () => {
+    const id = (await createPkg({ name: "Born archived", status: "archived" })).body.id;
+    const row = await query<{ status: string; is_active: boolean; archived_at: string | null }>(
+      "SELECT status, is_active, archived_at FROM subscription_packages WHERE id = $1", [id]
+    );
+    expect(row.rows[0].status).toBe("archived");
+    expect(row.rows[0].is_active).toBe(false);
+    expect(row.rows[0].archived_at).not.toBeNull();
+  });
+
+  it("records sequential version numbers across create + edits (no duplicates)", async () => {
+    const id = (await createPkg({ name: "Versioned", price: 1 })).body.id; // v1 = created
+    await request(app).patch(`/api/v1/packages/${id}`).set(auth(superToken)).send({ price: 2 }); // v2
+    await request(app).patch(`/api/v1/packages/${id}`).set(auth(superToken)).send({ price: 3 }); // v3
+    const hist = await request(app).get(`/api/v1/packages/${id}/history`).set(auth(superToken));
+    const versions = hist.body.map((r: { versionNo: number }) => r.versionNo).sort((a: number, b: number) => a - b);
+    expect(versions).toEqual([1, 2, 3]);
+  });
+
   it("reports usage, impact and comparison", async () => {
     const inst = await request(app).post("/api/v1/institutions").set(auth(superToken)).send({ name: "Used", code: "USED", type: "college" });
     const a = (await createPkg({ name: "Plan A", price: 100, status: "active" })).body.id;
