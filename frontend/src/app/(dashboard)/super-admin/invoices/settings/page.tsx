@@ -183,7 +183,7 @@ export default function InvoiceSettingsPage() {
           <Field label="State">
             <Input value={form.supplierState} onChange={(e) => set("supplierState", e.target.value)} />
           </Field>
-          <Field label="State code">
+          <Field label="State code" hint="GST state code (e.g. 33 for Tamil Nadu). Drives the CGST/SGST vs IGST split on invoices.">
             <Input value={form.supplierStateCode} onChange={(e) => set("supplierStateCode", e.target.value)} />
           </Field>
           <Field label="Email">

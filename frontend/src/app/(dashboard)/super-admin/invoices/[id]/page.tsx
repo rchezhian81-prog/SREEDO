@@ -62,6 +62,13 @@ interface Invoice {
   subtotal: string;
   taxPercent: string;
   taxAmount: string;
+  cgstRate: string;
+  cgstAmount: string;
+  sgstRate: string;
+  sgstAmount: string;
+  igstRate: string;
+  igstAmount: string;
+  gstTreatment: string;
   total: string;
   discountAmount: string;
   couponCode: string | null;
@@ -150,6 +157,7 @@ export default function InvoiceDetailPage() {
     recipientState: "",
     recipientStateCode: "",
     reverseCharge: false,
+    gstTreatment: "registered",
   });
 
   const money = (v: string | number) => formatMoney(v, inv?.currency ?? "INR");
@@ -184,6 +192,7 @@ export default function InvoiceDetailPage() {
         recipientState: data.recipientState ?? "",
         recipientStateCode: data.recipientStateCode ?? "",
         reverseCharge: data.reverseCharge ?? false,
+        gstTreatment: data.gstTreatment ?? "registered",
       });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load invoice");
@@ -276,6 +285,7 @@ export default function InvoiceDetailPage() {
         recipientState: edit.recipientState || null,
         recipientStateCode: edit.recipientStateCode || null,
         reverseCharge: edit.reverseCharge,
+        gstTreatment: edit.gstTreatment || "registered",
       })
     );
 
@@ -449,6 +459,9 @@ export default function InvoiceDetailPage() {
           {inv.placeOfSupply && (
             <span className="text-xs text-muted">Place of supply: {inv.placeOfSupply}</span>
           )}
+          {inv.gstTreatment && inv.gstTreatment !== "registered" && (
+            <span className="text-xs text-muted">GST treatment: {inv.gstTreatment}</span>
+          )}
           {inv.reverseCharge && <span className="text-xs text-muted">Reverse charge</span>}
         </div>
         {inv.status === "void" && inv.voidReason && (
@@ -582,14 +595,35 @@ export default function InvoiceDetailPage() {
               <span>− {money(inv.discountAmount)}</span>
             </div>
           )}
-          <div className="flex justify-between text-muted">
-            <span>Tax ({Number(inv.taxPercent).toFixed(2)}%)</span>
-            <span>{money(inv.taxAmount)}</span>
-          </div>
+          {Number(inv.cgstAmount) > 0 || Number(inv.sgstAmount) > 0 ? (
+            <>
+              <div className="flex justify-between text-muted">
+                <span>CGST ({Number(inv.cgstRate).toFixed(2)}%){inv.reverseCharge ? " (RCM)" : ""}</span>
+                <span>{money(inv.cgstAmount)}</span>
+              </div>
+              <div className="flex justify-between text-muted">
+                <span>SGST ({Number(inv.sgstRate).toFixed(2)}%){inv.reverseCharge ? " (RCM)" : ""}</span>
+                <span>{money(inv.sgstAmount)}</span>
+              </div>
+            </>
+          ) : Number(inv.igstAmount) > 0 ? (
+            <div className="flex justify-between text-muted">
+              <span>IGST ({Number(inv.igstRate).toFixed(2)}%){inv.reverseCharge ? " (RCM)" : ""}</span>
+              <span>{money(inv.igstAmount)}</span>
+            </div>
+          ) : (
+            <div className="flex justify-between text-muted">
+              <span>Tax ({Number(inv.taxPercent).toFixed(2)}%)</span>
+              <span>{money(inv.taxAmount)}</span>
+            </div>
+          )}
           <div className="flex justify-between border-t border-line pt-1 font-semibold text-ink">
             <span>Total</span>
             <span>{money(inv.total)}</span>
           </div>
+          {inv.reverseCharge && (
+            <p className="text-xs text-amber-600">Tax payable by recipient under reverse charge (RCM)</p>
+          )}
         </div>
         {isDraft && (
           <div className="mt-4 ml-auto flex w-64 flex-wrap items-center gap-2 border-t border-line pt-3 text-sm">
@@ -704,7 +738,23 @@ export default function InvoiceDetailPage() {
                   onChange={(e) => setEdit({ ...edit, recipientStateCode: e.target.value })}
                 />
               </Field>
+              <Field label="GST treatment">
+                <Select
+                  value={edit.gstTreatment}
+                  onChange={(e) => setEdit({ ...edit, gstTreatment: e.target.value })}
+                >
+                  <option value="registered">Registered</option>
+                  <option value="unregistered">Unregistered</option>
+                  <option value="sez">SEZ</option>
+                  <option value="export">Export</option>
+                  <option value="composition">Composition</option>
+                </Select>
+              </Field>
             </div>
+            <p className="mt-2 text-xs text-faint">
+              CGST/SGST vs IGST is derived automatically from the supplier state (Invoice settings) and the
+              recipient state code above. Leave the recipient state code blank to keep a single combined tax line.
+            </p>
             <label className="mt-3 flex items-center gap-2 text-sm text-muted">
               <input
                 type="checkbox"

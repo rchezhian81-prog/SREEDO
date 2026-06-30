@@ -38,6 +38,10 @@ const INVOICE_COLS = `
   (i.status = 'issued' AND i.due_date IS NOT NULL AND i.due_date < CURRENT_DATE) AS "isOverdue",
   i.subtotal, i.tax_percent AS "taxPercent", i.tax_amount AS "taxAmount",
   i.discount_amount AS "discountAmount", i.coupon_id AS "couponId", i.coupon_code AS "couponCode",
+  i.cgst_rate AS "cgstRate", i.cgst_amount AS "cgstAmount",
+  i.sgst_rate AS "sgstRate", i.sgst_amount AS "sgstAmount",
+  i.igst_rate AS "igstRate", i.igst_amount AS "igstAmount",
+  i.gst_treatment AS "gstTreatment",
   i.round_off AS "roundOff", i.total,
   i.gstin, i.billing_name AS "billingName", i.billing_address AS "billingAddress",
   i.tax_notes AS "taxNotes", i.notes,
@@ -99,25 +103,56 @@ async function assertDraft(invoiceId: string, action: string): Promise<void> {
 }
 
 /**
- * Recompute subtotal/tax/total from the invoice's lines (NUMERIC math in SQL).
- * A coupon discount (if any) is applied PRE-TAX and capped at the subtotal, so the
- * taxable base = subtotal - discount. When discount_amount = 0 this is identical to
- * the original formula, so non-coupon invoices are unaffected.
+ * Recompute subtotal / discount / GST split / total from the invoice's lines
+ * (NUMERIC math in SQL). The flow:
+ *   taxable = subtotal - min(discount, subtotal)   (coupon discount is pre-tax)
+ *   GST split from supplier state (invoice_settings) vs recipient state (invoice):
+ *     same state  -> CGST + SGST (each tax_percent/2)
+ *     diff state  -> IGST (tax_percent)
+ *     unknown     -> legacy single tax bucket (preserves pre-GST behaviour)
+ *   reverse charge -> tax is shown for reference but NOT collected (total excludes it)
+ * When state is unknown and discount = 0, this is identical to the original formula,
+ * so existing / non-GST invoices are unaffected. Issued invoices are never recomputed.
  */
 async function recomputeTotals(invoiceId: string): Promise<void> {
   await query(
-    `UPDATE saas_invoices i SET
-       subtotal = c.subtotal,
-       discount_amount = least(i.discount_amount, c.subtotal),
-       tax_amount = round((c.subtotal - least(i.discount_amount, c.subtotal)) * i.tax_percent / 100, 2),
-       total = (c.subtotal - least(i.discount_amount, c.subtotal))
-               + round((c.subtotal - least(i.discount_amount, c.subtotal)) * i.tax_percent / 100, 2)
-               + i.round_off
-     FROM (
+    `WITH base AS (
        SELECT coalesce(sum(amount), 0)::numeric(12,2) AS subtotal
        FROM saas_invoice_lines WHERE invoice_id = $1
-     ) c
-     WHERE i.id = $1`,
+     ),
+     calc AS (
+       SELECT i.id, base.subtotal,
+         least(i.discount_amount, base.subtotal) AS discount,
+         (base.subtotal - least(i.discount_amount, base.subtotal)) AS taxable,
+         i.tax_percent, i.round_off, i.reverse_charge,
+         (s.supplier_state_code IS NOT NULL AND i.recipient_state_code IS NOT NULL
+           AND s.supplier_state_code = i.recipient_state_code) AS intra,
+         (s.supplier_state_code IS NOT NULL AND i.recipient_state_code IS NOT NULL
+           AND s.supplier_state_code <> i.recipient_state_code) AS inter,
+         (s.supplier_state_code IS NULL OR i.recipient_state_code IS NULL) AS unknown_state
+       FROM saas_invoices i CROSS JOIN base
+       LEFT JOIN invoice_settings s ON s.id = TRUE
+       WHERE i.id = $1
+     ),
+     g AS (
+       SELECT *,
+         CASE WHEN intra THEN round(taxable * (tax_percent / 2) / 100, 2) ELSE 0 END AS cgst,
+         CASE WHEN intra THEN round(taxable * (tax_percent / 2) / 100, 2) ELSE 0 END AS sgst,
+         CASE WHEN inter THEN round(taxable * tax_percent / 100, 2) ELSE 0 END AS igst,
+         CASE WHEN unknown_state THEN round(taxable * tax_percent / 100, 2) ELSE 0 END AS legacy
+       FROM calc
+     )
+     UPDATE saas_invoices i SET
+       subtotal = g.subtotal,
+       discount_amount = g.discount,
+       cgst_rate = CASE WHEN g.intra THEN g.tax_percent / 2 ELSE 0 END, cgst_amount = g.cgst,
+       sgst_rate = CASE WHEN g.intra THEN g.tax_percent / 2 ELSE 0 END, sgst_amount = g.sgst,
+       igst_rate = CASE WHEN g.inter THEN g.tax_percent ELSE 0 END, igst_amount = g.igst,
+       tax_amount = CASE WHEN g.reverse_charge THEN 0 ELSE g.cgst + g.sgst + g.igst + g.legacy END,
+       total = g.taxable
+               + CASE WHEN g.reverse_charge THEN 0 ELSE g.cgst + g.sgst + g.igst + g.legacy END
+               + g.round_off
+     FROM g WHERE i.id = g.id`,
     [invoiceId]
   );
 }
@@ -374,7 +409,10 @@ const LIST_REPORT_COLUMNS: ReportColumn[] = [
 /** Dispatch a report by type → { columns, rows, totals }. */
 export async function report(q: ReportQuery) {
   const base: InvoiceFilters = { from: q.from, to: q.to, institutionId: q.institutionId };
-  if (q.type === "by-institution" || q.type === "by-month" || q.type === "revenue" || q.type === "tax") {
+  if (
+    q.type === "by-institution" || q.type === "by-month" ||
+    q.type === "revenue" || q.type === "tax" || q.type === "gst"
+  ) {
     return groupedReport(q.type, base);
   }
   const { whereSql, params } = buildInvoiceFilters({
@@ -500,6 +538,49 @@ async function groupedReport(type: string, base: InvoiceFilters) {
       ] as ReportColumn[],
     };
   }
+  if (type === "gst") {
+    // GST summary (CGST/SGST/IGST split) per month over issued + paid invoices.
+    // Reverse-charge tax is the recipient's liability, so it is excluded from the
+    // supplier's collected-tax columns (matches tax_amount, which is 0 under RCM).
+    // Taxable value is net of any coupon discount (the base tax was computed on).
+    const gstWhere = whereSql
+      ? `${whereSql} AND i.status IN ('issued','paid')`
+      : `WHERE i.status IN ('issued','paid')`;
+    const gstCols = `count(*)::int AS count,
+      coalesce(sum(i.subtotal - least(i.discount_amount, i.subtotal)),0)::text AS "taxableValue",
+      coalesce(sum(i.cgst_amount) FILTER (WHERE NOT i.reverse_charge),0)::text AS "cgstAmount",
+      coalesce(sum(i.sgst_amount) FILTER (WHERE NOT i.reverse_charge),0)::text AS "sgstAmount",
+      coalesce(sum(i.igst_amount) FILTER (WHERE NOT i.reverse_charge),0)::text AS "igstAmount",
+      coalesce(sum(i.tax_amount),0)::text AS "taxAmount",
+      coalesce(sum(i.total),0)::text AS total`;
+    const rows = (
+      await query<Row>(
+        `SELECT to_char(date_trunc('month', i.created_at), 'YYYY-MM') AS month, ${gstCols}
+         FROM saas_invoices i JOIN institutions inst ON inst.id = i.institution_id
+         ${gstWhere} GROUP BY 1 ORDER BY 1 DESC`,
+        params
+      )
+    ).rows;
+    const totals = (
+      await query<Row>(
+        `SELECT ${gstCols} FROM saas_invoices i JOIN institutions inst ON inst.id = i.institution_id ${gstWhere}`,
+        params
+      )
+    ).rows[0];
+    return {
+      type, rows, totals,
+      columns: [
+        { key: "month", label: "Month" },
+        { key: "count", label: "Invoices", numeric: true },
+        { key: "taxableValue", label: "Taxable value", numeric: true },
+        { key: "cgstAmount", label: "CGST", numeric: true },
+        { key: "sgstAmount", label: "SGST", numeric: true },
+        { key: "igstAmount", label: "IGST", numeric: true },
+        { key: "taxAmount", label: "Total tax", numeric: true },
+        { key: "total", label: "Total", numeric: true },
+      ] as ReportColumn[],
+    };
+  }
   // tax summary (flat tax) over issued + paid
   const taxWhere = whereSql ? `${whereSql} AND i.status IN ('issued','paid')` : `WHERE i.status IN ('issued','paid')`;
   const taxCols = `count(*)::int AS count,
@@ -550,6 +631,9 @@ const EXPORT_COLUMNS: ReportColumn[] = [
   { key: "discount", label: "Discount", numeric: true },
   { key: "netTaxable", label: "Net taxable", numeric: true },
   { key: "taxPercent", label: "Tax %", numeric: true },
+  { key: "cgstAmount", label: "CGST amount", numeric: true },
+  { key: "sgstAmount", label: "SGST amount", numeric: true },
+  { key: "igstAmount", label: "IGST amount", numeric: true },
   { key: "taxAmount", label: "Tax amount", numeric: true },
   { key: "total", label: "Grand total", numeric: true },
   { key: "outstanding", label: "Outstanding", numeric: true },
@@ -594,6 +678,9 @@ export async function exportInvoices(q: ExportQuery) {
     discount: Number(r.discountAmount ?? 0),
     netTaxable: Number(r.subtotal) - Number(r.discountAmount ?? 0),
     taxPercent: Number(r.taxPercent),
+    cgstAmount: Number(r.cgstAmount ?? 0),
+    sgstAmount: Number(r.sgstAmount ?? 0),
+    igstAmount: Number(r.igstAmount ?? 0),
     taxAmount: Number(r.taxAmount),
     total: Number(r.total),
     outstanding: outstandingOf(r.status, r.total),
@@ -634,8 +721,8 @@ export async function createDraft(
          (institution_id, package_id, currency, period_start, period_end,
           payment_terms_days, due_date, tax_percent, gstin, billing_name,
           billing_address, tax_notes, notes, sac_code, place_of_supply,
-          reverse_charge, recipient_state, recipient_state_code, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
+          reverse_charge, recipient_state, recipient_state_code, gst_treatment, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING id`,
       [
         institutionId,
         input.packageId ?? null,
@@ -655,6 +742,7 @@ export async function createDraft(
         input.reverseCharge ?? false,
         input.recipientState ?? null,
         input.recipientStateCode ?? null,
+        input.gstTreatment ?? "registered",
         createdBy,
       ]
     );
@@ -693,6 +781,7 @@ const UPDATE_COLUMN_MAP: Record<string, string> = {
   reverseCharge: "reverse_charge",
   recipientState: "recipient_state",
   recipientStateCode: "recipient_state_code",
+  gstTreatment: "gst_treatment",
 };
 
 export async function updateDraft(invoiceId: string, input: UpdateInvoice) {
@@ -784,11 +873,11 @@ export async function duplicateInvoice(invoiceId: string, createdBy: string) {
          (institution_id, package_id, currency, period_start, period_end,
           payment_terms_days, due_date, tax_percent, gstin, billing_name,
           billing_address, tax_notes, notes, sac_code, place_of_supply,
-          reverse_charge, recipient_state, recipient_state_code, created_by)
+          reverse_charge, recipient_state, recipient_state_code, gst_treatment, created_by)
        SELECT institution_id, package_id, currency, period_start, period_end,
               payment_terms_days, NULL, tax_percent, gstin, billing_name,
               billing_address, tax_notes, notes, sac_code, place_of_supply,
-              reverse_charge, recipient_state, recipient_state_code, $2
+              reverse_charge, recipient_state, recipient_state_code, gst_treatment, $2
        FROM saas_invoices WHERE id = $1
        RETURNING id`,
       [invoiceId, createdBy]
@@ -1027,6 +1116,9 @@ export async function invoicePdfBuffer(invoiceId: string): Promise<Buffer> {
             i.subtotal::text AS subtotal, i.tax_percent::text AS "taxPercent",
             i.tax_amount::text AS "taxAmount", i.round_off::text AS "roundOff",
             i.discount_amount::text AS "discountAmount", i.coupon_code AS "couponCode",
+            i.cgst_rate::text AS "cgstRate", i.cgst_amount::text AS "cgstAmount",
+            i.sgst_rate::text AS "sgstRate", i.sgst_amount::text AS "sgstAmount",
+            i.igst_rate::text AS "igstRate", i.igst_amount::text AS "igstAmount",
             i.total::text AS total,
             i.sac_code AS "sacCode", i.place_of_supply AS "placeOfSupply",
             i.reverse_charge AS "reverseCharge",

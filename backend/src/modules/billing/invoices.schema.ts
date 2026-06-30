@@ -19,13 +19,14 @@ export const updateLineSchema = z
   })
   .refine((v) => Object.keys(v).length > 0, { message: "No fields to update" });
 
-// GST-readiness fields (stored + printed; flat tax calculation is unchanged).
+// GST fields (stored + printed; the CGST/SGST/IGST split is derived at recompute).
 const gstFields = {
   sacCode: z.string().max(20).optional(),
   placeOfSupply: z.string().max(100).optional(),
   reverseCharge: z.boolean().optional(),
   recipientState: z.string().max(100).optional(),
   recipientStateCode: z.string().max(4).optional(),
+  gstTreatment: z.enum(["registered", "unregistered", "sez", "export", "composition"]).optional(),
 };
 
 export const createInvoiceSchema = z.object({
@@ -68,6 +69,7 @@ export const updateInvoiceSchema = z
     reverseCharge: z.boolean().optional(),
     recipientState: z.string().max(100).nullable().optional(),
     recipientStateCode: z.string().max(4).nullable().optional(),
+    gstTreatment: z.enum(["registered", "unregistered", "sez", "export", "composition"]).optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: "No fields to update" });
 
@@ -177,7 +179,7 @@ export const reportQuerySchema = z.object({
   type: z
     .enum([
       "all", "paid", "unpaid", "overdue", "draft", "void",
-      "by-institution", "by-month", "revenue", "tax",
+      "by-institution", "by-month", "revenue", "tax", "gst",
     ])
     .default("all"),
   from: z.string().date().optional(),

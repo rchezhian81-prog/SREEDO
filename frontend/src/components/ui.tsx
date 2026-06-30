@@ -79,10 +79,12 @@ export const Textarea = forwardRef<
 export function Field({
   label,
   error,
+  hint,
   children,
 }: {
   label: string;
   error?: string;
+  hint?: string;
   children: ReactNode;
 }) {
   const generatedId = useId();
@@ -109,6 +111,9 @@ export function Field({
         {label}
       </label>
       {control}
+      {hint && !error && (
+        <span className="mt-1 block text-xs text-faint">{hint}</span>
+      )}
       {error && (
         <span id={errorId} className="mt-1 block text-xs text-red-500">
           {error}
