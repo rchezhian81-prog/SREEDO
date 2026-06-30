@@ -39,6 +39,7 @@ const REPORT_TYPES: { value: string; label: string }[] = [
   { value: "by-month", label: "Month-wise" },
   { value: "revenue", label: "Revenue summary" },
   { value: "tax", label: "Flat tax summary" },
+  { value: "gst", label: "GST summary (CGST/SGST/IGST)" },
 ];
 
 // Numeric columns that are money (formatted as currency) vs plain counts/percent.
@@ -113,7 +114,7 @@ export default function InvoiceReportsPage() {
     <>
       <PageHeader
         title="Invoice reports"
-        subtitle="Register, outstanding, overdue, collection, revenue and flat-tax summaries"
+        subtitle="Register, outstanding, overdue, collection, revenue, flat-tax and GST (CGST/SGST/IGST) summaries"
         action={
           <Button variant="secondary" onClick={() => router.push("/super-admin/invoices")}>
             ← Invoices

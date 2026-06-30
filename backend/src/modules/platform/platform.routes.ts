@@ -434,7 +434,7 @@ platformRouter.get("/invoices/summary", requirePermission("platform:read"), asyn
 /**
  * @openapi
  * /platform/invoices/reports:
- *   get: { tags: [Platform], summary: "Invoice reports (type + date/status/institution filters); JSON or CSV/XLSX export", security: [{ bearerAuth: [] }], parameters: [{ in: query, name: type, schema: { type: string, enum: [all, paid, unpaid, overdue, draft, void, by-institution, by-month, revenue, tax] } }, { in: query, name: from, schema: { type: string, format: date } }, { in: query, name: to, schema: { type: string, format: date } }, { in: query, name: institutionId, schema: { type: string, format: uuid } }, { in: query, name: format, schema: { type: string, enum: [json, csv, xlsx] } }], responses: { 200: { description: "Report { type, columns, rows, totals } or a spreadsheet download" } } }
+ *   get: { tags: [Platform], summary: "Invoice reports (type + date/status/institution filters); JSON or CSV/XLSX export", security: [{ bearerAuth: [] }], parameters: [{ in: query, name: type, schema: { type: string, enum: [all, paid, unpaid, overdue, draft, void, by-institution, by-month, revenue, tax, gst] } }, { in: query, name: from, schema: { type: string, format: date } }, { in: query, name: to, schema: { type: string, format: date } }, { in: query, name: institutionId, schema: { type: string, format: uuid } }, { in: query, name: format, schema: { type: string, enum: [json, csv, xlsx] } }], responses: { 200: { description: "Report { type, columns, rows, totals } or a spreadsheet download" } } }
  */
 platformRouter.get("/invoices/reports", requirePermission("platform:read"), async (req, res) => {
   const q = reportQuerySchema.parse(req.query);

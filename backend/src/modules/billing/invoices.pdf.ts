@@ -48,6 +48,12 @@ export interface InvoicePdfData {
   couponCode?: string | null;
   taxPercent: string | number;
   taxAmount: string | number;
+  cgstRate?: string | number;
+  cgstAmount?: string | number;
+  sgstRate?: string | number;
+  sgstAmount?: string | number;
+  igstRate?: string | number;
+  igstAmount?: string | number;
   roundOff?: string | number;
   total: string | number;
   sacCode?: string | null;
@@ -250,9 +256,20 @@ export function invoicePdf(data: InvoicePdfData): Promise<Buffer> {
     totalsRow("Subtotal", money(cur, data.subtotal));
     if (Number(data.discountAmount) > 0)
       totalsRow(`Discount${data.couponCode ? ` (${data.couponCode})` : ""}`, `- ${money(cur, data.discountAmount ?? 0)}`);
-    totalsRow(`Tax (${Number(data.taxPercent).toFixed(2)}%)`, money(cur, data.taxAmount));
+    const cg = Number(data.cgstAmount ?? 0), sg = Number(data.sgstAmount ?? 0), ig = Number(data.igstAmount ?? 0);
+    const rcm = data.reverseCharge ? " (RCM)" : "";
+    if (cg > 0 || sg > 0) {
+      totalsRow(`CGST (${Number(data.cgstRate ?? 0).toFixed(2)}%)${rcm}`, money(cur, data.cgstAmount ?? 0));
+      totalsRow(`SGST (${Number(data.sgstRate ?? 0).toFixed(2)}%)${rcm}`, money(cur, data.sgstAmount ?? 0));
+    } else if (ig > 0) {
+      totalsRow(`IGST (${Number(data.igstRate ?? 0).toFixed(2)}%)${rcm}`, money(cur, data.igstAmount ?? 0));
+    } else {
+      totalsRow(`Tax (${Number(data.taxPercent).toFixed(2)}%)`, money(cur, data.taxAmount));
+    }
     if (Number(data.roundOff) !== 0) totalsRow("Round off", money(cur, data.roundOff ?? 0));
     totalsRow("Total", money(cur, data.total), true);
+    if (data.reverseCharge)
+      doc.moveDown(0.3).fontSize(8).fillColor("#a00").text("Tax payable by recipient under reverse charge (RCM)", 330, doc.y, { width: 215 }).fillColor("#000");
 
     // Amount in words
     doc.moveDown(0.8);
