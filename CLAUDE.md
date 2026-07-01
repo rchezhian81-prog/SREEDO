@@ -47,12 +47,15 @@ is indexed in `docs/PLANNING_INDEX.md`.
   The VPS's `docker-compose.prod.yml` and `infra/` SSL files (certbot,
   `nginx/prod.conf`, `enable-https.sh`, `init-letsencrypt.sh`, `secure-admins.sh`)
   are **server-local — keep the VPS copy, do not overwrite with the repo's**.
-  Update procedure on the VPS: back up `docker-compose.prod.yml`, `git pull
-  --ff-only origin main`, restore it, then `up -d --build`. The backend runs
-  `runMigrations()` on boot (`src/server.ts`), so migrations apply automatically
-  on deploy. `deploy.yml` (GH Actions) auto-deploys only when
-  `vars.DEPLOY_ENABLED == 'true'` + `VPS_*` secrets are set (currently off →
-  manual deploy is used).
+  Update procedure on the VPS: run `bash scripts/deploy.sh` — it backs up the DB,
+  preserves the server-local `docker-compose.prod.yml` across a `git pull --ff-only
+  origin main`, rebuilds only backend+frontend, validates nginx before reload,
+  health-checks `/health`, and auto-rolls back the code on failure. The backend
+  runs `runMigrations()` on boot (`src/server.ts`), so migrations apply
+  automatically on deploy. `deploy.yml` (GH Actions) is a **manual one-click**
+  deploy (Actions → Deploy → Run workflow) that runs `scripts/deploy.sh` over SSH;
+  it fires only when `vars.DEPLOY_ENABLED == 'true'` + `VPS_*` secrets are set
+  (currently off).
 - **School vs College is structural, not cosmetic.** Pre-login `/select` sets a
   `mode` store (`sreedo-mode`). Institution `type` (DB) is the source of truth:
   the dashboard reconciles `mode` from `GET /auth/me` (`institutionType`). The

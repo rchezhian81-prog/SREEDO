@@ -1,23 +1,22 @@
 name: Deploy
 
-# Continuous deployment to the production VPS.
+# One-click MANUAL production deploy to the VPS.
 #
-# SAFETY: this workflow is OFF by default. The deploy job only runs when the repo
-# owner opts in by setting the repository variable DEPLOY_ENABLED to "true" AND
-# providing the VPS_* secrets below. Until then the job is skipped, so this file
-# never breaks CI on main.
+# SAFETY: OFF by default and MANUAL only — it never runs on push. It executes
+# solely from the Actions tab → "Deploy" → "Run workflow", and only when the repo
+# variable DEPLOY_ENABLED is "true" AND the VPS_* secrets are set. Until then the
+# job is skipped, so this file never affects CI.
 #
-# To enable (GitHub → Settings → Secrets and variables → Actions):
+# Enable (GitHub → Settings → Secrets and variables → Actions):
 #   Variables:  DEPLOY_ENABLED = true        (DEPLOY_PATH optional, default /opt/sreedo)
 #   Secrets:    VPS_HOST, VPS_USER, VPS_SSH_KEY   (VPS_PORT optional, default 22)
 #
-# It performs the same steps you'd run by hand: pull the latest main and rebuild
-# the stack with the production compose override (data volumes are preserved).
+# All deploy logic — DB backup, server-local override preservation, fast-forward
+# pull, selective rebuild, nginx validate + reload, health check, and auto-rollback
+# — lives in scripts/deploy.sh, so a CI deploy and a hand-run deploy are identical.
 
 on:
   workflow_dispatch: {}
-  push:
-    branches: [main]
 
 concurrency:
   group: deploy-production
@@ -29,24 +28,15 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ vars.DEPLOY_ENABLED == 'true' }}
     steps:
-      - name: Deploy over SSH
+      - name: Deploy over SSH (runs scripts/deploy.sh on the VPS)
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || '22' }}
+          command_timeout: "20m"
           script: |
             set -euo pipefail
             cd "${{ vars.DEPLOY_PATH || '/opt/sreedo' }}"
-            echo "▶ Pulling latest main…"
-            git fetch --all --prune
-            git checkout main
-            git pull --ff-only origin main
-            echo "▶ Rebuilding stack (production compose override; data volumes preserved)…"
-            COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
-            $COMPOSE pull || true            # refresh image-based services (db, nginx…)
-            $COMPOSE up -d --build
-            echo "▶ Status:"
-            $COMPOSE ps
-            echo "✔ Deploy complete."
+            bash scripts/deploy.sh
