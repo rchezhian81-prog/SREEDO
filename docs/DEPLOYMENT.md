@@ -263,8 +263,8 @@ docker compose up -d --build
 
 ### Automated deploy (optional CI/CD)
 
-`.github/workflows/deploy.yml` runs a **manual, one-click** deploy from
-*Actions → Deploy → Run workflow* — it does **not** auto-run on push. It SSHes to
+`.github/workflows/deploy.yml` **auto-deploys on every push/merge to `main`** (and
+can also be run manually from *Actions → Deploy → Run workflow*). It SSHes to
 the VPS and runs `scripts/deploy.sh`, which backs up the DB, fast-forward-pulls
 `main` (preserving the server-local `docker-compose.prod.yml`), rebuilds only
 backend+frontend, validates nginx config before reloading, health-checks
