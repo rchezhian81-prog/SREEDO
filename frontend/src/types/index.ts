@@ -1559,6 +1559,47 @@ export interface PlatformKpis {
 /** Platform-level health from GET /platform/health (mirrors SystemHealth). */
 export type PlatformHealth = SystemHealth;
 
+/** Subscription counts by lifecycle status (from GET /platform/revenue). */
+export interface PlatformRevenueByStatus {
+  active: number;
+  trialing: number;
+  suspended: number;
+  cancelled: number;
+  expired: number;
+}
+
+/** Per-currency revenue slice (money is never summed across currencies). */
+export interface PlatformRevenueByCurrency {
+  currency: string;
+  mrr: number;
+  arr: number;
+  activeSubscriptions: number;
+  deferredRevenue: number;
+}
+
+/** One point on the monthly invoice-total trend (YYYY-MM). */
+export interface PlatformRevenueTrendPoint {
+  month: string;
+  total: number;
+}
+
+/**
+ * SaaS-operator revenue report from GET /platform/revenue. Headline figures
+ * (mrr/arr/deferredRevenue) are in `currency` (the dominant currency);
+ * `mixedCurrency` warns when more than one currency is present.
+ */
+export interface PlatformRevenue {
+  currency: string;
+  mixedCurrency: boolean;
+  mrr: number;
+  arr: number;
+  byStatus: PlatformRevenueByStatus;
+  trialingCount: number;
+  deferredRevenue: number;
+  byCurrency: PlatformRevenueByCurrency[];
+  trend: PlatformRevenueTrendPoint[];
+}
+
 /** Institution row from GET /platform/institutions. */
 export interface PlatformInstitution {
   id: string;

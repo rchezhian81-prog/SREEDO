@@ -15,6 +15,7 @@ import {
   institutionExportQuerySchema,
   listInstitutionsQuerySchema,
   platformAuditQuerySchema,
+  revenueQuerySchema,
   roleParamSchema,
   setLimitsSchema,
   suspendSchema,
@@ -22,6 +23,7 @@ import {
   userSearchQuerySchema,
 } from "./platform.schema";
 import * as service from "./platform.service";
+import * as revenue from "./platform-revenue.service";
 import * as billing from "../billing/billing.service";
 import * as invoices from "../billing/invoices.service";
 import * as invoiceSettings from "../billing/invoice-settings.service";
@@ -131,6 +133,23 @@ function sendSpreadsheet(
  */
 platformRouter.get("/kpis", requirePermission("platform:usage_read"), async (_req, res) => {
   res.json(await service.platformKpis());
+});
+
+/**
+ * @openapi
+ * /platform/revenue:
+ *   get:
+ *     tags: [Platform]
+ *     summary: "SaaS-operator revenue report — MRR/ARR, subscription status mix, deferred (unrecognized) revenue, per-currency breakdown + monthly invoice trend. Money is never summed across currencies (headline uses the dominant currency; mixedCurrency flags otherwise)."
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: months, schema: { type: integer, minimum: 1, maximum: 24, default: 12 }, description: "Trend window length in months" }
+ *     responses:
+ *       200: { description: "{ currency, mixedCurrency, mrr, arr, byStatus, trialingCount, deferredRevenue, byCurrency, trend }" }
+ */
+platformRouter.get("/revenue", requirePermission("platform:read"), async (req, res) => {
+  const { months } = revenueQuerySchema.parse(req.query);
+  res.json(await revenue.platformRevenue(months));
 });
 
 /**
