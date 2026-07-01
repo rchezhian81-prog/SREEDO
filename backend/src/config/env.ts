@@ -150,6 +150,16 @@ export const env = {
   paymentCheckoutBaseUrl: optional("PAYMENT_CHECKOUT_BASE_URL"),
   paymentCurrency: process.env.PAYMENT_CURRENCY ?? "INR",
 
+  // Platform SaaS-invoice payment gateway (Razorpay) — Super Admin C-4. Optional
+  // env FALLBACK for the secrets when the singleton DB settings row leaves them
+  // blank (the super admin normally enters these in the masked settings UI).
+  // Nothing is hardcoded; when no key id/secret is configured the gateway is off
+  // and operators keep collecting SaaS invoices offline (mark-paid) as before.
+  razorpayKeyId: optional("RAZORPAY_KEY_ID"),
+  razorpayKeySecret: optional("RAZORPAY_KEY_SECRET"),
+  razorpayWebhookSecret: optional("RAZORPAY_WEBHOOK_SECRET"),
+  razorpayApiBase: process.env.RAZORPAY_API_BASE ?? "https://api.razorpay.com/v1",
+
   // API docs (Swagger) default off in production; override with ENABLE_API_DOCS.
   enableApiDocs:
     process.env.ENABLE_API_DOCS !== undefined

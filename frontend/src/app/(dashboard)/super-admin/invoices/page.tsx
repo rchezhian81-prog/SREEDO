@@ -369,11 +369,17 @@ export default function InvoicesPage() {
     <>
       <PageHeader
         title="Invoices"
-        subtitle="SaaS subscription invoices (gateway-free, offline payment) — super-admin"
+        subtitle="SaaS subscription invoices (offline or Razorpay online payment) — super-admin"
         action={
           <div className="flex gap-2">
             <Button variant="secondary" onClick={() => router.push("/super-admin/invoices/reports")}>
               Reports
+            </Button>
+            <Button variant="secondary" onClick={() => router.push("/super-admin/invoices/transactions")}>
+              Payments
+            </Button>
+            <Button variant="secondary" onClick={() => router.push("/super-admin/invoices/payment-gateway")}>
+              Gateway
             </Button>
             <Button variant="secondary" onClick={() => router.push("/super-admin/invoices/settings")}>
               Settings

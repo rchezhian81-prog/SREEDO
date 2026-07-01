@@ -67,6 +67,7 @@ import {
 } from "./modules/pdfs/pdfs.routes";
 import { payrollRouter } from "./modules/payroll/payroll.routes";
 import { couponsRouter } from "./modules/billing/coupons.routes";
+import { saasPaymentsWebhookRouter } from "./modules/saaspayments/saaspayments.routes";
 import { platformRouter } from "./modules/platform/platform.routes";
 import { platformSettingsRouter } from "./modules/platform/platform-settings.routes";
 import { tenantRouter } from "./modules/platform/tenant.routes";
@@ -230,6 +231,11 @@ export function createApp(): express.Express {
   // reachable by any signed-in user) and falls through unmatched paths to the
   // super-admin-guarded routers below.
   api.use("/platform", platformSettingsRouter); // global platform settings + feature flags
+  // PUBLIC Razorpay webhook for SaaS-invoice payments — mounted BEFORE the
+  // super-admin-guarded routers (it matches only /platform/payments/webhook, so
+  // all other /platform paths fall through). Signature + idempotency are enforced
+  // in the service, so no auth middleware applies to the webhook itself.
+  api.use("/platform", saasPaymentsWebhookRouter);
   api.use("/platform", platformRouter); // super-admin platform hardening
   api.use("/platform", couponsRouter); // super-admin coupon / promotion management
   api.use("/platform", tenantRouter); // super-admin tenant/institution management

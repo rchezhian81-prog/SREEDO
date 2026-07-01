@@ -103,6 +103,16 @@ interface Note {
   reason: string | null;
   createdAt: string;
 }
+interface PaymentTxn {
+  id: string;
+  status: string;
+  amount: string;
+  currency: string;
+  paymentLinkUrl: string | null;
+  gatewayOrderId: string | null;
+  gatewayPaymentId: string | null;
+  createdAt: string;
+}
 
 type Tone = "slate" | "green" | "amber" | "red" | "blue";
 const statusTone = (s: string): Tone =>
@@ -131,6 +141,8 @@ export default function InvoiceDetailPage() {
   const [editingLine, setEditingLine] = useState<LineDraft | null>(null);
   const [payMethod, setPayMethod] = useState("bank_transfer");
   const [payRef, setPayRef] = useState("");
+  const [gatewayEnabled, setGatewayEnabled] = useState(false);
+  const [txn, setTxn] = useState<PaymentTxn | null>(null);
 
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
@@ -166,14 +178,20 @@ export default function InvoiceDetailPage() {
     setLoading(true);
     setError(null);
     try {
-      const [data, auditRows, noteRows] = await Promise.all([
+      const [data, auditRows, noteRows, gateway, txns] = await Promise.all([
         api.get<Invoice>(`/platform/invoices/${id}`),
         api.get<AuditEvent[]>(`/platform/invoices/${id}/audit`).catch(() => []),
         api.get<Note[]>(`/platform/invoices/${id}/notes`).catch(() => []),
+        api.get<{ enabled: boolean }>(`/platform/payment-gateway`).catch(() => ({ enabled: false })),
+        api
+          .get<{ rows: PaymentTxn[] }>(`/platform/payment-transactions?invoiceId=${id}`)
+          .catch(() => ({ rows: [] as PaymentTxn[] })),
       ]);
       setInv(data);
       setAudit(auditRows);
       setNotes(noteRows);
+      setGatewayEnabled(!!gateway.enabled);
+      setTxn(txns.rows[0] ?? null);
       setEdit({
         currency: data.currency ?? "",
         taxPercent: String(Number(data.taxPercent) || 0),
@@ -298,6 +316,13 @@ export default function InvoiceDetailPage() {
         reference: payRef || undefined,
       })
     );
+
+  // Generate (or reuse) a Razorpay payment link for this issued invoice. The
+  // webhook marks it paid once the customer pays; we just surface the link here.
+  const generatePayLink = () =>
+    act(async () => {
+      await api.post(`/platform/invoices/${id}/payment-link`);
+    });
 
   const resend = () =>
     act(async () => {
@@ -865,6 +890,35 @@ export default function InvoiceDetailPage() {
               Void
             </Button>
           </div>
+        </Card>
+      )}
+
+      {((inv.status === "issued" && gatewayEnabled) || txn) && (
+        <Card className="mb-4">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-sm font-medium text-ink">Online payment (Razorpay)</p>
+            {txn && <Badge tone={txn.status === "paid" ? "green" : "amber"}>{txn.status}</Badge>}
+          </div>
+          {txn?.paymentLinkUrl ? (
+            <p className="text-sm text-muted">
+              Payment link:{" "}
+              <a href={txn.paymentLinkUrl} target="_blank" rel="noreferrer" className="text-brand-600 underline">
+                {txn.paymentLinkUrl}
+              </a>
+            </p>
+          ) : (
+            <p className="text-sm text-muted">No payment link yet.</p>
+          )}
+          {txn?.gatewayPaymentId && (
+            <p className="mt-1 text-xs text-faint">Gateway payment id: {txn.gatewayPaymentId}</p>
+          )}
+          {inv.status === "issued" && gatewayEnabled && (
+            <div className="mt-3">
+              <Button variant="secondary" onClick={generatePayLink} disabled={busy}>
+                {txn?.paymentLinkUrl ? "Regenerate payment link" : "Generate payment link"}
+              </Button>
+            </div>
+          )}
         </Card>
       )}
 
