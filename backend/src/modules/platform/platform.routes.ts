@@ -43,7 +43,9 @@ import {
 } from "../billing/invoices.schema";
 import { applyCouponSchema } from "../billing/coupons.schema";
 import * as saasPayments from "../saaspayments/saaspayments.service";
+import * as recurring from "../saaspayments/recurring.service";
 import {
+  autoChargeToggleSchema,
   gatewaySettingsSchema,
   transactionsQuerySchema,
 } from "../saaspayments/saaspayments.schema";
@@ -301,6 +303,24 @@ platformRouter.post("/institutions/:id/subscription", requirePermission("platfor
 
 /**
  * @openapi
+ * /platform/institutions/{id}/subscription/auto-charge:
+ *   post:
+ *     tags: [Platform]
+ *     summary: "Enrol/withdraw a tenant's latest subscription from online recurring auto-charge (B4). Audited. Actual charging still requires the gateway master switch + configuration."
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     requestBody: { required: true, content: { application/json: { schema: { type: object, required: [autoCharge], properties: { autoCharge: { type: boolean } } } } } }
+ *     responses:
+ *       200: { description: "{ subscriptionId, autoCharge }" }
+ *       404: { description: "No subscription for this institution" }
+ */
+platformRouter.post("/institutions/:id/subscription/auto-charge", requirePermission("platform:manage_subscriptions"), async (req, res) => {
+  const { autoCharge } = autoChargeToggleSchema.parse(req.body);
+  res.json(await recurring.setAutoCharge(uuidParam(req), autoCharge, actor(req)));
+});
+
+/**
+ * @openapi
  * /platform/institutions/{id}/limits:
  *   patch: { tags: [Platform], summary: Set per-institution feature limits (audited), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Updated limits } } }
  */
@@ -397,6 +417,23 @@ platformRouter.post("/email/test", requirePermission("platform:health_read"), as
 platformRouter.post("/subscriptions/run-lifecycle", requirePermission("platform:manage_subscriptions"), async (req, res) => {
   const a = actor(req);
   res.json(await billing.sweepSubscriptionLifecycle({ id: a.id, email: a.email }));
+});
+
+/**
+ * @openapi
+ * /platform/subscriptions/run-recurring:
+ *   post:
+ *     tags: [Platform]
+ *     summary: "Run one online recurring-billing + dunning tick (B4). Generates/issues/links due renewal invoices and advances the dunning retry schedule. No-op (enabled:false) unless auto-charge is switched on AND the gateway is configured. Audited."
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "Summary { enabled, renewalsGenerated, dunningRetried, dunningExhausted, suspended, ranAt }" }
+ */
+platformRouter.post("/subscriptions/run-recurring", requirePermission("platform:manage_subscriptions"), async (req, res) => {
+  const a = actor(req);
+  const summary = await recurring.runRecurringBilling({ id: a.id, email: a.email });
+  await invoiceAudit(req, "subscription.run_recurring", null, null, { ...summary }, "subscription");
+  res.json(summary);
 });
 
 /**

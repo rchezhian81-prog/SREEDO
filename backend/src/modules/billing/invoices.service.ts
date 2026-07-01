@@ -711,7 +711,7 @@ async function insertLine(
 export async function createDraft(
   institutionId: string,
   input: CreateInvoice,
-  createdBy: string
+  createdBy: string | null
 ) {
   await assertInstitution(institutionId);
   const settings = await getSettings();

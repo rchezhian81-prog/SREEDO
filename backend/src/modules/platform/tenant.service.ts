@@ -199,8 +199,14 @@ export async function tenantBilling(id: string) {
     [id]
   );
   const sub = await query<Record<string, unknown>>(
-    `SELECT p.name AS "packageName", s.status, p.billing_cycle AS "billingCycle",
-            to_char(s.starts_at,'YYYY-MM-DD') AS "startsAt", to_char(s.ends_at,'YYYY-MM-DD') AS "endsAt"
+    `SELECT s.id, p.name AS "packageName", s.status, p.billing_cycle AS "billingCycle",
+            to_char(s.starts_at,'YYYY-MM-DD') AS "startsAt", to_char(s.ends_at,'YYYY-MM-DD') AS "endsAt",
+            to_char(s.renews_at,'YYYY-MM-DD') AS "renewsAt",
+            s.auto_renew AS "autoRenew", s.auto_charge AS "autoCharge",
+            s.dunning_state AS "dunningState", s.dunning_attempts AS "dunningAttempts",
+            to_char(s.next_retry_at,'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "nextRetryAt",
+            to_char(s.last_charge_at,'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "lastChargeAt",
+            s.last_payment_error AS "lastPaymentError"
      FROM institution_subscriptions s JOIN subscription_packages p ON p.id = s.package_id
      WHERE s.institution_id = $1 ORDER BY s.created_at DESC LIMIT 1`,
     [id]

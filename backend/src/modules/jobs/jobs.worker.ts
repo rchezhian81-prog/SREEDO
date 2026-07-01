@@ -9,6 +9,7 @@ import {
 import { enqueueDueScheduledBackups, runScheduledBackup } from "../backups/backups.service";
 import { runWebhookDeliveryJob } from "../integrations/webhooks.delivery";
 import { sweepSubscriptionLifecycle } from "../billing/billing.service";
+import { runRecurringBilling } from "../saaspayments/recurring.service";
 import { runSchedulerTick } from "./jobs.service";
 
 interface ClaimedJob {
@@ -174,6 +175,9 @@ export function startWorker(): void {
         await runSchedulerTick(null);
         await enqueueDueScheduledBackups();
         await sweepSubscriptionLifecycle();
+        // Online recurring billing + dunning (B4). A clean no-op unless the
+        // operator enabled auto-charge AND the gateway is configured.
+        await runRecurringBilling();
         await processDueJobs({ limit: 50 });
       } catch (err) {
         console.error("job worker tick failed:", err);
