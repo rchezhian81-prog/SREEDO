@@ -586,6 +586,34 @@ function SubscriptionTab({ t, busy, onChanged, setNotice, setError }: { t: Tenan
     } catch (err) { setError(err instanceof ApiError ? err.message : "Failed to create invoice"); }
     finally { setSaving(false); }
   };
+  const sub = b.subscription;
+  const dunningState = sub ? String(sub.dunningState ?? "none") : "none";
+  const dunningTone = dunningState === "exhausted" ? "red" : dunningState === "retrying" ? "amber" : "slate";
+  const autoCharge = !!sub?.autoCharge;
+  const toggleAutoCharge = async () => {
+    setSaving(true); setError(null); setNotice(null);
+    try {
+      await api.post(`/platform/institutions/${t.id}/subscription/auto-charge`, { autoCharge: !autoCharge });
+      setNotice(`Auto-charge ${!autoCharge ? "enabled" : "disabled"} for this tenant.`); onChanged();
+    } catch (err) { setError(err instanceof ApiError ? err.message : "Failed to toggle auto-charge"); }
+    finally { setSaving(false); }
+  };
+  const runRecurring = async () => {
+    setSaving(true); setError(null); setNotice(null);
+    try {
+      const r = await api.post<{ enabled: boolean; renewalsGenerated: number; dunningRetried: number; dunningExhausted: number; suspended: number }>(
+        "/platform/subscriptions/run-recurring", {}
+      );
+      setNotice(
+        r.enabled
+          ? `Recurring tick: ${r.renewalsGenerated} renewal(s), ${r.dunningRetried} retried, ${r.dunningExhausted} exhausted, ${r.suspended} suspended.`
+          : "Recurring auto-charge is off (enable it + configure the gateway in Payment gateway settings)."
+      );
+      onChanged();
+    } catch (err) { setError(err instanceof ApiError ? err.message : "Failed to run recurring tick"); }
+    finally { setSaving(false); }
+  };
+  const dt = (v: unknown) => (v ? new Date(String(v)).toLocaleString() : "—");
   return (
     <div className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-4">
@@ -596,13 +624,40 @@ function SubscriptionTab({ t, busy, onChanged, setNotice, setError }: { t: Tenan
       </div>
       <Card>
         <p className="mb-2 text-sm font-medium text-slate-700">Current subscription</p>
-        {b.subscription ? (
+        {sub ? (
           <div className="text-sm text-slate-600">
-            {String(b.subscription.packageName)} · <Badge tone="blue">{String(b.subscription.status)}</Badge> · {String(b.subscription.billingCycle)}
-            {b.subscription.endsAt ? ` · renews/ends ${String(b.subscription.endsAt)}` : ""}
+            {String(sub.packageName)} · <Badge tone="blue">{String(sub.status)}</Badge> · {String(sub.billingCycle)}
+            {sub.endsAt ? ` · renews/ends ${String(sub.renewsAt ?? sub.endsAt)}` : ""}
           </div>
         ) : <p className="text-sm text-slate-400">No subscription assigned.</p>}
       </Card>
+      {sub && (
+        <Card>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-medium text-slate-700">Recurring billing &amp; dunning</p>
+            <Badge tone={dunningTone}>dunning: {dunningState}</Badge>
+          </div>
+          <div className="grid gap-3 text-sm text-slate-600 sm:grid-cols-2">
+            <div className="flex items-center justify-between gap-2 rounded-lg border border-slate-100 px-3 py-2">
+              <span>Auto-charge renewals</span>
+              <label className="flex items-center gap-2 font-medium">
+                <input type="checkbox" className="h-4 w-4 rounded border-slate-300" checked={autoCharge} disabled={saving || busy} onChange={toggleAutoCharge} />
+                {autoCharge ? "On" : "Off"}
+              </label>
+            </div>
+            <div className="rounded-lg border border-slate-100 px-3 py-2">Attempts: <span className="font-medium">{String(sub.dunningAttempts ?? 0)}</span></div>
+            <div className="rounded-lg border border-slate-100 px-3 py-2">Next retry: <span className="font-medium">{dt(sub.nextRetryAt)}</span></div>
+            <div className="rounded-lg border border-slate-100 px-3 py-2">Last charge: <span className="font-medium">{dt(sub.lastChargeAt)}</span></div>
+          </div>
+          {sub.lastPaymentError ? (
+            <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">Last payment error: {String(sub.lastPaymentError)}</p>
+          ) : null}
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <Button variant="secondary" disabled={saving || busy} onClick={runRecurring}>Run recurring now</Button>
+            <span className="text-xs text-slate-400">Auto-charge + dunning are off unless enabled in <Link href="/super-admin/invoices/payment-gateway" className="font-medium text-brand-600 hover:text-brand-700">Payment gateway settings</Link> and the gateway is configured.</span>
+          </div>
+        </Card>
+      )}
       <Card>
         <p className="mb-2 text-sm font-medium text-slate-700">Assign / change package</p>
         <div className="grid grid-cols-3 gap-3">

@@ -12,7 +12,8 @@ import {
   PageHeader,
   Spinner,
 } from "@/components/ui";
-import type { PlatformHealth, PlatformKpis } from "@/types";
+import type { PlatformHealth, PlatformKpis, PlatformRevenue } from "@/types";
+import { formatMoney } from "@/lib/format";
 import { usePlatformGuard } from "./_guard";
 import { formatBytes, formatNumber, formatUptime } from "./_utils";
 
@@ -75,6 +76,7 @@ export default function PlatformDashboardPage() {
   const [kpis, setKpis] = useState<PlatformKpis | null>(null);
   const [health, setHealth] = useState<PlatformHealth | null>(null);
   const [email, setEmail] = useState<EmailStatus | null>(null);
+  const [revenue, setRevenue] = useState<PlatformRevenue | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshedAt, setRefreshedAt] = useState<Date | null>(null);
@@ -87,14 +89,16 @@ export default function PlatformDashboardPage() {
     setLoading(true);
     setError(null);
     try {
-      const [k, h, e] = await Promise.all([
+      const [k, h, e, r] = await Promise.all([
         api.get<PlatformKpis>("/platform/kpis"),
         api.get<PlatformHealth>("/platform/health").catch(() => null),
         api.get<EmailStatus>("/platform/email/status").catch(() => null),
+        api.get<PlatformRevenue>("/platform/revenue").catch(() => null),
       ]);
       setKpis(k);
       setHealth(h);
       setEmail(e);
+      setRevenue(r);
       setRefreshedAt(new Date());
     } catch (err) {
       setKpis(null);
@@ -177,6 +181,7 @@ export default function PlatformDashboardPage() {
         <Link href="/super-admin/invoices"><Button variant="secondary">Invoices</Button></Link>
         <Link href="/super-admin/packages"><Button variant="secondary">Packages</Button></Link>
         <Link href="/super-admin/subscriptions"><Button variant="secondary">Subscriptions</Button></Link>
+        <Link href="/super-admin/revenue"><Button variant="secondary">Revenue</Button></Link>
         <Link href="/super-admin/platform/audit"><Button variant="secondary">Audit</Button></Link>
         <Link href="/super-admin/platform/support"><Button variant="secondary">Support</Button></Link>
         <Link href="/super-admin/backups"><Button variant="secondary">Backups</Button></Link>
@@ -290,6 +295,42 @@ export default function PlatformDashboardPage() {
             <KpiCard label="Scheduled reports" value={formatNumber(kpis.scheduledReports)} />
             <KpiCard label="Custom reports" value={formatNumber(kpis.customReports)} />
           </div>
+
+          {/* Revenue (SaaS operator) */}
+          {revenue && (
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                  Revenue
+                </h2>
+                <Link
+                  href="/super-admin/revenue"
+                  className="text-xs font-medium text-brand-600 hover:underline"
+                >
+                  View report →
+                </Link>
+              </div>
+              {revenue.mixedCurrency && (
+                <p className="mb-3 text-xs text-amber-600">
+                  Multiple currencies — headline shown in {revenue.currency}.
+                </p>
+              )}
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <KpiCard label="MRR" value={formatMoney(revenue.mrr, revenue.currency)} />
+                <KpiCard label="ARR" value={formatMoney(revenue.arr, revenue.currency)} />
+                <KpiCard
+                  label="Deferred revenue"
+                  value={formatMoney(revenue.deferredRevenue, revenue.currency)}
+                />
+                <KpiCard
+                  label="Active / trialing"
+                  value={`${formatNumber(revenue.byStatus.active)} / ${formatNumber(
+                    revenue.trialingCount
+                  )}`}
+                />
+              </div>
+            </div>
+          )}
 
           {/* Module adoption */}
           <div>

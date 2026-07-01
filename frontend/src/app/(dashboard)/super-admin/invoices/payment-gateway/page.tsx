@@ -28,6 +28,13 @@ interface GatewaySettings {
   keySecretSource: "db" | "env" | null;
   webhookSecretSource: "db" | "env" | null;
   configured: boolean;
+  // B4 recurring & dunning policy.
+  autoChargeEnabled: boolean;
+  dunningMaxAttempts: number;
+  dunningRetryIntervalDays: number;
+  suspendOnDunningExhausted: boolean;
+  renewalLeadDays: number;
+  recurringActive: boolean;
 }
 
 export default function PaymentGatewayPage() {
@@ -44,6 +51,12 @@ export default function PaymentGatewayPage() {
   const [keySecret, setKeySecret] = useState("");
   const [webhookSecret, setWebhookSecret] = useState("");
   const [currency, setCurrency] = useState("INR");
+  // B4 recurring & dunning policy (OFF by default).
+  const [autoChargeEnabled, setAutoChargeEnabled] = useState(false);
+  const [dunningMaxAttempts, setDunningMaxAttempts] = useState("3");
+  const [dunningRetryIntervalDays, setDunningRetryIntervalDays] = useState("3");
+  const [suspendOnExhausted, setSuspendOnExhausted] = useState(true);
+  const [renewalLeadDays, setRenewalLeadDays] = useState("0");
 
   const apply = (s: GatewaySettings) => {
     setData(s);
@@ -52,6 +65,11 @@ export default function PaymentGatewayPage() {
     setCurrency(s.defaultCurrency ?? "INR");
     setKeySecret("");
     setWebhookSecret("");
+    setAutoChargeEnabled(s.autoChargeEnabled);
+    setDunningMaxAttempts(String(s.dunningMaxAttempts));
+    setDunningRetryIntervalDays(String(s.dunningRetryIntervalDays));
+    setSuspendOnExhausted(s.suspendOnDunningExhausted);
+    setRenewalLeadDays(String(s.renewalLeadDays));
   };
 
   useEffect(() => {
@@ -79,6 +97,12 @@ export default function PaymentGatewayPage() {
         // Blank = keep the stored secret (backend ignores empty secrets).
         keySecret: keySecret,
         webhookSecret: webhookSecret,
+        // B4 recurring & dunning policy.
+        autoChargeEnabled,
+        dunningMaxAttempts: Number(dunningMaxAttempts),
+        dunningRetryIntervalDays: Number(dunningRetryIntervalDays),
+        suspendOnDunningExhausted: suspendOnExhausted,
+        renewalLeadDays: Number(renewalLeadDays),
       });
       apply(updated);
       setNotice("Payment gateway settings saved.");
@@ -118,6 +142,9 @@ export default function PaymentGatewayPage() {
           {data.configured ? "Configured" : "Not configured"}
         </Badge>
         <Badge tone={data.enabled ? "green" : "slate"}>{data.enabled ? "Enabled" : "Disabled"}</Badge>
+        <Badge tone={data.recurringActive ? "green" : "slate"}>
+          {data.recurringActive ? "Recurring active" : "Recurring off"}
+        </Badge>
         <span className="text-xs text-muted">Provider: {data.provider}</span>
         {data.updatedAt && (
           <span className="text-xs text-faint">
@@ -178,6 +205,73 @@ export default function PaymentGatewayPage() {
         <div className="mt-4">
           <Button onClick={save} disabled={saving}>
             {saving ? "Saving…" : "Save gateway settings"}
+          </Button>
+        </div>
+      </Card>
+
+      <Card className="mb-4">
+        <div className="mb-1 flex flex-wrap items-center gap-2">
+          <p className="text-sm font-medium text-ink">Recurring &amp; dunning</p>
+          <Badge tone={data.recurringActive ? "green" : "slate"}>
+            {data.recurringActive ? "Active" : "Off"}
+          </Badge>
+        </div>
+        <p className="mb-3 text-xs text-faint">
+          Off by default. Auto-charge and dunning only run when this master switch is on{" "}
+          <strong>and</strong> the gateway above is enabled + configured. Renewals are charged only
+          for tenants whose subscription has auto-renew and auto-charge turned on. Nothing is charged
+          or suspended until you opt in.
+        </p>
+        <label className="mb-3 flex items-center gap-2 text-sm text-muted">
+          <input
+            type="checkbox"
+            checked={autoChargeEnabled}
+            onChange={(e) => setAutoChargeEnabled(e.target.checked)}
+            className="h-4 w-4 rounded border-line"
+          />
+          Enable online recurring auto-charge &amp; dunning (master switch)
+        </label>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <Field label="Dunning max attempts" hint="1–10 retries before giving up">
+            <Input
+              type="number"
+              min={1}
+              max={10}
+              value={dunningMaxAttempts}
+              onChange={(e) => setDunningMaxAttempts(e.target.value)}
+            />
+          </Field>
+          <Field label="Retry interval (days)" hint="1–30 days between retries">
+            <Input
+              type="number"
+              min={1}
+              max={30}
+              value={dunningRetryIntervalDays}
+              onChange={(e) => setDunningRetryIntervalDays(e.target.value)}
+            />
+          </Field>
+          <Field label="Renewal lead (days)" hint="0–30; how early to raise the renewal invoice">
+            <Input
+              type="number"
+              min={0}
+              max={30}
+              value={renewalLeadDays}
+              onChange={(e) => setRenewalLeadDays(e.target.value)}
+            />
+          </Field>
+        </div>
+        <label className="mt-3 flex items-center gap-2 text-sm text-muted">
+          <input
+            type="checkbox"
+            checked={suspendOnExhausted}
+            onChange={(e) => setSuspendOnExhausted(e.target.checked)}
+            className="h-4 w-4 rounded border-line"
+          />
+          Suspend the tenant when dunning is exhausted (reversible; data is retained)
+        </label>
+        <div className="mt-4">
+          <Button onClick={save} disabled={saving}>
+            {saving ? "Saving…" : "Save recurring & dunning"}
           </Button>
         </div>
       </Card>

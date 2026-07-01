@@ -279,6 +279,13 @@ export interface SubscriptionStatus {
   autoRenew: boolean;
   packageName: string | null;
   isActiveNow: boolean;
+  // B4 recurring/dunning state (safe to expose; no secrets).
+  autoCharge: boolean;
+  dunningState: string;
+  dunningAttempts: number;
+  nextRetryAt: string | null;
+  lastChargeAt: string | null;
+  lastPaymentError: string | null;
 }
 
 /** Current subscription + a computed `isActiveNow` (honours grace). */
@@ -293,6 +300,12 @@ export async function subscriptionStatus(
             to_char(s.trial_ends_at, 'YYYY-MM-DD') AS "trialEndsAt",
             to_char(s.renews_at, 'YYYY-MM-DD') AS "renewsAt",
             s.auto_renew AS "autoRenew",
+            s.auto_charge AS "autoCharge",
+            s.dunning_state AS "dunningState",
+            s.dunning_attempts AS "dunningAttempts",
+            to_char(s.next_retry_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "nextRetryAt",
+            to_char(s.last_charge_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "lastChargeAt",
+            s.last_payment_error AS "lastPaymentError",
             p.name AS "packageName",
             (s.status IN ('active','trialing')
               AND (s.ends_at IS NULL

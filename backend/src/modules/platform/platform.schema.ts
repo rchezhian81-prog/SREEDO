@@ -115,3 +115,10 @@ export const grantPermissionSchema = z.object({
   reason: z.string().max(500).optional(),
 });
 
+// --- Revenue reporting (Billing Phase B5) ---
+
+/** Query for GET /platform/revenue. `months` bounds the invoice trend window. */
+export const revenueQuerySchema = z.object({
+  months: z.coerce.number().int().min(1).max(24).default(12),
+});
+

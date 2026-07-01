@@ -15,6 +15,7 @@ import {
   institutionExportQuerySchema,
   listInstitutionsQuerySchema,
   platformAuditQuerySchema,
+  revenueQuerySchema,
   roleParamSchema,
   setLimitsSchema,
   suspendSchema,
@@ -22,6 +23,7 @@ import {
   userSearchQuerySchema,
 } from "./platform.schema";
 import * as service from "./platform.service";
+import * as revenue from "./platform-revenue.service";
 import * as billing from "../billing/billing.service";
 import * as invoices from "../billing/invoices.service";
 import * as invoiceSettings from "../billing/invoice-settings.service";
@@ -41,7 +43,9 @@ import {
 } from "../billing/invoices.schema";
 import { applyCouponSchema } from "../billing/coupons.schema";
 import * as saasPayments from "../saaspayments/saaspayments.service";
+import * as recurring from "../saaspayments/recurring.service";
 import {
+  autoChargeToggleSchema,
   gatewaySettingsSchema,
   transactionsQuerySchema,
 } from "../saaspayments/saaspayments.schema";
@@ -131,6 +135,23 @@ function sendSpreadsheet(
  */
 platformRouter.get("/kpis", requirePermission("platform:usage_read"), async (_req, res) => {
   res.json(await service.platformKpis());
+});
+
+/**
+ * @openapi
+ * /platform/revenue:
+ *   get:
+ *     tags: [Platform]
+ *     summary: "SaaS-operator revenue report — MRR/ARR, subscription status mix, deferred (unrecognized) revenue, per-currency breakdown + monthly invoice trend. Money is never summed across currencies (headline uses the dominant currency; mixedCurrency flags otherwise)."
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: months, schema: { type: integer, minimum: 1, maximum: 24, default: 12 }, description: "Trend window length in months" }
+ *     responses:
+ *       200: { description: "{ currency, mixedCurrency, mrr, arr, byStatus, trialingCount, deferredRevenue, byCurrency, trend }" }
+ */
+platformRouter.get("/revenue", requirePermission("platform:read"), async (req, res) => {
+  const { months } = revenueQuerySchema.parse(req.query);
+  res.json(await revenue.platformRevenue(months));
 });
 
 /**
@@ -282,6 +303,24 @@ platformRouter.post("/institutions/:id/subscription", requirePermission("platfor
 
 /**
  * @openapi
+ * /platform/institutions/{id}/subscription/auto-charge:
+ *   post:
+ *     tags: [Platform]
+ *     summary: "Enrol/withdraw a tenant's latest subscription from online recurring auto-charge (B4). Audited. Actual charging still requires the gateway master switch + configuration."
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     requestBody: { required: true, content: { application/json: { schema: { type: object, required: [autoCharge], properties: { autoCharge: { type: boolean } } } } } }
+ *     responses:
+ *       200: { description: "{ subscriptionId, autoCharge }" }
+ *       404: { description: "No subscription for this institution" }
+ */
+platformRouter.post("/institutions/:id/subscription/auto-charge", requirePermission("platform:manage_subscriptions"), async (req, res) => {
+  const { autoCharge } = autoChargeToggleSchema.parse(req.body);
+  res.json(await recurring.setAutoCharge(uuidParam(req), autoCharge, actor(req)));
+});
+
+/**
+ * @openapi
  * /platform/institutions/{id}/limits:
  *   patch: { tags: [Platform], summary: Set per-institution feature limits (audited), security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: Updated limits } } }
  */
@@ -378,6 +417,23 @@ platformRouter.post("/email/test", requirePermission("platform:health_read"), as
 platformRouter.post("/subscriptions/run-lifecycle", requirePermission("platform:manage_subscriptions"), async (req, res) => {
   const a = actor(req);
   res.json(await billing.sweepSubscriptionLifecycle({ id: a.id, email: a.email }));
+});
+
+/**
+ * @openapi
+ * /platform/subscriptions/run-recurring:
+ *   post:
+ *     tags: [Platform]
+ *     summary: "Run one online recurring-billing + dunning tick (B4). Generates/issues/links due renewal invoices and advances the dunning retry schedule. No-op (enabled:false) unless auto-charge is switched on AND the gateway is configured. Audited."
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "Summary { enabled, renewalsGenerated, dunningRetried, dunningExhausted, suspended, ranAt }" }
+ */
+platformRouter.post("/subscriptions/run-recurring", requirePermission("platform:manage_subscriptions"), async (req, res) => {
+  const a = actor(req);
+  const summary = await recurring.runRecurringBilling({ id: a.id, email: a.email });
+  await invoiceAudit(req, "subscription.run_recurring", null, null, { ...summary }, "subscription");
+  res.json(summary);
 });
 
 /**
