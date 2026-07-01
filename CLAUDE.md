@@ -52,10 +52,10 @@ is indexed in `docs/PLANNING_INDEX.md`.
   origin main`, rebuilds only backend+frontend, validates nginx before reload,
   health-checks `/health`, and auto-rolls back the code on failure. The backend
   runs `runMigrations()` on boot (`src/server.ts`), so migrations apply
-  automatically on deploy. `deploy.yml` (GH Actions) is a **manual one-click**
-  deploy (Actions → Deploy → Run workflow) that runs `scripts/deploy.sh` over SSH;
-  it fires only when `vars.DEPLOY_ENABLED == 'true'` + `VPS_*` secrets are set
-  (currently off).
+  automatically on deploy. `deploy.yml` (GH Actions) **auto-deploys on every push to
+  `main`** (and can be run manually via Actions → Deploy → Run workflow), running
+  `scripts/deploy.sh` over SSH; it fires only when `vars.DEPLOY_ENABLED == 'true'` +
+  `VPS_*` secrets are set.
 - **School vs College is structural, not cosmetic.** Pre-login `/select` sets a
   `mode` store (`sreedo-mode`). Institution `type` (DB) is the source of truth:
   the dashboard reconciles `mode` from `GET /auth/me` (`institutionType`). The

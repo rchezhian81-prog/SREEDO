@@ -1,11 +1,12 @@
 name: Deploy
 
-# One-click MANUAL production deploy to the VPS.
+# Production deploy to the VPS — runs automatically on every push/merge to main,
+# and can also be run manually (Actions → "Deploy" → "Run workflow").
 #
-# SAFETY: OFF by default and MANUAL only — it never runs on push. It executes
-# solely from the Actions tab → "Deploy" → "Run workflow", and only when the repo
-# variable DEPLOY_ENABLED is "true" AND the VPS_* secrets are set. Until then the
-# job is skipped, so this file never affects CI.
+# SAFETY: OFF by default. The job runs only when the repo variable DEPLOY_ENABLED is
+# "true" AND the VPS_* secrets are set. Until then the job is skipped, so this file
+# never affects CI. The deploy itself backs up the DB and auto-rolls back if the
+# post-deploy health check fails (see scripts/deploy.sh).
 #
 # Enable (GitHub → Settings → Secrets and variables → Actions):
 #   Variables:  DEPLOY_ENABLED = true        (DEPLOY_PATH optional, default /opt/sreedo)
@@ -16,6 +17,8 @@ name: Deploy
 # — lives in scripts/deploy.sh, so a CI deploy and a hand-run deploy are identical.
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch: {}
 
 concurrency:
