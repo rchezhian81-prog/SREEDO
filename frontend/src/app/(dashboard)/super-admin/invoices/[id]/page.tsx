@@ -637,10 +637,21 @@ export default function InvoiceDetailPage() {
               <span>{money(inv.igstAmount)}</span>
             </div>
           ) : (
-            <div className="flex justify-between text-muted">
-              <span>Tax ({Number(inv.taxPercent).toFixed(2)}%)</span>
-              <span>{money(inv.taxAmount)}</span>
-            </div>
+            <>
+              <div className="flex justify-between text-muted">
+                <span>Tax ({Number(inv.taxPercent).toFixed(2)}%)</span>
+                <span>{money(inv.taxAmount)}</span>
+              </div>
+              {Number(inv.taxPercent) > 0 && (
+                <p className="text-[11px] leading-snug text-faint">
+                  Set supplier state (
+                  <Link href="/super-admin/invoices/settings" className="underline hover:text-muted">
+                    Invoice settings
+                  </Link>
+                  ) and a recipient state code on the draft to itemise CGST/SGST/IGST.
+                </p>
+              )}
+            </>
           )}
           <div className="flex justify-between border-t border-line pt-1 font-semibold text-ink">
             <span>Total</span>
@@ -919,6 +930,21 @@ export default function InvoiceDetailPage() {
               </Button>
             </div>
           )}
+        </Card>
+      )}
+
+      {inv.status === "issued" && !gatewayEnabled && !txn && (
+        <Card className="mb-4">
+          <p className="text-sm text-muted">
+            Online payments are off —{" "}
+            <Link
+              href="/super-admin/invoices/payment-gateway"
+              className="text-brand-600 underline hover:text-brand-700"
+            >
+              configure the payment gateway
+            </Link>{" "}
+            to collect this invoice online.
+          </p>
         </Card>
       )}
 

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import {
   Badge, Button, Card, ConfirmDialog, EmptyState, ErrorNote, Field, Input, PageHeader, Select, Spinner, Textarea,
@@ -140,7 +140,24 @@ function OverviewTab({ pkg, onSave, onStatus, onError, onNotice }: {
   const [impact, setImpact] = useState<Impact | null>(null);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
+  const router = useRouter();
+  const [dupOpen, setDupOpen] = useState(false);
+  const [dupName, setDupName] = useState("");
+  const [dupBusy, setDupBusy] = useState(false);
   const set = (k: string, v: unknown) => setF((s) => ({ ...s, [k]: v }));
+
+  const openDuplicate = () => { setDupName(`${pkg.name} (copy)`); setDupOpen(true); };
+  const confirmDuplicate = async () => {
+    setDupBusy(true);
+    try {
+      const created = await api.post<Package>(`/packages/${pkg.id}/duplicate`, { name: dupName.trim() });
+      setDupOpen(false);
+      onNotice("Package duplicated — opening the new draft.");
+      router.push(`/super-admin/packages/${created.id}`);
+    } catch (err) {
+      onError(err instanceof ApiError ? err.message : "Failed to duplicate package");
+    } finally { setDupBusy(false); }
+  };
 
   const submit = async () => {
     setSaving(true);
@@ -268,10 +285,28 @@ function OverviewTab({ pkg, onSave, onStatus, onError, onNotice }: {
         <Button onClick={submit} disabled={saving}>{saving ? "Saving…" : "Save changes"}</Button>
         <div className="flex-1" />
         <Badge tone={statusTone(pkg.status)}>{pkg.status}</Badge>
+        <Button variant="secondary" onClick={openDuplicate}>Duplicate</Button>
         {pkg.status !== "active" && <Button variant="secondary" onClick={setActive}>Set active</Button>}
         {pkg.status !== "deprecated" && <Button variant="secondary" onClick={() => openArchive("deprecated")}>Deprecate</Button>}
         {pkg.status !== "archived" && <Button variant="danger" onClick={() => openArchive("archived")}>Archive</Button>}
       </div>
+
+      <ConfirmDialog
+        open={dupOpen}
+        title="Duplicate package"
+        tone="primary"
+        confirmLabel="Duplicate"
+        busy={dupBusy}
+        confirmDisabled={!dupName.trim()}
+        message={
+          <div className="space-y-2 text-sm">
+            <p>Copies every setting from <strong>{pkg.name}</strong> into a new package. The copy starts as a <strong>draft</strong> (internal) so you can review it before publishing.</p>
+            <Field label="New package name"><Input value={dupName} onChange={(e) => setDupName(e.target.value)} placeholder="Name for the copy" /></Field>
+          </div>
+        }
+        onConfirm={confirmDuplicate}
+        onClose={() => setDupOpen(false)}
+      />
 
       <ConfirmDialog
         open={!!archive}
