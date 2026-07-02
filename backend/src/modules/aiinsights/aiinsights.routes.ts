@@ -4,10 +4,13 @@ import { param, uuidParam } from "../../utils/params";
 import { authenticate } from "../../middleware/auth";
 import { requireTenant, tenantId } from "../../middleware/tenant";
 import { requirePermission } from "../../middleware/permissions";
+import { requireFeature } from "../../middleware/feature-flag";
 import * as service from "./aiinsights.service";
 
 export const aiInsightsRouter = Router();
-aiInsightsRouter.use(authenticate, requireTenant);
+// Optional add-on module: a super-admin can switch it off per tenant via
+// settings.featureFlags.aiInsights (default-allow; super_admin bypasses).
+aiInsightsRouter.use(authenticate, requireTenant, requireFeature("aiInsights", "AI Insights"));
 
 const canRead = requirePermission("ai:read");
 const canSummarize = requirePermission("ai:summarize");

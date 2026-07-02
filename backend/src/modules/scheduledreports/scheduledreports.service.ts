@@ -1,6 +1,7 @@
 import type { z } from "zod";
 import { query } from "../../db/postgres";
 import { ApiError } from "../../utils/api-error";
+import { assertScheduledReportQuota } from "../../utils/plan-limits";
 import type { UserRole } from "../../types";
 import { permissionsForRole } from "../../middleware/permissions";
 import { getReport, toCsv } from "../reportcenter/reportcenter.service";
@@ -118,6 +119,8 @@ export async function createSchedule(
   actor: Actor,
   institutionId: string
 ) {
+  // Enforce the tenant's scheduled-report quota before creating a new schedule.
+  await assertScheduledReportQuota(institutionId);
   await assertReportUsable(input.reportId, actor, institutionId);
   const recipients = input.recipients ?? [];
   await validateRecipients(recipients, institutionId);

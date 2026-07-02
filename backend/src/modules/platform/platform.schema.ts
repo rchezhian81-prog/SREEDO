@@ -16,6 +16,7 @@ export const setLimitsSchema = z
     maxBranches: z.number().int().min(0).nullable().optional(),
     storageLimitMb: z.number().int().min(0).nullable().optional(),
     reportsQuota: z.number().int().min(0).nullable().optional(),
+    scheduledReportsQuota: z.number().int().min(0).nullable().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: "No limits to update" });
 

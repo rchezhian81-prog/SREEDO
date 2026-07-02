@@ -236,6 +236,7 @@ function OverviewTab({ t }: { t: Tenant }) {
         <Tile label="Staff" value={formatNumber(t.usage.staff)} />
         <Tile label="Users" value={formatNumber(t.usage.users)} />
         <Tile label="Active sessions" value={formatNumber(t.usage.activeSessions)} />
+        <Tile label="Storage" value={`${formatNumber(t.usage.storageUsedMb ?? 0)} MB`} hint={t.limits.storageLimitMb != null ? `of ${t.limits.storageLimitMb} MB` : "no cap"} />
         <Tile label="Outstanding" value={`${t.currency ?? "INR"} ${Number(t.billing.outstanding).toFixed(2)}`} hint={`${t.billing.overdueCount} overdue`} />
         <Tile label="Onboarding" value={`${t.onboardingProgress.completion}%`} hint={t.onboardingProgress.missing.length ? `${t.onboardingProgress.missing.length} required left` : "required steps done"} />
       </div>
@@ -719,6 +720,7 @@ function LimitsTab({ t, busy, onSave }: { t: Tenant; busy: boolean; onSave: (l: 
   const [f, setF] = useState({
     maxStudents: num(l.maxStudents), maxStaff: num(l.maxStaff), maxBranches: num(l.maxBranches),
     storageLimitMb: num(l.storageLimitMb), reportsQuota: num(l.reportsQuota),
+    scheduledReportsQuota: num(l.scheduledReportsQuota),
   });
   const set = (k: string, v: string) => setF((s) => ({ ...s, [k]: v }));
   const over = (used: number | undefined, max: number | null | string | undefined) =>
@@ -739,7 +741,7 @@ function LimitsTab({ t, busy, onSave }: { t: Tenant; busy: boolean; onSave: (l: 
   };
   const save = () => {
     const toNum = (v: string) => (v.trim() === "" ? null : Number(v));
-    onSave({ maxStudents: toNum(f.maxStudents), maxStaff: toNum(f.maxStaff), maxBranches: toNum(f.maxBranches), storageLimitMb: toNum(f.storageLimitMb), reportsQuota: toNum(f.reportsQuota) });
+    onSave({ maxStudents: toNum(f.maxStudents), maxStaff: toNum(f.maxStaff), maxBranches: toNum(f.maxBranches), storageLimitMb: toNum(f.storageLimitMb), reportsQuota: toNum(f.reportsQuota), scheduledReportsQuota: toNum(f.scheduledReportsQuota) });
   };
   return (
     <Card>
@@ -748,8 +750,9 @@ function LimitsTab({ t, busy, onSave }: { t: Tenant; busy: boolean; onSave: (l: 
       {row("Students", "maxStudents", t.usage.students)}
       {row("Staff", "maxStaff", t.usage.staff)}
       {row("Branches", "maxBranches", t.usage.branches)}
-      {row("Storage (MB)", "storageLimitMb")}
+      {row("Storage (MB)", "storageLimitMb", t.usage.storageUsedMb)}
       {row("Reports quota", "reportsQuota")}
+      {row("Scheduled reports", "scheduledReportsQuota", t.usage.scheduledReports)}
       {Number(t.billing.overdueCount) > 0 && <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">Billing overdue: {t.billing.overdueCount} invoice(s) past due.</div>}
       <div className="mt-3"><Button disabled={busy} onClick={save}>Save limits</Button></div>
     </Card>

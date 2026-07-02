@@ -1,7 +1,8 @@
 import { pool, query } from "../../db/postgres";
 import { getMongoDb } from "../../db/mongo";
 import { ApiError } from "../../utils/api-error";
-import { effectiveLimits } from "../../utils/plan-limits";
+import { effectiveLimits, scheduledReportCount, storageUsageMb } from "../../utils/plan-limits";
+import { invalidateFeatureFlagCache } from "../../middleware/feature-flag";
 import type { z } from "zod";
 import type { auditQuerySchema, updateSettingsSchema } from "./adminconsole.schema";
 
@@ -58,6 +59,8 @@ export async function updateInstitutionSettings(
     ]
   );
   if (!rows[0]) throw ApiError.notFound("Institution not found");
+  // Feature flags may have changed — drop the cached copy so gates re-read.
+  if (input.featureFlags !== undefined) invalidateFeatureFlagCache(id);
   return rows[0];
 }
 
@@ -67,13 +70,17 @@ export async function institutionLimits(id: string) {
   await assertInstitution(id);
   // EFFECTIVE limits = per-institution overrides (settings.limits) over the plan,
   // so caps set in the platform console actually display and enforce.
-  const limits = await effectiveLimits(id);
-  const counts = await query<{ students: number; staff: number; branches: number }>(
-    `SELECT (SELECT count(*)::int FROM students WHERE institution_id = $1) AS students,
-            (SELECT count(*)::int FROM teachers WHERE institution_id = $1) AS staff,
-            (SELECT count(*)::int FROM branches WHERE institution_id = $1) AS branches`,
-    [id]
-  );
+  const [limits, counts, storageUsedMb, scheduledReports] = await Promise.all([
+    effectiveLimits(id),
+    query<{ students: number; staff: number; branches: number }>(
+      `SELECT (SELECT count(*)::int FROM students WHERE institution_id = $1) AS students,
+              (SELECT count(*)::int FROM teachers WHERE institution_id = $1) AS staff,
+              (SELECT count(*)::int FROM branches WHERE institution_id = $1) AS branches`,
+      [id]
+    ),
+    storageUsageMb(id),
+    scheduledReportCount(id),
+  ]);
   const { students, staff, branches } = counts.rows[0];
   const within = (max: number | null, used: number) => max == null || used <= max;
   return {
@@ -85,12 +92,17 @@ export async function institutionLimits(id: string) {
     maxBranches: limits.maxBranches,
     branches,
     storageLimitMb: limits.storageLimitMb,
+    storageUsedMb,
     reportsQuota: limits.reportsQuota,
+    scheduledReportsQuota: limits.scheduledReportsQuota,
+    scheduledReports,
     smsQuota: limits.smsQuota,
     withinLimits:
       within(limits.maxStudents, students) &&
       within(limits.maxStaff, staff) &&
-      within(limits.maxBranches, branches),
+      within(limits.maxBranches, branches) &&
+      within(limits.storageLimitMb, storageUsedMb) &&
+      within(limits.scheduledReportsQuota, scheduledReports),
   };
 }
 
