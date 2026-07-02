@@ -13,17 +13,11 @@ import { usePlatformGuard } from "../../platform/_guard";
 const INSTITUTION_TYPES = ["school", "college", "university", "coaching", "other"] as const;
 const BILLING_CYCLES: [string, string][] = [["monthly", "Monthly"], ["quarterly", "Quarterly"], ["half_yearly", "Half-yearly"], ["annual", "Annual"]];
 const cycleLabel = (c: string) => BILLING_CYCLES.find(([v]) => v === c)?.[1] ?? c;
-const MODULE_GROUPS = [
-  "admissions", "students", "staff", "attendance", "fees", "exams", "transport", "hostel",
-  "library", "inventory", "communication", "reports", "documents", "certificates", "timetable",
-  "hr", "payroll", "parentPortal", "studentPortal", "mobileApp", "apiAccess", "advancedAnalytics",
-  "customBranding",
-];
 const LIMIT_KEYS = [
   "users", "teachers", "parents", "branches", "classes", "storageMb", "documents",
   "smsQuota", "emailQuota", "whatsappQuota", "apiRequests", "reports", "scheduledReports", "supportSessions",
 ];
-const TABS = ["Overview", "Feature Matrix", "Limits", "Tenants", "Usage", "History"] as const;
+const TABS = ["Overview", "Limits", "Tenants", "Usage", "History"] as const;
 type Tab = (typeof TABS)[number];
 
 interface Package {
@@ -107,7 +101,6 @@ export default function PackageDetailPage() {
           </div>
 
           {tab === "Overview" && <OverviewTab key={pkg.updatedAt} pkg={pkg} onSave={save} onStatus={() => load()} onError={setError} onNotice={toast.success} />}
-          {tab === "Feature Matrix" && <FeatureMatrixTab pkg={pkg} onSave={save} />}
           {tab === "Limits" && <LimitsTab pkg={pkg} onSave={save} />}
           {tab === "Tenants" && <TenantsTab id={pkg.id} />}
           {tab === "Usage" && <UsageTab id={pkg.id} />}
@@ -330,42 +323,6 @@ function OverviewTab({ pkg, onSave, onStatus, onError, onNotice }: {
         onClose={() => setArchive(null)}
       />
     </div>
-  );
-}
-
-function FeatureMatrixTab({ pkg, onSave }: { pkg: Package; onSave: (p: Record<string, unknown>, msg: string) => void }) {
-  const features = (pkg.features ?? {}) as { modules?: Record<string, boolean>; supportLevel?: string };
-  const [modules, setModules] = useState<Record<string, boolean>>(() => ({ ...(features.modules ?? {}) }));
-  const [supportLevel, setSupportLevel] = useState(features.supportLevel ?? "standard");
-  const [saving, setSaving] = useState(false);
-  const toggle = (k: string) => setModules((m) => ({ ...m, [k]: !m[k] }));
-
-  const submit = async () => {
-    setSaving(true);
-    await onSave({ features: { ...(pkg.features ?? {}), modules, supportLevel } }, "Feature matrix saved.");
-    setSaving(false);
-  };
-
-  return (
-    <Card>
-      <p className="mb-3 text-xs text-slate-400">Toggle modules/features included in this package. These guide each tenant&apos;s enabled modules (tenant settings remain the source of truth per tenant).</p>
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {MODULE_GROUPS.map((k) => (
-          <label key={k} className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2 text-sm">
-            <span className="capitalize">{k.replace(/([A-Z])/g, " $1")}</span>
-            <input type="checkbox" className="h-4 w-4 rounded border-slate-300" checked={!!modules[k]} onChange={() => toggle(k)} />
-          </label>
-        ))}
-      </div>
-      <div className="mt-4 max-w-xs">
-        <Field label="Support level">
-          <Select value={supportLevel} onChange={(e) => setSupportLevel(e.target.value)}>
-            <option value="basic">Basic</option><option value="standard">Standard</option><option value="priority">Priority</option><option value="dedicated">Dedicated</option>
-          </Select>
-        </Field>
-      </div>
-      <div className="mt-4"><Button onClick={submit} disabled={saving}>{saving ? "Saving…" : "Save feature matrix"}</Button></div>
-    </Card>
   );
 }
 
