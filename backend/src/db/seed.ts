@@ -33,9 +33,12 @@ export async function seed(): Promise<void> {
 
   // Super admin + a demo tenant (institution, branch, package, subscription).
   const superHash = await hashPassword(SUPER_ADMIN_PASSWORD);
+  // platform_role='owner' so the bootstrap super admin is a protected owner on a
+  // FRESH install too (migration 0092's backfill only catches super_admins that
+  // already exist when it runs, i.e. upgrades — not the seed that follows it).
   await query(
-    `INSERT INTO users (email, password_hash, full_name, role)
-     VALUES ($1, $2, 'Platform Super Admin', 'super_admin')`,
+    `INSERT INTO users (email, password_hash, full_name, role, platform_role)
+     VALUES ($1, $2, 'Platform Super Admin', 'super_admin', 'owner')`,
     [SUPER_ADMIN_EMAIL, superHash]
   );
   const { rows: instRows } = await query<{ id: string }>(
