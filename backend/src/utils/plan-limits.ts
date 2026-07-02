@@ -39,6 +39,7 @@ export interface EffectiveLimits {
   maxBranches: number | null;
   storageLimitMb: number | null;
   reportsQuota: number | null;
+  scheduledReportsQuota: number | null;
   smsQuota: number | null;
 }
 
@@ -65,9 +66,75 @@ export async function effectiveLimits(institutionId: string): Promise<EffectiveL
     maxStaff: num(o.maxStaff) ?? plan.maxStaff,
     maxBranches: num(o.maxBranches),
     storageLimitMb: num(o.storageLimitMb) ?? (f.storageLimitMb as number | undefined) ?? null,
-    reportsQuota: num(o.reportsQuota),
+    reportsQuota: num(o.reportsQuota) ?? (f.reportsQuota as number | undefined) ?? null,
+    scheduledReportsQuota:
+      num(o.scheduledReportsQuota) ?? (f.scheduledReportsQuota as number | undefined) ?? null,
     smsQuota: (f.smsQuota as number | undefined) ?? null,
   };
+}
+
+const MB = 1024 * 1024;
+
+/**
+ * Total storage an institution is currently using, in MB — the sum of every
+ * stored file it owns across the tenant `documents` table AND the operator-facing
+ * `tenant_documents` table (both keep byte sizes; the actual bytes live in object
+ * storage / disk). Rounded to 2 decimals. Cheap enough to compute on demand.
+ */
+export async function storageUsageMb(institutionId: string): Promise<number> {
+  const { rows } = await query<{ bytes: string }>(
+    `SELECT
+       COALESCE((SELECT sum(size_bytes) FROM documents WHERE institution_id = $1), 0) +
+       COALESCE((SELECT sum(size_bytes) FROM tenant_documents
+                 WHERE institution_id = $1 AND archived_at IS NULL), 0) AS bytes`,
+    [institutionId]
+  );
+  const bytes = Number(rows[0]?.bytes ?? 0);
+  return Math.round((bytes / MB) * 100) / 100;
+}
+
+/**
+ * Enforces the institution's EFFECTIVE storage cap before accepting an upload:
+ * (current usage + the incoming file) must stay within `storageLimitMb`. A null
+ * limit means "unlimited" — the guard degrades to allow.
+ */
+export async function assertStorageWithinLimit(
+  institutionId: string,
+  incomingBytes: number
+): Promise<void> {
+  const { storageLimitMb } = await effectiveLimits(institutionId);
+  if (storageLimitMb == null) return;
+  const used = await storageUsageMb(institutionId);
+  const incoming = incomingBytes / MB;
+  if (used + incoming > storageLimitMb) {
+    throw ApiError.forbidden(
+      `Storage limit reached: this plan allows ${storageLimitMb} MB (currently using ${used} MB). Free up space or upgrade the plan.`
+    );
+  }
+}
+
+/** Number of saved scheduled-report definitions the institution has. */
+export async function scheduledReportCount(institutionId: string): Promise<number> {
+  const { rows } = await query<{ c: number }>(
+    `SELECT count(*)::int AS c FROM scheduled_reports WHERE institution_id = $1`,
+    [institutionId]
+  );
+  return Number(rows[0]?.c ?? 0);
+}
+
+/**
+ * Enforces the institution's EFFECTIVE scheduled-report quota before creating a
+ * new schedule. A null quota means "unlimited" — the guard degrades to allow.
+ */
+export async function assertScheduledReportQuota(institutionId: string): Promise<void> {
+  const { scheduledReportsQuota } = await effectiveLimits(institutionId);
+  if (scheduledReportsQuota == null) return;
+  const count = await scheduledReportCount(institutionId);
+  if (count >= scheduledReportsQuota) {
+    throw ApiError.forbidden(
+      `Plan limit reached: maximum scheduled reports (${scheduledReportsQuota}) for this plan`
+    );
+  }
 }
 
 /**

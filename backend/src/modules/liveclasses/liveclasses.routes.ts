@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { authenticate, authorize } from "../../middleware/auth";
 import { requireTenant, tenantId } from "../../middleware/tenant";
+import { requireFeature } from "../../middleware/feature-flag";
 import { uuidParam } from "../../utils/params";
 import {
   createLiveClassSchema,
@@ -10,7 +11,9 @@ import * as service from "./liveclasses.service";
 
 export const liveClassesRouter = Router();
 
-const guard = [authenticate, requireTenant];
+// Optional add-on module: a super-admin can switch it off per tenant via
+// settings.featureFlags.liveClasses (default-allow; super_admin bypasses).
+const guard = [authenticate, requireTenant, requireFeature("liveClasses", "Live Classes")];
 // Scheduling is for staff; everyone in the tenant can see the schedule.
 const canWrite = authorize("admin", "teacher");
 

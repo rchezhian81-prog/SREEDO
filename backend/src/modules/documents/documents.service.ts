@@ -4,6 +4,7 @@ import { query } from "../../db/postgres";
 import { env } from "../../config/env";
 import { ApiError } from "../../utils/api-error";
 import { storage } from "../../utils/storage";
+import { assertStorageWithinLimit } from "../../utils/plan-limits";
 import { accessibleStudentIds, isStaff } from "../../utils/scope";
 import type { z } from "zod";
 import type { listQuerySchema, uploadFieldsSchema } from "./documents.schema";
@@ -115,6 +116,8 @@ export async function createDocument(
   institutionId: string
 ) {
   const ext = assertValidFile(file.originalname, file.mimetype, file.size);
+  // Enforce the tenant's effective storage quota before we persist the bytes.
+  await assertStorageWithinLimit(institutionId, file.size);
   const ownerId = await resolveUploadOwner(
     req,
     fields.ownerType,

@@ -1,12 +1,15 @@
 import { Router } from "express";
 import { query } from "../../db/postgres";
+import { tenantRateLimiter } from "../../middleware/rate-limit";
 import { apiKeyAuth } from "./ext.auth";
 
 // External, read-only API authenticated by an institution API key (x-api-key),
 // scoped to that key's tenant. Deliberately read-only and on its own surface, so
 // a leaked key can never mutate or destroy data — only read the tenant it owns.
 export const extRouter = Router();
-extRouter.use(apiKeyAuth);
+// Authenticate first (resolves the key → institution), then apply a per-tenant
+// rate limit keyed by that institution so one key can't starve others.
+extRouter.use(apiKeyAuth, tenantRateLimiter);
 
 /**
  * @openapi

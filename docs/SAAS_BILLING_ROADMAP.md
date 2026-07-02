@@ -92,13 +92,28 @@ the common path for Indian schools before any online card billing.
   fields optional for non-India tenants.
 - **Tests:** invoice numbering monotonicity, tax math, tenant scoping.
 
-### Phase B3 — Plan-limit enforcement completeness — **P1**
-- Enforce **storage** (sum of `documents` sizes per institution vs limit),
-  **feature flags** (gate routes/UI by `features` JSON), and **report quotas**.
-- Surface usage vs limit in the admin console (some already in
-  `adminconsole.service.ts` `institutionLimits`).
-- **Per-tenant rate limiting:** key the limiter by `institution_id` (and by API
-  key for `/ext`), backed by a shared store when multi-instance.
+### Phase B3 — Plan-limit enforcement completeness — **P1** — ✅ SHIPPED
+- ✅ **Storage** enforced on upload: `assertStorageWithinLimit` in
+  `utils/plan-limits.ts` (sums `documents` + `tenant_documents` byte sizes vs the
+  effective `storageLimitMb`) is called from `documents.service.createDocument`.
+- ✅ **Feature flags:** `middleware/feature-flag.ts` (`requireFeature`, cached,
+  super_admin bypass, **default-allow** — a module is blocked only when
+  `settings.featureFlags[key] === false`). Wired to the optional Live Classes and
+  AI Insights modules; the cache is busted when a tenant's settings change.
+- ✅ **Report quota:** `assertScheduledReportQuota` (effective
+  `scheduledReportsQuota`) enforced in `scheduledreports.service.createSchedule`.
+- ✅ **Usage vs limit surfaced:** `adminconsole.institutionLimits` and the platform
+  tenant detail now return `storageUsedMb` + scheduled-report counts; the
+  super-admin tenant **Plan limits & usage** tab shows storage & scheduled-report
+  usage with over/near-limit badges.
+- ✅ **Per-tenant rate limiting:** `tenantRateLimiter` (keyed by `institution_id`,
+  `TENANT_RATE_LIMIT_MAX`) mounted on the API-key `/ext` surface so one leaked key
+  can't starve other tenants. In-memory today; swap in a shared store (Redis) when
+  multi-instance.
+- ✅ **Tests:** `tests/integration/plan-limits.int.test.ts` (storage block/allow,
+  scheduled-report quota, feature-flag gate, per-tenant `/ext` limiter isolation).
+- No migration required — all additive (JSONB limit overrides, computed usage,
+  in-memory limiter).
 
 ### Phase B4 — Online recurring billing (ONLY with credentials + rules) — **P0 (gated)**
 Do **not** start until the operator provides: gateway account + API keys, the

@@ -75,6 +75,8 @@ export const env = {
   rateLimitWindowMinutes: Number(process.env.RATE_LIMIT_WINDOW_MINUTES ?? 15),
   rateLimitMax: Number(process.env.RATE_LIMIT_MAX ?? 300),
   authRateLimitMax: Number(process.env.AUTH_RATE_LIMIT_MAX ?? 10),
+  // Per-tenant limiter (keyed by institution) for the external `/ext` API surface.
+  tenantRateLimitMax: Number(process.env.TENANT_RATE_LIMIT_MAX ?? 600),
 
   openaiApiKey: optional("OPENAI_API_KEY"),
   openaiModel: process.env.OPENAI_MODEL ?? "gpt-4o",

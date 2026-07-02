@@ -3,7 +3,7 @@ import type { z } from "zod";
 import { query, withTransaction } from "../../db/postgres";
 import { ApiError } from "../../utils/api-error";
 import { hashPassword } from "../../utils/password";
-import { effectiveLimits } from "../../utils/plan-limits";
+import { effectiveLimits, scheduledReportCount, storageUsageMb } from "../../utils/plan-limits";
 import { storage } from "../../utils/storage";
 import { mailerConfigured } from "../../utils/mailer";
 import { assertValidFile } from "../documents/documents.service";
@@ -167,17 +167,22 @@ const PROFILE_COL_MAP: Record<string, string> = {
 };
 
 async function tenantUsage(id: string) {
-  const { rows } = await query<Record<string, number>>(
-    `SELECT
-       (SELECT count(*)::int FROM students s WHERE s.institution_id = $1 AND s.status <> 'archived') AS students,
-       (SELECT count(*)::int FROM teachers t WHERE t.institution_id = $1) AS staff,
-       (SELECT count(*)::int FROM users u WHERE u.institution_id = $1) AS users,
-       (SELECT count(*)::int FROM branches b WHERE b.institution_id = $1) AS branches,
-       (SELECT count(*)::int FROM refresh_tokens rt JOIN users u ON u.id = rt.user_id
-          WHERE u.institution_id = $1 AND rt.revoked_at IS NULL AND rt.expires_at > now()) AS "activeSessions"`,
-    [id]
-  );
-  return rows[0];
+  const [counts, storageUsedMb, scheduledReports] = await Promise.all([
+    query<Record<string, number>>(
+      `SELECT
+         (SELECT count(*)::int FROM students s WHERE s.institution_id = $1 AND s.status <> 'archived') AS students,
+         (SELECT count(*)::int FROM teachers t WHERE t.institution_id = $1) AS staff,
+         (SELECT count(*)::int FROM users u WHERE u.institution_id = $1) AS users,
+         (SELECT count(*)::int FROM branches b WHERE b.institution_id = $1) AS branches,
+         (SELECT count(*)::int FROM scheduled_reports sr WHERE sr.institution_id = $1) AS "scheduledReports",
+         (SELECT count(*)::int FROM refresh_tokens rt JOIN users u ON u.id = rt.user_id
+            WHERE u.institution_id = $1 AND rt.revoked_at IS NULL AND rt.expires_at > now()) AS "activeSessions"`,
+      [id]
+    ),
+    storageUsageMb(id),
+    scheduledReportCount(id),
+  ]);
+  return { ...counts.rows[0], storageUsedMb, scheduledReports };
 }
 
 /** Read-only billing summary for one tenant (never modifies the invoice module). */
