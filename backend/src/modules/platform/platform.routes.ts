@@ -24,6 +24,7 @@ import {
 } from "./platform.schema";
 import * as service from "./platform.service";
 import * as revenue from "./platform-revenue.service";
+import * as subs from "./subscriptions.service";
 import * as billing from "../billing/billing.service";
 import * as invoices from "../billing/invoices.service";
 import * as invoiceSettings from "../billing/invoice-settings.service";
@@ -415,8 +416,7 @@ platformRouter.post("/email/test", requirePermission("platform:health_read"), as
  *   post: { tags: [Platform], summary: Run the subscription lifecycle sweep (expiry/grace/auto-suspend/reminders; audited), security: [{ bearerAuth: [] }], responses: { 200: { description: "Sweep summary { graceStarted, expired, trialExpired, autoSuspended, remindersSent }" } } }
  */
 platformRouter.post("/subscriptions/run-lifecycle", requirePermission("platform:manage_subscriptions"), async (req, res) => {
-  const a = actor(req);
-  res.json(await billing.sweepSubscriptionLifecycle({ id: a.id, email: a.email }));
+  res.json(await subs.runLifecycle(actor(req)));
 });
 
 /**
@@ -451,7 +451,7 @@ platformRouter.get("/subscriptions", requirePermission("platform:read"), async (
  *   get: { tags: [Platform], summary: Subscription lifecycle configuration (auto-suspend / enforcement flags + grace/reminder settings; reflects env, read-only, no secrets), security: [{ bearerAuth: [] }], responses: { 200: { description: "{ autoSuspend, enforce, graceDays, reminderDays }" } } }
  */
 platformRouter.get("/subscriptions/config", requirePermission("platform:read"), async (_req, res) => {
-  res.json(billing.lifecycleConfig());
+  res.json(await subs.getLifecycleConfig());
 });
 
 /**

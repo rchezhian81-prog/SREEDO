@@ -69,6 +69,7 @@ import { payrollRouter } from "./modules/payroll/payroll.routes";
 import { couponsRouter } from "./modules/billing/coupons.routes";
 import { saasPaymentsWebhookRouter } from "./modules/saaspayments/saaspayments.routes";
 import { platformRouter } from "./modules/platform/platform.routes";
+import { subscriptionsRouter } from "./modules/platform/subscriptions.routes";
 import { platformSettingsRouter } from "./modules/platform/platform-settings.routes";
 import { tenantRouter } from "./modules/platform/tenant.routes";
 import { portalRouter } from "./modules/portal/portal.routes";
@@ -237,6 +238,7 @@ export function createApp(): express.Express {
   // in the service, so no auth middleware applies to the webhook itself.
   api.use("/platform", saasPaymentsWebhookRouter);
   api.use("/platform", platformRouter); // super-admin platform hardening
+  api.use("/platform", subscriptionsRouter); // super-admin subscription management (D)
   api.use("/platform", couponsRouter); // super-admin coupon / promotion management
   api.use("/platform", tenantRouter); // super-admin tenant/institution management
   api.use("/", superAdminRouter); // /institutions, /branches, /packages

@@ -33,6 +33,7 @@ interface EventInput {
   event: string;
   fromStatus?: string | null;
   toStatus?: string | null;
+  reason?: string | null;
   detail?: Record<string, unknown>;
   actor?: SweepActor;
 }
@@ -43,8 +44,8 @@ export async function recordSubscriptionEvent(input: EventInput): Promise<void> 
     await query(
       `INSERT INTO subscription_events
          (institution_id, subscription_id, event, from_status, to_status,
-          actor_id, actor_email, detail)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb)`,
+          actor_id, actor_email, detail, reason)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9)`,
       [
         input.institutionId,
         input.subscriptionId,
@@ -54,11 +55,73 @@ export async function recordSubscriptionEvent(input: EventInput): Promise<void> 
         input.actor?.id ?? null,
         input.actor?.email ?? null,
         JSON.stringify(input.detail ?? {}),
+        input.reason ?? null,
       ]
     );
   } catch (err) {
     console.error(`Failed to record subscription event ${input.event}:`, err);
   }
+}
+
+export interface EffectiveLifecycleConfig {
+  trialDays: number;
+  graceDays: number;
+  reminderDays: number[]; // days BEFORE expiry (renewal reminders)
+  expiryReminderDays: number[]; // days AFTER expiry
+  autoExpire: boolean;
+  autoSuspend: boolean;
+  billingOverdueSuspend: boolean;
+  enforce: boolean; // env-only (requireActiveSubscription); not in the DB config
+  updatedAt: string | null;
+  updatedByEmail: string | null;
+}
+
+/**
+ * The effective lifecycle configuration. Prefers the DB-backed singleton
+ * (subscription_lifecycle_config, editable by the super-admin in Super Admin D)
+ * and falls back to the B1 env defaults when the row is absent — so the sweep
+ * behaves identically on a fresh DB and honours operator edits when present.
+ */
+export async function effectiveLifecycleConfig(): Promise<EffectiveLifecycleConfig> {
+  const { rows } = await query<{
+    trial_days: number; grace_days: number;
+    renewal_reminder_days: number[]; expiry_reminder_days: number[];
+    auto_expire_enabled: boolean; auto_suspend_enabled: boolean;
+    billing_overdue_suspend_enabled: boolean;
+    updated_at: string | null; updated_by_email: string | null;
+  }>(
+    `SELECT trial_days, grace_days, renewal_reminder_days, expiry_reminder_days,
+            auto_expire_enabled, auto_suspend_enabled, billing_overdue_suspend_enabled,
+            to_char(updated_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS updated_at, updated_by_email
+     FROM subscription_lifecycle_config WHERE id = 1`
+  );
+  const r = rows[0];
+  if (!r) {
+    return {
+      trialDays: 14,
+      graceDays: env.billingGraceDays,
+      reminderDays: env.billingReminderDays,
+      expiryReminderDays: [0, 7],
+      autoExpire: true,
+      autoSuspend: env.billingAutoSuspend,
+      billingOverdueSuspend: false,
+      enforce: env.billingEnforceSubscription,
+      updatedAt: null,
+      updatedByEmail: null,
+    };
+  }
+  return {
+    trialDays: r.trial_days,
+    graceDays: r.grace_days,
+    reminderDays: r.renewal_reminder_days ?? [],
+    expiryReminderDays: r.expiry_reminder_days ?? [],
+    autoExpire: r.auto_expire_enabled,
+    autoSuspend: r.auto_suspend_enabled,
+    billingOverdueSuspend: r.billing_overdue_suspend_enabled,
+    enforce: env.billingEnforceSubscription,
+    updatedAt: r.updated_at,
+    updatedByEmail: r.updated_by_email,
+  };
 }
 
 /** Pure helper (unit-tested): the renewal-reminder email body. */
@@ -99,8 +162,10 @@ async function institutionAdminEmails(institutionId: string): Promise<string[]> 
 export async function sweepSubscriptionLifecycle(
   actor: SweepActor = null
 ): Promise<SweepSummary> {
-  const graceDays = env.billingGraceDays;
-  const reminderDays = env.billingReminderDays;
+  const cfg = await effectiveLifecycleConfig();
+  const graceDays = cfg.graceDays;
+  const reminderDays = cfg.reminderDays;
+  const autoExpire = cfg.autoExpire;
   const summary: SweepSummary = {
     graceStarted: 0,
     expired: 0,
@@ -148,11 +213,13 @@ export async function sweepSubscriptionLifecycle(
        WHERE status = 'trialing'
          AND trial_ends_at IS NOT NULL
          AND CURRENT_DATE > trial_ends_at
+         AND $1::boolean
        FOR UPDATE
      )
      UPDATE institution_subscriptions s SET status = 'expired'
      FROM due WHERE s.id = due.id
-     RETURNING s.id, s.institution_id, due.status AS from_status`
+     RETURNING s.id, s.institution_id, due.status AS from_status`,
+    [autoExpire]
   );
   for (const r of trial.rows) {
     summary.trialExpired += 1;
@@ -177,12 +244,13 @@ export async function sweepSubscriptionLifecycle(
        WHERE status IN ('active','trialing')
          AND ends_at IS NOT NULL
          AND CURRENT_DATE > COALESCE(grace_until, ends_at + $1::int)
+         AND $2::boolean
        FOR UPDATE
      )
      UPDATE institution_subscriptions s SET status = 'expired'
      FROM due WHERE s.id = due.id
      RETURNING s.id, s.institution_id, due.status AS from_status`,
-    [graceDays]
+    [graceDays, autoExpire]
   );
   for (const r of expired.rows) {
     summary.expired += 1;
@@ -197,7 +265,7 @@ export async function sweepSubscriptionLifecycle(
   }
 
   // 4. Optional auto-suspend for institutions whose subscription just expired.
-  if (env.billingAutoSuspend) {
+  if (cfg.autoSuspend) {
     const justExpired = [...trial.rows, ...expired.rows];
     for (const r of justExpired) {
       const res = await query<{ id: string }>(
