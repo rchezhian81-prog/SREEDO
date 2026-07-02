@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth-store";
 import {
-  Badge, Button, EmptyState, ErrorNote, Field, Input, Modal, PageHeader, Select, Spinner, Textarea,
+  Badge, Button, ConfirmDialog, EmptyState, ErrorNote, Field, Input, Modal, PageHeader, Select, Spinner, Textarea,
 } from "@/components/ui";
 import { toast } from "@/components/toast";
 import { usePlatformGuard } from "../platform/_guard";
@@ -48,10 +49,14 @@ async function downloadFile(path: string, filename: string) {
 }
 
 export default function PackagesPage() {
+  const router = useRouter();
   const { ready, gate } = usePlatformGuard("Packages", "SaaS plan administration");
   const [packages, setPackages] = useState<Package[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [dup, setDup] = useState<Package | null>(null);
+  const [dupName, setDupName] = useState("");
+  const [dupBusy, setDupBusy] = useState(false);
 
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
@@ -97,6 +102,20 @@ export default function PackagesPage() {
   const exportList = (format: "csv" | "xlsx") => {
     const p = buildQuery(); p.set("format", format);
     downloadFile(`/packages-export?${p.toString()}`, `packages.${format}`).catch(() => setError("Export failed"));
+  };
+
+  const openDuplicate = (p: Package) => { setDup(p); setDupName(`${p.name} (copy)`); };
+  const confirmDuplicate = async () => {
+    if (!dup) return;
+    setDupBusy(true);
+    try {
+      const created = await api.post<Package>(`/packages/${dup.id}/duplicate`, { name: dupName.trim() });
+      setDup(null);
+      toast.success("Package duplicated — opening the new draft.");
+      router.push(`/super-admin/packages/${created.id}`);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to duplicate package");
+    } finally { setDupBusy(false); }
   };
 
   if (!ready) return gate;
@@ -185,7 +204,10 @@ export default function PackagesPage() {
                   <td className="px-4 py-3">{p.maxStudents ?? "∞"}</td>
                   <td className="px-4 py-3">{p.maxStaff ?? "∞"}</td>
                   <td className="px-4 py-3 text-right">
-                    <Link href={`/super-admin/packages/${p.id}`} className="text-xs font-medium text-brand-600 hover:text-brand-700">Manage</Link>
+                    <div className="flex items-center justify-end gap-3">
+                      <button onClick={() => openDuplicate(p)} className="text-xs font-medium text-brand-600 hover:text-brand-700">Duplicate</button>
+                      <Link href={`/super-admin/packages/${p.id}`} className="text-xs font-medium text-brand-600 hover:text-brand-700">Manage</Link>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -201,6 +223,23 @@ export default function PackagesPage() {
         />
       )}
       {compareOpen && <CompareModal ids={[...selected]} onClose={() => setCompareOpen(false)} />}
+
+      <ConfirmDialog
+        open={dup !== null}
+        title="Duplicate package"
+        tone="primary"
+        confirmLabel="Duplicate"
+        busy={dupBusy}
+        confirmDisabled={!dupName.trim()}
+        message={
+          <div className="space-y-2 text-sm">
+            <p>Copies every setting from <strong>{dup?.name}</strong> into a new package. The copy starts as a <strong>draft</strong> (internal) so you can review it before publishing.</p>
+            <Field label="New package name"><Input value={dupName} onChange={(e) => setDupName(e.target.value)} placeholder="Name for the copy" /></Field>
+          </div>
+        }
+        onConfirm={confirmDuplicate}
+        onClose={() => setDup(null)}
+      />
     </>
   );
 }

@@ -629,7 +629,12 @@ function SubscriptionTab({ t, busy, onChanged, setNotice, setError }: { t: Tenan
             {String(sub.packageName)} · <Badge tone="blue">{String(sub.status)}</Badge> · {String(sub.billingCycle)}
             {sub.endsAt ? ` · renews/ends ${String(sub.renewsAt ?? sub.endsAt)}` : ""}
           </div>
-        ) : <p className="text-sm text-slate-400">No subscription assigned.</p>}
+        ) : (
+          <div className="space-y-1">
+            <p className="text-sm text-slate-400">No subscription assigned.</p>
+            <p className="text-xs text-faint">Assign a package below to unlock recurring-billing &amp; dunning controls.</p>
+          </div>
+        )}
       </Card>
       {sub && (
         <Card>

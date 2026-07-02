@@ -377,9 +377,12 @@ export default function DashboardLayout({
       return;
     }
     // Super admins live in the /super-admin console; everyone else in the
-    // school dashboard. Keep each role on its own side.
+    // school dashboard. Keep each role on its own side. /security is a shared
+    // account page (2FA/password/sessions) that every role — super admins
+    // included — must be able to reach, so treat it as allowed.
     const inSuperArea = pathname.startsWith("/super-admin");
-    if (user?.role === "super_admin" && !inSuperArea) {
+    const superAllowed = inSuperArea || pathname === "/security";
+    if (user?.role === "super_admin" && !superAllowed) {
       router.replace("/super-admin/platform");
     } else if (user && user.role !== "super_admin" && inSuperArea) {
       router.replace("/dashboard");
@@ -430,8 +433,10 @@ export default function DashboardLayout({
         );
 
   // While unauthenticated or mid-redirect to the correct area, show a spinner.
+  // A super admin on the shared /security page is allowed to stay (it renders
+  // with the super-admin sidebar), so don't block it as an out-of-area redirect.
   if (!hydrated || !accessToken) return <Spinner />;
-  if (isSuper !== inSuperArea) return <Spinner />;
+  if (isSuper !== inSuperArea && !(isSuper && pathname === "/security")) return <Spinner />;
 
   const handleLogout = async () => {
     if (refreshToken) {
