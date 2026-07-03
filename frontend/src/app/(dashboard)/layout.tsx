@@ -11,6 +11,7 @@ import { Icon, type IconName } from "@/components/icons";
 import { useThemeStore } from "@/stores/theme-store";
 import { useModeStore } from "@/stores/mode-store";
 import { useI18n } from "@/i18n/I18nProvider";
+import { usePermissions } from "@/lib/use-permissions";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { RuntimeBanner } from "@/components/RuntimeBanner";
 import { Toaster } from "@/components/toast";
@@ -23,6 +24,9 @@ type NavItem = {
   // When set, the item is hidden if the tenant has an explicit enabled-modules
   // list that does not include this key. Untagged items are always shown.
   moduleKey?: string;
+  // Super-admin nav only: the effective permission required to see this item.
+  // Untagged items always show; owners hold every permission so keep them all.
+  perm?: string;
 };
 
 const SCHOOL_NAV: NavItem[] = [
@@ -106,24 +110,24 @@ const COLLEGE_NAV: NavItem[] = SCHOOL_NAV.flatMap((item) =>
 );
 
 const SUPER_ADMIN_NAV: NavItem[] = [
-  { href: "/super-admin/platform", label: "Platform Overview", icon: "grid" },
-  { href: "/super-admin/platform/tenants", label: "Tenants", icon: "building" },
-  { href: "/super-admin/platform/audit", label: "Platform Audit", icon: "file" },
-  { href: "/super-admin/platform/support", label: "Support Access", icon: "help" },
-  { href: "/super-admin/admins", label: "Platform Admins", icon: "users" },
-  { href: "/super-admin/rbac", label: "Roles & Permissions", icon: "shield" },
-  { href: "/super-admin/packages", label: "Packages", icon: "package" },
-  { href: "/super-admin/subscriptions", label: "Subscriptions", icon: "receipt" },
-  { href: "/super-admin/revenue", label: "Revenue", icon: "trendUp" },
-  { href: "/super-admin/invoices", label: "Invoices", icon: "file" },
-  { href: "/super-admin/coupons", label: "Coupons", icon: "tag" },
-  { href: "/super-admin/settings", label: "Settings", icon: "gear" },
-  { href: "/super-admin/audit-logs", label: "Audit Logs", icon: "file" },
-  { href: "/super-admin/exports", label: "Data Exports", icon: "package" },
-  { href: "/super-admin/health", label: "System Health", icon: "alert" },
-  { href: "/super-admin/observability", label: "Observability", icon: "barChart" },
-  { href: "/super-admin/backups", label: "Backups", icon: "shield" },
-  { href: "/super-admin/jobs", label: "Jobs", icon: "gear" },
+  { href: "/super-admin/platform", label: "Platform Overview", icon: "grid", perm: "platform:read" },
+  { href: "/super-admin/platform/tenants", label: "Tenants", icon: "building", perm: "platform:read" },
+  { href: "/super-admin/platform/audit", label: "Platform Audit", icon: "file", perm: "platform:audit_read" },
+  { href: "/super-admin/platform/support", label: "Support Access", icon: "help", perm: "platform:impersonate" },
+  { href: "/super-admin/admins", label: "Platform Admins", icon: "users", perm: "platform:manage_admins" },
+  { href: "/super-admin/rbac", label: "Roles & Permissions", icon: "shield", perm: "platform:rbac_read" },
+  { href: "/super-admin/packages", label: "Packages", icon: "package", perm: "platform:read" },
+  { href: "/super-admin/subscriptions", label: "Subscriptions", icon: "receipt", perm: "platform:read" },
+  { href: "/super-admin/revenue", label: "Revenue", icon: "trendUp", perm: "platform:read" },
+  { href: "/super-admin/invoices", label: "Invoices", icon: "file", perm: "platform:read" },
+  { href: "/super-admin/coupons", label: "Coupons", icon: "tag", perm: "platform:read" },
+  { href: "/super-admin/settings", label: "Settings", icon: "gear", perm: "platform:settings_read" },
+  { href: "/super-admin/audit-logs", label: "Audit Logs", icon: "file", perm: "platform:audit_read" },
+  { href: "/super-admin/exports", label: "Data Exports", icon: "package", perm: "platform:read" },
+  { href: "/super-admin/health", label: "System Health", icon: "alert", perm: "platform:health_read" },
+  { href: "/super-admin/observability", label: "Observability", icon: "barChart", perm: "observability:read" },
+  { href: "/super-admin/backups", label: "Backups", icon: "shield", perm: "backup:read" },
+  { href: "/super-admin/jobs", label: "Jobs", icon: "gear", perm: "jobs:read" },
   { href: "/security", label: "Security", icon: "shield" },
 ];
 
@@ -361,6 +365,9 @@ export default function DashboardLayout({
   const { user, accessToken, refreshToken, logout } = useAuthStore();
   const mode = useModeStore((s) => s.mode);
   const setMode = useModeStore((s) => s.setMode);
+  // Effective-permission gate for the super-admin nav (owners hold every key, so
+  // they keep every item; non-owner platform sub-roles are correctly limited).
+  const { can: canNav } = usePermissions();
   const [hydrated, setHydrated] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -419,7 +426,9 @@ export default function DashboardLayout({
   const isSuper = user?.role === "super_admin";
   const inSuperArea = pathname.startsWith("/super-admin");
   const navItems = isSuper
-    ? SUPER_ADMIN_NAV
+    ? // Filter the super-admin nav by the caller's effective permissions. Items
+      // without a `perm` always show; owners hold every key so keep everything.
+      SUPER_ADMIN_NAV.filter((item) => canNav(item.perm))
     : (mode === "college" ? COLLEGE_NAV : SCHOOL_NAV)
         .filter((item) => !item.adminOnly || user?.role === "admin")
         // Hide modules the tenant explicitly disabled. Untagged items and the

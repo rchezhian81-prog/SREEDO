@@ -74,6 +74,7 @@ import {
   platformAdminsRouter,
   platformInviteAcceptRouter,
 } from "./modules/platform/platform-admins.routes";
+import { platformRbacRouter } from "./modules/platform/rbac.routes";
 import { platformSettingsRouter } from "./modules/platform/platform-settings.routes";
 import { tenantRouter } from "./modules/platform/tenant.routes";
 import { portalRouter } from "./modules/portal/portal.routes";
@@ -246,6 +247,7 @@ export function createApp(): express.Express {
   api.use("/platform", platformInviteAcceptRouter);
   api.use("/platform", platformRouter); // super-admin platform hardening
   api.use("/platform/admins", platformAdminsRouter); // super-admin platform-team management (I)
+  api.use("/platform/rbac", platformRbacRouter); // super-admin RBAC roles + permission matrix (H)
   api.use("/platform", subscriptionsRouter); // super-admin subscription management (D)
   api.use("/platform", couponsRouter); // super-admin coupon / promotion management
   api.use("/platform", tenantRouter); // super-admin tenant/institution management

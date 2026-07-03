@@ -1821,44 +1821,6 @@ export interface ObservabilityHealth {
   uptimeSeconds: number;
 }
 
-// --- Super Admin RBAC Console (/platform/permissions, /platform/roles) ---
-
-/** A single permission within the catalogue, with the roles that hold it. */
-export interface RbacPermission {
-  key: string;
-  description: string;
-  /** Roles currently holding this permission. */
-  roles: string[];
-}
-
-/** Permission catalogue grouped by module, from GET /platform/permissions. */
-export interface RbacPermissionGroup {
-  module: string;
-  permissions: RbacPermission[];
-}
-
-/** Explicit role → permissions matrix from GET /platform/roles. */
-export interface RbacRoleMatrixEntry {
-  role: string;
-  permissions: string[];
-}
-
-/** Result of POST /platform/roles/:role/permissions (grant). */
-export interface RbacGrantResult {
-  role: string;
-  permission: string;
-  granted: boolean;
-  alreadyGranted: boolean;
-}
-
-/** Result of POST /platform/roles/:role/permissions/revoke (revoke). */
-export interface RbacRevokeResult {
-  role: string;
-  permission: string;
-  revoked: boolean;
-  removed: boolean;
-}
-
 // --- Super Admin: Scheduled Backup / Restore Automation (/backups/*) ---
 
 /** A database backup (super-admin backup/restore automation). */

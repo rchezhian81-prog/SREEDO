@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { Request } from "express";
 import { authenticate } from "../../middleware/auth";
-import { permissionsForRole } from "../../middleware/permissions";
+import { effectivePermissions } from "../../middleware/permissions";
 import { authRateLimiter } from "../../middleware/rate-limit";
 import { ApiError } from "../../utils/api-error";
 import { uuidParam } from "../../utils/params";
@@ -314,7 +314,7 @@ authRouter.get("/me", authenticate, async (req, res) => {
  */
 authRouter.get("/permissions", authenticate, async (req, res) => {
   const role = req.user!.role;
-  res.json({ role, permissions: await permissionsForRole(role) });
+  res.json({ role, permissions: await effectivePermissions(req.user!) });
 });
 
 /**

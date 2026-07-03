@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { uuidParam } from "../../utils/params";
 import { ApiError } from "../../utils/api-error";
 import { authenticate, authorize } from "../../middleware/auth";
+import { requirePermission } from "../../middleware/permissions";
 import { toCsv, toXlsx, type Cell } from "../../utils/spreadsheet";
 import {
   assignSubscriptionSchema,
@@ -24,6 +25,12 @@ import * as service from "./superadmin.service";
 // institution's admin.
 export const superAdminRouter = Router();
 superAdminRouter.use(authenticate, authorize("super_admin"));
+// RBAC (Super Admin H): every route needs platform:read; mutations additionally
+// need the relevant manage key, so a read-only platform sub-role (e.g. auditor)
+// can view but not mutate. Owners bypass (see requirePermission).
+superAdminRouter.use(requirePermission("platform:read"));
+const canManageTenant = requirePermission("platform:manage_institutions");
+const canManageBilling = requirePermission("platform:manage_subscriptions");
 
 const actor = (req: Request) => ({
   id: req.user!.id,
@@ -94,7 +101,7 @@ superAdminRouter.get("/institutions", async (_req, res) => {
   res.json(await service.listInstitutions());
 });
 
-superAdminRouter.post("/institutions", async (req, res) => {
+superAdminRouter.post("/institutions", canManageTenant, async (req, res) => {
   const input = createInstitutionSchema.parse(req.body);
   res.status(201).json(await service.createInstitution(input));
 });
@@ -134,14 +141,14 @@ superAdminRouter.get("/institutions/:id", async (req, res) => {
   res.json(await service.getInstitution(uuidParam(req)));
 });
 
-superAdminRouter.patch("/institutions/:id", async (req, res) => {
+superAdminRouter.patch("/institutions/:id", canManageTenant, async (req, res) => {
   const input = updateInstitutionSchema.parse(req.body);
   res.json(await service.updateInstitution(uuidParam(req), input));
 });
 
 // Hard delete is disabled. This legacy endpoint now SOFT-ARCHIVES (requires a
 // reason, audited) so production tenant data is never destroyed.
-superAdminRouter.delete("/institutions/:id", async (req, res) => {
+superAdminRouter.delete("/institutions/:id", canManageTenant, async (req, res) => {
   const raw = (req.body as { reason?: unknown } | undefined)?.reason ?? req.query?.reason;
   const reason = typeof raw === "string" ? raw.trim() : "";
   if (!reason) {
@@ -188,7 +195,7 @@ superAdminRouter.get("/institutions/:id/branches", async (req, res) => {
   res.json(await service.listBranches(uuidParam(req)));
 });
 
-superAdminRouter.post("/institutions/:id/branches", async (req, res) => {
+superAdminRouter.post("/institutions/:id/branches", canManageTenant, async (req, res) => {
   const input = createBranchSchema.parse(req.body);
   res.status(201).json(await service.createBranch(uuidParam(req), input));
 });
@@ -215,13 +222,13 @@ superAdminRouter.post("/institutions/:id/branches", async (req, res) => {
  *       200: { description: "Deactivated ({ archived: true }) — data preserved" }
  *       400: { description: "Reason required (hard delete disabled)" }
  */
-superAdminRouter.patch("/branches/:id", async (req, res) => {
+superAdminRouter.patch("/branches/:id", canManageTenant, async (req, res) => {
   const input = updateBranchSchema.parse(req.body);
   res.json(await service.updateBranch(uuidParam(req), input));
 });
 
 // Hard delete is disabled — deactivate (soft) with a reason, audited.
-superAdminRouter.delete("/branches/:id", async (req, res) => {
+superAdminRouter.delete("/branches/:id", canManageTenant, async (req, res) => {
   const raw = (req.body as { reason?: unknown } | undefined)?.reason ?? req.query?.reason;
   const reason = typeof raw === "string" ? raw.trim() : "";
   if (!reason) {
@@ -296,7 +303,7 @@ superAdminRouter.get("/packages", async (req, res) => {
   res.json(await service.listPackages(packageListQuerySchema.parse(req.query)));
 });
 
-superAdminRouter.post("/packages", async (req, res) => {
+superAdminRouter.post("/packages", canManageBilling, async (req, res) => {
   const input = createPackageSchema.parse(req.body);
   res.status(201).json(await service.createPackage(input, actor(req)));
 });
@@ -321,7 +328,7 @@ superAdminRouter.get("/packages/:id", async (req, res) => {
   res.json(await service.getPackage(uuidParam(req)));
 });
 
-superAdminRouter.patch("/packages/:id", async (req, res) => {
+superAdminRouter.patch("/packages/:id", canManageBilling, async (req, res) => {
   const input = updatePackageSchema.parse(req.body);
   res.json(await service.updatePackage(uuidParam(req), input, actor(req)));
 });
@@ -336,7 +343,7 @@ superAdminRouter.patch("/packages/:id", async (req, res) => {
  *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
  *     responses: { 201: { description: Duplicated package } }
  */
-superAdminRouter.post("/packages/:id/duplicate", async (req, res) => {
+superAdminRouter.post("/packages/:id/duplicate", canManageBilling, async (req, res) => {
   const input = duplicatePackageSchema.parse(req.body);
   res.status(201).json(await service.duplicatePackage(uuidParam(req), input, actor(req)));
 });
@@ -351,7 +358,7 @@ superAdminRouter.post("/packages/:id/duplicate", async (req, res) => {
  *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
  *     responses: { 200: { description: Updated package } }
  */
-superAdminRouter.post("/packages/:id/status", async (req, res) => {
+superAdminRouter.post("/packages/:id/status", canManageBilling, async (req, res) => {
   const input = packageStatusSchema.parse(req.body);
   res.json(await service.setPackageStatus(uuidParam(req), input, actor(req)));
 });
@@ -408,7 +415,7 @@ superAdminRouter.get("/packages/:id/impact", async (req, res) => {
  *     responses:
  *       201: { description: Subscription assigned }
  */
-superAdminRouter.post("/institutions/:id/subscription", async (req, res) => {
+superAdminRouter.post("/institutions/:id/subscription", canManageBilling, async (req, res) => {
   const input = assignSubscriptionSchema.parse(req.body);
   res.status(201).json(await service.assignSubscription(uuidParam(req), input, actor(req)));
 });

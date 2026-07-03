@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { uuidParam } from "../../utils/params";
 import { authenticate, authorize } from "../../middleware/auth";
+import { requirePermission } from "../../middleware/permissions";
 import { auditQuerySchema, updateSettingsSchema } from "./adminconsole.schema";
 import * as service from "./adminconsole.service";
 
@@ -8,6 +9,11 @@ import * as service from "./adminconsole.service";
 // institution). No normal admin/staff/student/parent can reach these routes.
 export const adminConsoleRouter = Router();
 adminConsoleRouter.use(authenticate, authorize("super_admin"));
+// RBAC (Super Admin H): reads need platform:read; settings edits need
+// manage_institutions; audit-log reads need audit_read. Owners bypass.
+adminConsoleRouter.use(requirePermission("platform:read"));
+const canManageSettings = requirePermission("platform:manage_institutions");
+const canReadAudit = requirePermission("platform:audit_read");
 
 /**
  * @openapi
@@ -55,7 +61,7 @@ adminConsoleRouter.get("/institutions", async (_req, res) => {
 adminConsoleRouter.get("/institutions/:id/settings", async (req, res) => {
   res.json(await service.getInstitutionSettings(uuidParam(req)));
 });
-adminConsoleRouter.patch("/institutions/:id/settings", async (req, res) => {
+adminConsoleRouter.patch("/institutions/:id/settings", canManageSettings, async (req, res) => {
   res.json(await service.updateInstitutionSettings(uuidParam(req), updateSettingsSchema.parse(req.body)));
 });
 
@@ -132,7 +138,7 @@ adminConsoleRouter.get("/exports", async (req, res) => {
  *       - { in: query, name: dateTo, schema: { type: string, format: date } }
  *     responses: { 200: { description: "{ available, rows }" } }
  */
-adminConsoleRouter.get("/audit-logs", async (req, res) => {
+adminConsoleRouter.get("/audit-logs", canReadAudit, async (req, res) => {
   res.json(await service.listAuditLogs(auditQuerySchema.parse(req.query)));
 });
 
@@ -145,7 +151,7 @@ adminConsoleRouter.get("/audit-logs", async (req, res) => {
  *     security: [{ bearerAuth: [] }]
  *     responses: { 200: { description: CSV file, content: { text/csv: {} } } }
  */
-adminConsoleRouter.get("/audit-logs/export", async (req, res) => {
+adminConsoleRouter.get("/audit-logs/export", canReadAudit, async (req, res) => {
   const csv = await service.auditLogsCsv(auditQuerySchema.parse(req.query));
   res.type("text/csv").attachment("audit-logs.csv").send(csv);
 });
