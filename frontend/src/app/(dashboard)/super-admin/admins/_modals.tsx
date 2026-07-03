@@ -96,7 +96,9 @@ export function AdminActionModal({
   onSuccess: (updated: Admin) => void;
 }) {
   const [reason, setReason] = useState("");
-  const [role, setRole] = useState<string>("platform_admin");
+  const [role, setRole] = useState<string>("");
+  // Active RBAC roles for the change-role picker (fetched from the RBAC module).
+  const [rbacRoles, setRbacRoles] = useState<{ key: string; name: string }[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -104,9 +106,18 @@ export function AdminActionModal({
   useEffect(() => {
     if (action && admin) {
       setReason("");
-      setRole(admin.platformRole ?? "platform_admin");
+      setRole(admin.platformRole ?? "");
       setError(null);
       setSaving(false);
+      // "Change role" now assigns an RBAC role — load the active roles.
+      if (action === "change-role") {
+        api
+          .get<{ key: string; name: string }[]>(
+            "/platform/rbac/roles?status=active"
+          )
+          .then((rs) => setRbacRoles(rs))
+          .catch(() => setRbacRoles([]));
+      }
     }
   }, [action, admin]);
 
@@ -116,6 +127,18 @@ export function AdminActionModal({
     if (action === "change-role" && !role) return false;
     return true;
   }, [action, reason, role]);
+
+  // Always keep the admin's current role selectable, even if it's archived.
+  const roleOptions = useMemo(() => {
+    const list = rbacRoles.map((r) => ({ key: r.key, name: r.name }));
+    if (admin?.platformRole && !list.some((r) => r.key === admin.platformRole)) {
+      list.unshift({
+        key: admin.platformRole,
+        name: `${admin.platformRole} (current)`,
+      });
+    }
+    return list;
+  }, [rbacRoles, admin]);
 
   if (!action || !admin) return null;
 
@@ -149,10 +172,12 @@ export function AdminActionModal({
           updated = await api.post<Admin>(`${base}/reset-2fa`, { reason: r });
           break;
         case "change-role":
-          updated = await api.post<Admin>(`${base}/role`, {
-            platformRole: role,
+          // Assign an RBAC role, then refetch the full admin for the UI.
+          await api.post(`/platform/rbac/users/${admin.id}/role`, {
+            roleKey: role,
             reason: r,
           });
+          updated = await api.get<Admin>(base);
           break;
       }
       toast.success(`${TITLES[action]} — done`);
@@ -189,11 +214,17 @@ export function AdminActionModal({
         )}
 
         {action === "change-role" && (
-          <Field label="New platform role" hint={`Currently ${roleLabel(admin.platformRole)}`}>
+          <Field
+            label="New role"
+            hint={`Currently ${roleLabel(admin.platformRole)}`}
+          >
             <Select value={role} onChange={(e) => setRole(e.target.value)}>
-              {PLATFORM_ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {roleLabel(r)}
+              <option value="" disabled>
+                Select a role…
+              </option>
+              {roleOptions.map((r) => (
+                <option key={r.key} value={r.key}>
+                  {r.name} ({r.key})
                 </option>
               ))}
             </Select>

@@ -7,13 +7,19 @@ interface PermissionsState {
   role: string;
   permissions: string[];
   loading: boolean;
-  /** True for super_admin (sees everything) or when the key is granted. */
-  can: (key: string) => boolean;
+  /**
+   * True when the caller holds `key`. Relies purely on the effective
+   * permissions from `GET /auth/permissions` (owners receive every key). A
+   * missing key always passes (ungated); while permissions are still loading we
+   * allow, so nothing flickers/hides before settling.
+   */
+  can: (key?: string) => boolean;
 }
 
 /**
- * Fetches `GET /auth/permissions` once and exposes a `can(key)` gate.
- * super_admin is treated as having every permission.
+ * Fetches `GET /auth/permissions` once and exposes a `can(key)` gate against the
+ * caller's EFFECTIVE permissions. Platform owners receive every permission, so
+ * they still see everything; non-owner platform sub-roles are correctly limited.
  */
 export function usePermissions(): PermissionsState {
   const [role, setRole] = useState("");
@@ -38,8 +44,12 @@ export function usePermissions(): PermissionsState {
     };
   }, []);
 
-  const can = (key: string) =>
-    role === "super_admin" || permissions.includes(key);
+  const can = (key?: string) => {
+    if (!key) return true;
+    // Avoid a blank flash while the effective permissions are still loading.
+    if (loading) return true;
+    return permissions.includes(key);
+  };
 
   return { role, permissions, loading, can };
 }
