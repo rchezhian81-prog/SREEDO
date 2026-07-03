@@ -116,6 +116,7 @@ const SUPER_ADMIN_NAV: NavItem[] = [
   { href: "/super-admin/platform/support", label: "Support Access", icon: "help", perm: "platform:impersonate" },
   { href: "/super-admin/admins", label: "Platform Admins", icon: "users", perm: "platform:manage_admins" },
   { href: "/super-admin/rbac", label: "Roles & Permissions", icon: "shield", perm: "platform:rbac_read" },
+  { href: "/super-admin/security", label: "Security Center", icon: "lock", perm: "platform:security_read" },
   { href: "/super-admin/packages", label: "Packages", icon: "package", perm: "platform:read" },
   { href: "/super-admin/subscriptions", label: "Subscriptions", icon: "receipt", perm: "platform:read" },
   { href: "/super-admin/revenue", label: "Revenue", icon: "trendUp", perm: "platform:read" },
