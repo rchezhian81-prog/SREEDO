@@ -70,6 +70,10 @@ import { couponsRouter } from "./modules/billing/coupons.routes";
 import { saasPaymentsWebhookRouter } from "./modules/saaspayments/saaspayments.routes";
 import { platformRouter } from "./modules/platform/platform.routes";
 import { subscriptionsRouter } from "./modules/platform/subscriptions.routes";
+import {
+  platformAdminsRouter,
+  platformInviteAcceptRouter,
+} from "./modules/platform/platform-admins.routes";
 import { platformSettingsRouter } from "./modules/platform/platform-settings.routes";
 import { tenantRouter } from "./modules/platform/tenant.routes";
 import { portalRouter } from "./modules/portal/portal.routes";
@@ -237,7 +241,11 @@ export function createApp(): express.Express {
   // all other /platform paths fall through). Signature + idempotency are enforced
   // in the service, so no auth middleware applies to the webhook itself.
   api.use("/platform", saasPaymentsWebhookRouter);
+  // PUBLIC platform-team invite acceptance (matches only /platform/invite/accept;
+  // all other /platform paths fall through to the guarded routers below).
+  api.use("/platform", platformInviteAcceptRouter);
   api.use("/platform", platformRouter); // super-admin platform hardening
+  api.use("/platform/admins", platformAdminsRouter); // super-admin platform-team management (I)
   api.use("/platform", subscriptionsRouter); // super-admin subscription management (D)
   api.use("/platform", couponsRouter); // super-admin coupon / promotion management
   api.use("/platform", tenantRouter); // super-admin tenant/institution management

@@ -26,8 +26,8 @@ import * as authService from "./auth.service";
 export const authRouter = Router();
 
 /** Session metadata captured from the request (the browser/device label). */
-function sessionMeta(req: Request): { userAgent: string | null } {
-  return { userAgent: req.headers["user-agent"] ?? null };
+function sessionMeta(req: Request): { userAgent: string | null; ip: string | null } {
+  return { userAgent: req.headers["user-agent"] ?? null, ip: clientIp(req) };
 }
 
 /**
@@ -70,6 +70,7 @@ authRouter.post("/login", authRateLimiter, async (req, res) => {
         actorEmail: result.user.email,
         actorRole: result.user.role,
         targetId: result.user.id,
+        detail: { userAgent: req.headers["user-agent"] ?? null },
         ip: clientIp(req),
       });
     }
@@ -78,7 +79,10 @@ authRouter.post("/login", authRateLimiter, async (req, res) => {
     await recordSecurityEvent({
       action: "auth.login.failed",
       actorEmail: email,
-      detail: { reason: err instanceof ApiError ? err.message : "error" },
+      detail: {
+        reason: err instanceof ApiError ? err.message : "error",
+        userAgent: req.headers["user-agent"] ?? null,
+      },
       ip: clientIp(req),
     });
     throw err;

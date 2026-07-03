@@ -110,6 +110,7 @@ const SUPER_ADMIN_NAV: NavItem[] = [
   { href: "/super-admin/platform/tenants", label: "Tenants", icon: "building" },
   { href: "/super-admin/platform/audit", label: "Platform Audit", icon: "file" },
   { href: "/super-admin/platform/support", label: "Support Access", icon: "help" },
+  { href: "/super-admin/admins", label: "Platform Admins", icon: "users" },
   { href: "/super-admin/rbac", label: "Roles & Permissions", icon: "shield" },
   { href: "/super-admin/packages", label: "Packages", icon: "package" },
   { href: "/super-admin/subscriptions", label: "Subscriptions", icon: "receipt" },

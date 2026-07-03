@@ -45,6 +45,7 @@ export type LoginResult = AuthTokens | { twoFactorRequired: true };
 /** Per-request session metadata captured at login/refresh (e.g. the browser). */
 export interface SessionMeta {
   userAgent?: string | null;
+  ip?: string | null;
 }
 
 async function issueTokens(
@@ -56,10 +57,10 @@ async function issueTokens(
   // session in the active-sessions list.
   const { token: refreshToken, tokenHash } = generateRefreshToken();
   const { rows } = await query<{ id: string }>(
-    `INSERT INTO refresh_tokens (user_id, token_hash, expires_at, user_agent)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO refresh_tokens (user_id, token_hash, expires_at, user_agent, ip)
+     VALUES ($1, $2, $3, $4, $5)
      RETURNING id`,
-    [user.id, tokenHash, refreshTokenExpiry(), meta?.userAgent ?? null]
+    [user.id, tokenHash, refreshTokenExpiry(), meta?.userAgent ?? null, meta?.ip ?? null]
   );
   const accessToken = signAccessToken({
     sub: user.id,
@@ -157,6 +158,8 @@ export async function login(
     }
   }
   await purgeStaleRefreshTokens();
+  // Record the successful sign-in time (platform admin console surfaces this).
+  await query("UPDATE users SET last_login_at = now() WHERE id = $1", [user.id]);
   return issueTokens(user, meta);
 }
 
