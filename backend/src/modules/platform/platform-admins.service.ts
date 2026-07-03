@@ -5,6 +5,7 @@ import { env } from "../../config/env";
 import { ApiError } from "../../utils/api-error";
 import { hashPassword } from "../../utils/password";
 import { sendMail, mailerConfigured } from "../../utils/mailer";
+import { invalidatePlatformRoleCache } from "../../middleware/permissions";
 import { recordAudit, type Actor } from "./platform.service";
 import type {
   acceptInviteSchema,
@@ -373,6 +374,7 @@ export async function assignRole(id: string, input: AssignRoleInput, actor: Acto
     await assertNotLastOwner(target, "demote");
   }
   await query("UPDATE users SET platform_role = $2 WHERE id = $1", [id, input.platformRole]);
+  invalidatePlatformRoleCache(id); // effective permissions change immediately
   await recordAudit(actor, {
     action: "platform.admin.role_changed",
     targetType: "user",
