@@ -58,6 +58,7 @@ import {
   ClipboardList,
   Rocket,
   Video,
+  KeyRound,
 } from "lucide-react";
 
 /*
@@ -126,6 +127,7 @@ const MAP = {
   clipboard: ClipboardList,
   rocket: Rocket,
   video: Video,
+  key: KeyRound,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof MAP;

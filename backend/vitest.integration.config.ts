@@ -9,8 +9,13 @@ export default defineConfig({
     include: ["tests/integration/**/*.int.test.ts"],
     setupFiles: ["tests/integration/setup.ts"],
     fileParallelism: false,
-    hookTimeout: 30_000,
-    testTimeout: 20_000,
+    // Generous timeouts: these are DB-heavy tests (real Postgres, many round
+    // trips each) and shared CI runners occasionally exhibit pathological I/O
+    // (Postgres checkpoints stalling for >100s), which would otherwise blow a
+    // tight timeout and flake a run even though the code is correct. Locally
+    // each test is ~1s; 60s gives ample headroom without masking a true hang.
+    hookTimeout: 60_000,
+    testTimeout: 60_000,
     env: {
       // High limits so the many requests a run makes don't trip rate limiting.
       RATE_LIMIT_MAX: "100000",
