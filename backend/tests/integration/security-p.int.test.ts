@@ -228,7 +228,7 @@ describe("Super Admin P — Security Center", () => {
     const created = await post("/api/v1/platform/security/api-tokens", tok.owner, {
       name: "CI integration",
       description: "read-only export",
-      scopes: ["reports:read"],
+      scopes: ["audit:read"],
     });
     expect(created.status).toBe(201);
     const raw = created.body.token as string;

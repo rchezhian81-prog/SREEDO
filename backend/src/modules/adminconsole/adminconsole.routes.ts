@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { uuidParam } from "../../utils/params";
 import { authenticate, authorize } from "../../middleware/auth";
+import { platformIpGate } from "../../middleware/platform-ip-gate";
 import { requirePermission } from "../../middleware/permissions";
 import { auditQuerySchema, updateSettingsSchema } from "./adminconsole.schema";
 import * as service from "./adminconsole.service";
@@ -9,6 +10,8 @@ import * as service from "./adminconsole.service";
 // institution). No normal admin/staff/student/parent can reach these routes.
 export const adminConsoleRouter = Router();
 adminConsoleRouter.use(authenticate, authorize("super_admin"));
+// Platform IP allowlist (no-op unless an operator enabled a non-empty list).
+adminConsoleRouter.use(platformIpGate);
 // RBAC (Super Admin H): reads need platform:read; settings edits need
 // manage_institutions; audit-log reads need audit_read. Owners bypass.
 adminConsoleRouter.use(requirePermission("platform:read"));

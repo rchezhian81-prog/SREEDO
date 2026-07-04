@@ -24,6 +24,8 @@ declare global {
       rawBody?: Buffer;
       /** Correlation id (incoming x-request-id or generated); echoed in responses. */
       requestId?: string;
+      /** Platform API-token identity (set by authenticatePlatformToken). */
+      platformToken?: { id: string; name: string; scopes: string[] };
     }
   }
 }

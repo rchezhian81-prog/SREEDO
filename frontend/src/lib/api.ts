@@ -44,10 +44,12 @@ async function refreshSession(): Promise<boolean> {
 
 async function request<T>(
   path: string,
-  options: { method?: string; body?: unknown } = {},
+  options: { method?: string; body?: unknown; token?: string } = {},
   allowRetry = true
 ): Promise<T> {
-  const token = useAuthStore.getState().accessToken;
+  // An explicit token (e.g. the scoped 2FA setup token used before a session
+  // exists) overrides the stored session and is never eligible for refresh.
+  const token = options.token ?? useAuthStore.getState().accessToken;
   const res = await fetch(`${API_URL}${path}`, {
     method: options.method ?? "GET",
     headers: {
@@ -57,7 +59,7 @@ async function request<T>(
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
   });
 
-  if (res.status === 401 && allowRetry && path !== "/auth/login") {
+  if (res.status === 401 && allowRetry && !options.token && path !== "/auth/login") {
     if (await refreshSession()) {
       return request(path, options, false);
     }
@@ -79,9 +81,9 @@ async function request<T>(
 }
 
 export const api = {
-  get: <T>(path: string) => request<T>(path),
-  post: <T>(path: string, body?: unknown) =>
-    request<T>(path, { method: "POST", body }),
+  get: <T>(path: string, token?: string) => request<T>(path, { token }),
+  post: <T>(path: string, body?: unknown, token?: string) =>
+    request<T>(path, { method: "POST", body, token }),
   put: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "PUT", body }),
   patch: <T>(path: string, body?: unknown) =>

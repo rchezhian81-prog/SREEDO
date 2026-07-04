@@ -1,6 +1,7 @@
 import type { Request } from "express";
 import { Router } from "express";
 import { authenticate, authorize } from "../../middleware/auth";
+import { platformIpGate } from "../../middleware/platform-ip-gate";
 import {
   requirePermission,
   effectivePermissions,
@@ -24,6 +25,8 @@ import {
 
 export const platformRbacRouter = Router();
 platformRbacRouter.use(authenticate, authorize("super_admin"));
+// Platform IP allowlist (no-op unless an operator enabled a non-empty list).
+platformRbacRouter.use(platformIpGate);
 
 const actor = (req: Request) => ({
   id: req.user!.id,

@@ -131,6 +131,14 @@ export default function ApiTokensPage() {
         recoverable form. Lists only ever show the token prefix.
       </div>
 
+      <p className="mb-4 text-xs text-muted">
+        Tokens authenticate the read-only external API —{" "}
+        <code className="font-mono text-faint">GET /platform/ext/summary</code> and{" "}
+        <code className="font-mono text-faint">/platform/ext/audit</code> — sent in
+        the <code className="font-mono text-faint">X-Platform-Token</code> header,
+        limited to each token&apos;s granted scopes.
+      </p>
+
       <ErrorNote message={error} />
 
       {loading ? (

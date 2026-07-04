@@ -8,6 +8,7 @@ import {
   hashRefreshToken,
   refreshTokenExpiry,
   signAccessToken,
+  signSetupToken,
 } from "../../utils/jwt";
 import { generateBase32Secret, otpauthUrl, verifyTotp } from "../../utils/totp";
 import { hashPassword, verifyPassword } from "../../utils/password";
@@ -22,6 +23,8 @@ interface UserRow {
   phone: string | null;
   is_active: boolean;
   institution_id: string | null;
+  /** Platform-team classification (owner/billing_admin/…); null for tenant users. */
+  platform_role: string | null;
   totp_secret: string | null;
   totp_enabled: boolean;
   failed_login_attempts: number;
@@ -39,8 +42,30 @@ export interface AuthTokens {
   };
 }
 
-/** Either a full session, or a signal that a 2FA code is still required. */
-export type LoginResult = AuthTokens | { twoFactorRequired: true };
+/**
+ * A scoped setup handshake: the platform user's role now mandates 2FA (grace
+ * elapsed) but they have not enrolled, so instead of a full login they get a
+ * short-lived setup-only token that unlocks ONLY the 2FA-enrollment surface.
+ */
+export interface TwoFactorSetupRequired {
+  twoFactorSetupRequired: true;
+  setupToken: string;
+  user: {
+    id: string;
+    email: string;
+    fullName: string;
+    role: UserRole;
+  };
+}
+
+/**
+ * A full session, a signal that a 2FA code is still required, or a scoped 2FA
+ * setup handshake for a user who must enrol before a full session is issued.
+ */
+export type LoginResult =
+  | AuthTokens
+  | { twoFactorRequired: true }
+  | TwoFactorSetupRequired;
 
 /** Per-request session metadata captured at login/refresh (e.g. the browser). */
 export interface SessionMeta {
@@ -112,6 +137,44 @@ async function clearFailedLogins(user: UserRow): Promise<void> {
   );
 }
 
+/**
+ * Should this login be intercepted with a 2FA-setup handshake instead of a full
+ * session? True only when the caller is a PLATFORM user (super_admin, no
+ * institution) whose role — per the per-role policy OR the global
+ * force_2fa_for_platform switch — REQUIRES 2FA, whose grace window has elapsed,
+ * and who has not enrolled. Reuses Phase 1's exact non-compliance predicate.
+ *
+ * ABSOLUTE lockout guard: the LAST active owner is never intercepted — an owner
+ * who is the sole operator always logs in normally, so 2FA policy can never
+ * lock the platform out of itself.
+ */
+async function requires2faSetupHandshake(user: UserRow): Promise<boolean> {
+  if (user.role !== "super_admin" || user.institution_id !== null) return false;
+  if (user.totp_enabled) return false;
+  const { rows } = await query<{ non_compliant: boolean }>(
+    `SELECT (
+        (COALESCE(p.require_2fa, false) OR COALESCE(c.force_2fa_for_platform, false))
+        AND (p.grace_until IS NULL OR p.grace_until < current_date)
+      ) AS non_compliant
+     FROM users u
+     LEFT JOIN security_2fa_policy p ON p.role_key = u.platform_role
+     LEFT JOIN platform_security_config c ON c.id = TRUE
+     WHERE u.id = $1`,
+    [user.id]
+  );
+  if (!rows[0]?.non_compliant) return false;
+  // Never block the last active owner (absolute lockout guard).
+  if (user.platform_role === "owner") {
+    const { rows: owners } = await query<{ c: number }>(
+      `SELECT count(*)::int AS c FROM users
+       WHERE role = 'super_admin' AND institution_id IS NULL
+         AND platform_role = 'owner' AND is_active = true`
+    );
+    if (Number(owners[0].c) <= 1) return false;
+  }
+  return true;
+}
+
 /** Housekeeping: drop expired tokens and revoked ones past the detection window. */
 async function purgeStaleRefreshTokens(): Promise<void> {
   await query(
@@ -156,6 +219,26 @@ export async function login(
     if (!user.totp_secret || !verifyTotp(user.totp_secret, totpCode)) {
       throw ApiError.unauthorized("Invalid two-factor code");
     }
+  }
+  // Enrollment gate: a platform user whose role now mandates 2FA (grace elapsed)
+  // and who hasn't enrolled gets a scoped setup-only session — never a dead end,
+  // and never the last active owner. No refresh token / session row is minted.
+  if (await requires2faSetupHandshake(user)) {
+    return {
+      twoFactorSetupRequired: true,
+      setupToken: signSetupToken({
+        sub: user.id,
+        email: user.email,
+        role: user.role,
+        institutionId: user.institution_id ?? null,
+      }),
+      user: {
+        id: user.id,
+        email: user.email,
+        fullName: user.full_name,
+        role: user.role,
+      },
+    };
   }
   await purgeStaleRefreshTokens();
   // Record the successful sign-in time (platform admin console surfaces this).

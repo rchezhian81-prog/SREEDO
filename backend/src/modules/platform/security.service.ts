@@ -738,7 +738,17 @@ export async function listApiTokens() {
   }));
 }
 
-async function insertToken(input: ApiTokenInput, actor: Actor, rotatedFrom: string | null) {
+/** insertToken only PERSISTS scopes (creation validates them via the schema), so
+ *  it accepts a structural input — letting rotate reuse an existing token's
+ *  already-validated `string[]` scopes without a redundant cast. */
+type InsertTokenInput = {
+  name: string;
+  description?: string;
+  scopes: readonly string[];
+  expiresInDays?: number | null;
+};
+
+async function insertToken(input: InsertTokenInput, actor: Actor, rotatedFrom: string | null) {
   const raw = TOKEN_PREFIX + crypto.randomBytes(30).toString("base64url");
   const tokenHash = crypto.createHash("sha256").update(raw).digest("hex");
   const prefix = raw.slice(0, 12);

@@ -178,6 +178,20 @@ export interface IpAllowlistState {
 }
 
 // ---- H. API tokens ----
+/**
+ * The FIXED set of scopes the backend accepts for platform API tokens. These
+ * govern the read-only external API (`GET /platform/ext/*`). Mirrors the
+ * allow-list in backend security validation — keep the two in sync.
+ */
+export const API_TOKEN_SCOPES: { value: string; label: string }[] = [
+  {
+    value: "platform:read",
+    label: "Read platform overview (counts, module adoption)",
+  },
+  { value: "metrics:read", label: "Read platform metrics" },
+  { value: "audit:read", label: "Read recent audit activity" },
+];
+
 export type TokenStatus = "active" | "expired" | "revoked";
 export interface ApiToken {
   id: string;
