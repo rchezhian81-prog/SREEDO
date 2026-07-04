@@ -112,10 +112,23 @@ export const ipAllowlistToggleSchema = z.object({
 
 // ---- API tokens ----
 
+/**
+ * The fixed, governed set of scopes a platform API token may carry. Token
+ * acceptance (`authenticatePlatformToken`) checks the required scope against this
+ * set, and creation validates requested scopes against it — no free-form scopes.
+ */
+export const PLATFORM_TOKEN_SCOPES = [
+  "platform:read",
+  "metrics:read",
+  "audit:read",
+] as const;
+
+export type PlatformTokenScope = (typeof PLATFORM_TOKEN_SCOPES)[number];
+
 export const apiTokenCreateSchema = z.object({
   name: z.string().trim().min(2).max(120),
   description: z.string().trim().max(500).optional(),
-  scopes: z.array(z.string().trim().min(1).max(80)).max(50).default([]),
+  scopes: z.array(z.enum(PLATFORM_TOKEN_SCOPES)).max(50).default([]),
   expiresInDays: z.coerce.number().int().min(1).max(3650).nullish(),
 });
 

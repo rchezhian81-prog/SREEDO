@@ -3,6 +3,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { param, uuidParam } from "../../utils/params";
 import { authenticate, authorize } from "../../middleware/auth";
+import { platformIpGate } from "../../middleware/platform-ip-gate";
 import { requirePermission } from "../../middleware/permissions";
 import { mailerConfigured, sendTestEmail, verifyMailer } from "../../utils/mailer";
 import { clientIp, recordSecurityEvent } from "../../utils/security-audit";
@@ -65,6 +66,8 @@ import { toCsv, toXlsx, type Cell } from "../../utils/spreadsheet";
 // requirePermission documents/enforces the granular platform:* model on top.
 export const platformRouter = Router();
 platformRouter.use(authenticate, authorize("super_admin"));
+// Platform IP allowlist (no-op unless an operator enabled a non-empty list).
+platformRouter.use(platformIpGate);
 
 const actor = (req: Request) => ({
   id: req.user!.id,

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import type { Request } from "express";
-import { authenticate } from "../../middleware/auth";
+import { authenticate, authenticateSetup } from "../../middleware/auth";
 import { effectivePermissions } from "../../middleware/permissions";
 import { authRateLimiter } from "../../middleware/rate-limit";
 import { ApiError } from "../../utils/api-error";
@@ -63,6 +63,21 @@ authRouter.post("/login", authRateLimiter, async (req, res) => {
       totpCode,
       sessionMeta(req)
     );
+    if ("twoFactorSetupRequired" in result) {
+      // Role now mandates 2FA and the user hasn't enrolled: hand back the scoped
+      // setup session (not a full login — no success event).
+      await recordSecurityEvent({
+        action: "auth.2fa.setup_required",
+        actorId: result.user.id,
+        actorEmail: result.user.email,
+        actorRole: result.user.role,
+        targetId: result.user.id,
+        detail: { userAgent: req.headers["user-agent"] ?? null },
+        ip: clientIp(req),
+      });
+      res.json(result);
+      return;
+    }
     if (!("twoFactorRequired" in result)) {
       await recordSecurityEvent({
         action: "auth.login.success",
@@ -237,6 +252,11 @@ authRouter.post("/portal/login", authRateLimiter, async (req, res) => {
     res.json(result);
     return;
   }
+  if ("twoFactorSetupRequired" in result) {
+    // Only platform users hit the 2FA-setup gate — never a student/parent portal
+    // account. Redirect them to the staff sign-in (no cookies set).
+    throw ApiError.forbidden("Use the staff sign-in for this account");
+  }
   if (result.user.role !== "student" && result.user.role !== "parent") {
     // Staff accounts must use the Bearer flow at /auth/login.
     await authService.logout(result.refreshToken);
@@ -296,7 +316,8 @@ authRouter.post("/portal/logout", async (req, res) => {
  *       200: { description: User profile }
  *       401: { description: Not authenticated }
  */
-authRouter.get("/me", authenticate, async (req, res) => {
+// authenticateSetup: a 2FA-setup session may read its own profile while enrolling.
+authRouter.get("/me", authenticateSetup, async (req, res) => {
   const profile = await authService.getProfile(req.user!.id);
   res.json(profile);
 });
@@ -397,7 +418,8 @@ authRouter.delete("/sessions/:id", authenticate, async (req, res) => {
  *     responses:
  *       200: { description: "Whether two-factor is enabled" }
  */
-authRouter.get("/2fa/status", authenticate, async (req, res) => {
+// authenticateSetup: reachable by a 2FA-setup session so it can drive enrollment.
+authRouter.get("/2fa/status", authenticateSetup, async (req, res) => {
   res.json(await authService.twoFactorStatus(req.user!.id));
 });
 
@@ -412,7 +434,8 @@ authRouter.get("/2fa/status", authenticate, async (req, res) => {
  *       200: { description: "Returns secret and otpauthUrl to add to an authenticator app, then call enable" }
  *       400: { description: Already enabled }
  */
-authRouter.post("/2fa/setup", authenticate, async (req, res) => {
+// authenticateSetup: a 2FA-setup session begins enrollment here.
+authRouter.post("/2fa/setup", authenticateSetup, async (req, res) => {
   res.json(await authService.beginTwoFactorSetup(req.user!.id));
 });
 
@@ -436,7 +459,9 @@ authRouter.post("/2fa/setup", authenticate, async (req, res) => {
  *       204: { description: Two-factor enabled }
  *       400: { description: Invalid code or setup not started }
  */
-authRouter.post("/2fa/enable", authenticate, async (req, res) => {
+// authenticateSetup: enabling 2FA is the exit from a setup session — after this
+// the user's next normal login passes the gate and yields a full session.
+authRouter.post("/2fa/enable", authenticateSetup, async (req, res) => {
   const { code } = enableTwoFactorSchema.parse(req.body);
   await authService.enableTwoFactor(req.user!.id, code);
   await recordSecurityEvent({

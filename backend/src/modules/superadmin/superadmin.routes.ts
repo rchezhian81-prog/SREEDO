@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { uuidParam } from "../../utils/params";
 import { ApiError } from "../../utils/api-error";
 import { authenticate, authorize } from "../../middleware/auth";
+import { platformIpGate } from "../../middleware/platform-ip-gate";
 import { requirePermission } from "../../middleware/permissions";
 import { toCsv, toXlsx, type Cell } from "../../utils/spreadsheet";
 import {
@@ -25,6 +26,8 @@ import * as service from "./superadmin.service";
 // institution's admin.
 export const superAdminRouter = Router();
 superAdminRouter.use(authenticate, authorize("super_admin"));
+// Platform IP allowlist (no-op unless an operator enabled a non-empty list).
+superAdminRouter.use(platformIpGate);
 // RBAC (Super Admin H): every route needs platform:read; mutations additionally
 // need the relevant manage key, so a read-only platform sub-role (e.g. auditor)
 // can view but not mutate. Owners bypass (see requirePermission).

@@ -69,6 +69,7 @@ import { payrollRouter } from "./modules/payroll/payroll.routes";
 import { couponsRouter } from "./modules/billing/coupons.routes";
 import { saasPaymentsWebhookRouter } from "./modules/saaspayments/saaspayments.routes";
 import { platformRouter } from "./modules/platform/platform.routes";
+import { platformExtRouter } from "./modules/platform/platform-ext.routes";
 import { subscriptionsRouter } from "./modules/platform/subscriptions.routes";
 import {
   platformAdminsRouter,
@@ -246,6 +247,9 @@ export function createApp(): express.Express {
   // PUBLIC platform-team invite acceptance (matches only /platform/invite/accept;
   // all other /platform paths fall through to the guarded routers below).
   api.use("/platform", platformInviteAcceptRouter);
+  // Governed read-only external API (X-Platform-Token, scoped). Mounted BEFORE the
+  // JWT-guarded platformRouter so its token auth is reached instead of authenticate.
+  api.use("/platform/ext", platformExtRouter);
   api.use("/platform", platformRouter); // super-admin platform hardening
   api.use("/platform/admins", platformAdminsRouter); // super-admin platform-team management (I)
   api.use("/platform/rbac", platformRbacRouter); // super-admin RBAC roles + permission matrix (H)

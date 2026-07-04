@@ -1,6 +1,7 @@
 import type { Request } from "express";
 import { Router } from "express";
 import { authenticate, authorize } from "../../middleware/auth";
+import { platformIpGate } from "../../middleware/platform-ip-gate";
 import { requirePermission } from "../../middleware/permissions";
 import { clientIp } from "../../utils/security-audit";
 import { uuidParam } from "../../utils/params";
@@ -37,7 +38,10 @@ platformInviteAcceptRouter.post("/invite/accept", async (req, res) => {
 
 // ---- Guarded: platform-team management (super_admin + platform:manage_admins) ----
 export const platformAdminsRouter = Router();
-platformAdminsRouter.use(authenticate, authorize("super_admin"), requirePermission("platform:manage_admins"));
+platformAdminsRouter.use(authenticate, authorize("super_admin"));
+// Platform IP allowlist (no-op unless an operator enabled a non-empty list).
+platformAdminsRouter.use(platformIpGate);
+platformAdminsRouter.use(requirePermission("platform:manage_admins"));
 
 /**
  * @openapi
