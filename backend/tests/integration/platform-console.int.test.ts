@@ -101,7 +101,12 @@ describe("super admin — platform console", () => {
     expect(q.body.rows.some((r: { action: string }) => r.action === "institution.suspend")).toBe(true);
     expect(q.body).toHaveProperty("total");
 
-    const csv = await get("/api/v1/platform/audit/export?format=csv&action=institution.suspend", tok.root);
+    // Audit Consolidation (F): a broad export (no dateFrom bound) now requires a
+    // governed reason. The consolidated exporter's Action column carries the action.
+    const csv = await get(
+      "/api/v1/platform/audit/export?format=csv&action=institution.suspend&reason=audit%20export%20test",
+      tok.root
+    );
     expect(csv.status).toBe(200);
     expect(csv.headers["content-type"]).toContain("text/csv");
     expect(csv.text).toContain("institution.suspend");
