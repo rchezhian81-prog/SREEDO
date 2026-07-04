@@ -1,13 +1,23 @@
-import type { Request } from "express";
+import type { Request, Response } from "express";
 import { Router } from "express";
 import { authenticate, authorize } from "../../middleware/auth";
 import { requirePermission } from "../../middleware/permissions";
+import { ApiError } from "../../utils/api-error";
 import { uuidParam } from "../../utils/params";
 import { clientIp } from "../../utils/security-audit";
-import type { Actor } from "./platform.service";
+import { toCsv, toXlsx, type Cell } from "../../utils/spreadsheet";
+import { type Actor, recordAudit } from "./platform.service";
 import * as service from "./support.service";
+import * as reportsService from "./support-reports.service";
+import * as approvalsService from "./support-approvals.service";
 import {
+  approvalCreateSchema,
+  approvalDecisionSchema,
+  approvalListQuerySchema,
+  exportQuerySchema,
   listQuerySchema,
+  reportsExportQuerySchema,
+  reportsQuerySchema,
   revokeByOperatorSchema,
   revokeByTenantSchema,
   revokeSchema,
@@ -32,6 +42,8 @@ platformSupportRouter.use(authenticate, authorize("super_admin"));
 const canRead = requirePermission("platform:support_read");
 const canStart = requirePermission("platform:support_start");
 const canRevoke = requirePermission("platform:support_revoke");
+const canExport = requirePermission("platform:support_export");
+const canApprove = requirePermission("platform:support_approve");
 
 const actor = (req: Request): Actor => ({
   id: req.user!.id,
@@ -39,6 +51,28 @@ const actor = (req: Request): Actor => ({
   role: req.user!.role,
   ip: clientIp(req),
 });
+
+/** Stream a column/row dataset as a CSV or XLSX download (mirrors the Audit
+ *  Console's exporter; kept module-local so this router owns its own streaming). */
+function sendSpreadsheet(
+  res: Response,
+  format: "csv" | "xlsx",
+  filename: string,
+  columns: { key: string; label: string }[],
+  rows: Record<string, unknown>[]
+): void {
+  const headers = columns.map((c) => c.label);
+  const data: Cell[][] = rows.map((r) => columns.map((c) => (r[c.key] ?? "") as Cell));
+  if (format === "xlsx") {
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}.xlsx"`);
+    res.send(toXlsx(headers, data));
+  } else {
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}.csv"`);
+    res.send(toCsv(headers, data));
+  }
+}
 
 /**
  * @openapi
@@ -65,6 +99,83 @@ platformSupportRouter.get("/templates", canRead, (_req, res) => {
  */
 platformSupportRouter.get("/security-summary", canRead, async (_req, res) => {
   res.json(await service.securitySummary());
+});
+
+/**
+ * @openapi
+ * /platform/support/reports:
+ *   get: { tags: [Platform Support], summary: "One of ten support-access report datasets (all/active/expired/revoked/tenant-wise/operator-wise/reason-wise/scope-wise/long-running/high-risk) with filters + totals (sessionCount, avgDurationMinutes, active/revoked/expired, notificationSent/Failed)", security: [{ bearerAuth: [] }], parameters: [{ in: query, name: type, schema: { type: string, enum: [all, active, expired, revoked, tenant-wise, operator-wise, reason-wise, scope-wise, long-running, high-risk] } }, { in: query, name: dateFrom, schema: { type: string, format: date } }, { in: query, name: dateTo, schema: { type: string, format: date } }, { in: query, name: institutionId, schema: { type: string, format: uuid } }, { in: query, name: operatorId, schema: { type: string, format: uuid } }, { in: query, name: status, schema: { type: string } }, { in: query, name: scope, schema: { type: string } }, { in: query, name: reasonTemplate, schema: { type: string } }], responses: { 200: { description: "{ type, filters, totals, rows|groups }" } } }
+ */
+platformSupportRouter.get("/reports", canRead, async (req, res) => {
+  res.json(await reportsService.reports(reportsQuerySchema.parse(req.query)));
+});
+
+/**
+ * @openapi
+ * /platform/support/reports/export:
+ *   get: { tags: [Platform Support], summary: "Export a support-access report as masked CSV/XLSX (curated columns; no secrets). A reason (min 5) is REQUIRED for a broad — no dateFrom — export. Audited as support.report_exported.", security: [{ bearerAuth: [] }], parameters: [{ in: query, name: type, schema: { type: string } }, { in: query, name: format, schema: { type: string, enum: [csv, xlsx] } }, { in: query, name: reason, schema: { type: string, minLength: 5 } }, { in: query, name: dateFrom, schema: { type: string, format: date } }, { in: query, name: dateTo, schema: { type: string, format: date } }], responses: { 200: { description: "CSV or XLSX file" }, 400: { description: "Reason required for a broad export" } } }
+ */
+platformSupportRouter.get("/reports/export", canExport, async (req, res) => {
+  const q = reportsExportQuerySchema.parse(req.query);
+  if (!q.dateFrom && (!q.reason || q.reason.trim().length < 5)) {
+    throw ApiError.badRequest("A reason (at least 5 characters) is required for a broad report export");
+  }
+  const { rows } = await reportsService.exportReport(q);
+  const { reason, format, ...filters } = q;
+  await recordAudit(actor(req), {
+    action: "support.report_exported",
+    targetType: "platform_impersonation_sessions",
+    targetId: null,
+    institutionId: null,
+    detail: { format, type: q.type, rows: rows.length, reason: reason ?? null, filters },
+  });
+  sendSpreadsheet(res, format, `support-report-${q.type}`, service.SUPPORT_EXPORT_COLUMNS, rows);
+});
+
+/**
+ * @openapi
+ * /platform/support/export:
+ *   get: { tags: [Platform Support], summary: "Export the filtered support-access session history as masked CSV/XLSX (curated columns; no token/secret columns). A reason (min 5) is REQUIRED for a broad — no dateFrom — export. Audited as support.history_exported.", security: [{ bearerAuth: [] }], parameters: [{ in: query, name: format, schema: { type: string, enum: [csv, xlsx] } }, { in: query, name: reason, schema: { type: string, minLength: 5 } }, { in: query, name: dateFrom, schema: { type: string, format: date } }, { in: query, name: dateTo, schema: { type: string, format: date } }, { in: query, name: institutionId, schema: { type: string, format: uuid } }, { in: query, name: targetId, schema: { type: string, format: uuid } }, { in: query, name: operatorId, schema: { type: string, format: uuid } }, { in: query, name: status, schema: { type: string } }, { in: query, name: scope, schema: { type: string } }, { in: query, name: reasonTemplate, schema: { type: string } }], responses: { 200: { description: "CSV or XLSX file" }, 400: { description: "Reason required for a broad export" } } }
+ */
+platformSupportRouter.get("/export", canExport, async (req, res) => {
+  const q = exportQuerySchema.parse(req.query);
+  if (!q.dateFrom && (!q.reason || q.reason.trim().length < 5)) {
+    throw ApiError.badRequest("A reason (at least 5 characters) is required for a broad history export");
+  }
+  const { columns, rows } = await service.exportSessions(q);
+  const { reason, format, ...filters } = q;
+  await recordAudit(actor(req), {
+    action: "support.history_exported",
+    targetType: "platform_impersonation_sessions",
+    targetId: null,
+    institutionId: null,
+    detail: { format, rows: rows.length, reason: reason ?? null, filters },
+  });
+  sendSpreadsheet(res, format, "support-history", columns, rows);
+});
+
+/**
+ * @openapi
+ * /platform/support/approvals:
+ *   get: { tags: [Platform Support], summary: "List support-access approval requests (optional status filter; paginated)", security: [{ bearerAuth: [] }], parameters: [{ in: query, name: status, schema: { type: string, enum: [pending, approved, rejected] } }, { in: query, name: page, schema: { type: integer } }, { in: query, name: pageSize, schema: { type: integer } }], responses: { 200: { description: "{ rows, total, page, pageSize }" } } }
+ *   post: { tags: [Platform Support], summary: "Request approval for a would-be high-risk (write-enabled) support session (start params + riskReason). Creates a pending row; audited as support.approval_requested.", security: [{ bearerAuth: [] }], responses: { 201: { description: "Created approval request" }, 400: { description: Invalid target }, 404: { description: User not found } } }
+ */
+platformSupportRouter.get("/approvals", canRead, async (req, res) => {
+  res.json(await approvalsService.listApprovals(approvalListQuerySchema.parse(req.query)));
+});
+platformSupportRouter.post("/approvals", canRead, async (req, res) => {
+  res.status(201).json(await approvalsService.requestApproval(approvalCreateSchema.parse(req.body), actor(req)));
+});
+
+/**
+ * @openapi
+ * /platform/support/approvals/{id}/decide:
+ *   post: { tags: [Platform Support], summary: "Approve or reject a pending approval request (reason required; audited as support.approval_approved / support.approval_rejected)", security: [{ bearerAuth: [] }], parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }], responses: { 200: { description: "Decided approval" }, 400: { description: "Already decided" }, 404: { description: Not found } } }
+ */
+platformSupportRouter.post("/approvals/:id/decide", canApprove, async (req, res) => {
+  res.json(
+    await approvalsService.decideApproval(uuidParam(req), approvalDecisionSchema.parse(req.body), actor(req))
+  );
 });
 
 /**

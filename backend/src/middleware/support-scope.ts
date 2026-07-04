@@ -38,37 +38,111 @@ function readAccessToken(req: Request): string | null {
  * on segment boundaries against the api sub-path (e.g. "/students/123"). Anything
  * unmapped resolves to the sentinel "other" and is therefore DENIED unless the
  * session explicitly lists it — deny-by-default. "overview" is non-sensitive
- * context and is always readable within a module-limited session.
+ * context (dashboards, academic structure, reference data) and is always readable
+ * within a module-limited session.
+ *
+ * STILL APPROXIMATE. Two notes: (1) only the eleven SUPPORT_MODULES keys can appear
+ * in a session's allowlist, so a path mapped to a descriptive-but-non-selectable
+ * key (e.g. "library", "transport") is effectively deny-by-default for
+ * module_limited — that is intentional and safe (it just yields a clearer audit
+ * log than the bare "other" sentinel). (2) The list is prefix-based, not a route
+ * table, so a brand-new tenant route may fall through to "other" until added here.
  */
 const MODULE_PREFIXES: ReadonlyArray<readonly [string, string]> = [
+  // Students & student-adjacent records.
   ["/students", "students"],
+  ["/admissions", "students"],
+  ["/enrollments", "students"],
+  ["/guardians", "students"],
+  ["/disciplinary", "students"],
+  ["/promote", "students"],
+  // Staff / HR.
   ["/teachers", "staff"],
   ["/staff", "staff"],
+  ["/staff-attendance", "staff"],
   ["/payroll", "staff"],
+  ["/salary", "staff"],
   ["/leave", "staff"],
+  ["/staff-leave", "staff"],
+  // Fees & billing / finance.
   ["/fees", "fees"],
-  ["/attendance", "attendance"],
-  ["/period-attendance", "attendance"],
-  ["/exams", "exams"],
-  ["/online-exams", "exams"],
-  ["/quizzes", "exams"],
-  ["/announcements", "communication"],
-  ["/messages", "communication"],
-  ["/notifications", "communication"],
-  ["/communication", "communication"],
-  ["/reports", "reports"],
-  ["/report-center", "reports"],
-  ["/documents", "documents"],
-  ["/files", "documents"],
+  ["/fee-structures", "fees"],
+  ["/fee-refunds", "fees"],
   ["/invoices", "billing"],
   ["/billing", "billing"],
   ["/payments", "billing"],
   ["/online-payments", "billing"],
+  ["/finance", "billing"],
+  // Attendance.
+  ["/attendance", "attendance"],
+  ["/period-attendance", "attendance"],
+  ["/biometric", "attendance"],
+  // Exams & academic learning artifacts.
+  ["/exams", "exams"],
+  ["/online-exams", "exams"],
+  ["/quizzes", "exams"],
+  ["/lms", "exams"],
+  ["/study-materials", "exams"],
+  ["/studymaterials", "exams"],
+  ["/question-bank", "exams"],
+  ["/homework", "exams"],
+  // Communication & engagement.
+  ["/announcements", "communication"],
+  ["/messages", "communication"],
+  ["/notifications", "communication"],
+  ["/communication", "communication"],
+  ["/threads", "communication"],
+  ["/gallery", "communication"],
+  ["/polls", "communication"],
+  ["/feedback", "communication"],
+  ["/live-classes", "communication"],
+  // Reports / analytics.
+  ["/reports", "reports"],
+  ["/report-center", "reports"],
+  ["/revenue", "reports"],
+  // Documents & certificates.
+  ["/documents", "documents"],
+  ["/files", "documents"],
+  ["/certificates", "documents"],
+  ["/transfer-certificates", "documents"],
+  ["/tc", "documents"],
+  // Operational modules — descriptive keys (deny-by-default for module_limited,
+  // but a clearer audit trail than the bare "other" sentinel).
+  ["/library", "library"],
+  ["/books", "library"],
+  ["/transport", "transport"],
+  ["/vehicles", "transport"],
+  ["/hostel", "hostel"],
+  ["/infirmary", "infirmary"],
+  ["/mess", "mess"],
+  ["/cafeteria", "mess"],
+  ["/inventory", "inventory"],
+  ["/vendors", "inventory"],
+  ["/purchases", "inventory"],
+  ["/visitors", "visitors"],
+  ["/lost-found", "lostfound"],
+  ["/lostfound", "lostfound"],
+  ["/alumni", "alumni"],
+  // Settings.
   ["/settings", "settings"],
+  // Non-sensitive context / academic structure — always readable in module_limited.
   ["/dashboard", "overview"],
   ["/me", "overview"],
   ["/overview", "overview"],
   ["/auth", "overview"],
+  ["/academics", "overview"],
+  ["/classes", "overview"],
+  ["/sections", "overview"],
+  ["/subjects", "overview"],
+  ["/departments", "overview"],
+  ["/programs", "overview"],
+  ["/batches", "overview"],
+  ["/semesters", "overview"],
+  ["/academic-years", "overview"],
+  ["/timetable", "overview"],
+  ["/periods", "overview"],
+  ["/rooms", "overview"],
+  ["/calendar", "overview"],
 ];
 
 /** Resolve a request sub-path to a coarse module key (approximate; deny-by-default). */
