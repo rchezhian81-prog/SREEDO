@@ -2014,3 +2014,164 @@ export interface LiveClass {
   status: LiveClassStatus;
   createdAt: string;
 }
+
+// --- Super Admin G: Support Access Hardening (/platform/support/*) ---
+
+/** A support session's access scope. */
+export type SupportScope = "read_only" | "write_enabled" | "module_limited";
+
+/** A support session's lifecycle status. */
+export type SupportStatus = "active" | "ended" | "expired" | "revoked" | "failed";
+
+/**
+ * One governed support-access session (POST/GET /platform/support/sessions...).
+ * `endedByEmail`/`revokedByEmail` are only populated by GET /sessions/:id.
+ */
+export interface SupportSession {
+  id: string;
+  operatorId: string | null;
+  operatorEmail: string | null;
+  operatorName: string | null;
+  targetId: string;
+  targetEmail: string;
+  targetRole: string;
+  institutionId: string | null;
+  institutionName: string | null;
+  institutionCode: string | null;
+  scope: SupportScope;
+  allowedModules: string[];
+  status: SupportStatus;
+  reason: string | null;
+  reasonTemplate: string | null;
+  ip: string | null;
+  userAgent: string | null;
+  startedAt: string;
+  expiresAt: string | null;
+  endedAt: string | null;
+  endedBy: string | null;
+  revokedBy: string | null;
+  revokeReason: string | null;
+  durationMinutes: number | null;
+  endedByEmail?: string | null;
+  revokedByEmail?: string | null;
+}
+
+/** Paginated session history (GET /platform/support/sessions). */
+export interface SupportSessionPage {
+  rows: SupportSession[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/** Per-operator session counts in the summary. */
+export interface SupportSummaryOperator {
+  operatorId: string | null;
+  operatorEmail: string | null;
+  sessions: number;
+}
+
+/** Per-tenant session counts in the summary. */
+export interface SupportSummaryTenant {
+  institutionId: string | null;
+  institutionName: string | null;
+  institutionCode: string | null;
+  sessions: number;
+}
+
+/** A support-related platform-audit event surfaced on the Overview. */
+export interface SupportAuditEvent {
+  id: string;
+  action: string;
+  actorId: string | null;
+  actorEmail: string | null;
+  targetId: string | null;
+  institutionId: string | null;
+  detail: unknown;
+  createdAt: string;
+}
+
+/** Dashboard cards over a window (GET /platform/support/summary). */
+export interface SupportSummary {
+  window: "today" | "7d" | "30d" | "custom";
+  activeCount: number;
+  startedToday: number;
+  endedToday: number;
+  expiredToday: number;
+  revokedToday: number;
+  highRiskCount: number;
+  avgDurationMinutes: number;
+  byOperator: SupportSummaryOperator[];
+  byTenant: SupportSummaryTenant[];
+  nearingExpiry: SupportSession[];
+  recentAuditEvents: SupportAuditEvent[];
+}
+
+/** Security-Center support posture (GET /platform/support/security-summary). */
+export interface SupportSecuritySummary {
+  activeCount: number;
+  longRunningCount: number;
+  recentlyRevoked: SupportSession[];
+  highRisk: SupportSession[];
+}
+
+/** Static reference lists for the console dropdowns (GET /platform/support/templates). */
+export interface SupportTemplates {
+  templates: string[];
+  modules: string[];
+  scopes: string[];
+}
+
+/** POST /platform/support/sessions success payload (imp token + minimal session/user). */
+export interface SupportStartResult {
+  token: string;
+  expiresAt: string;
+  session: {
+    id: string;
+    scope: SupportScope;
+    allowedModules: string[];
+    status: SupportStatus;
+    expiresAt: string;
+  };
+  user: {
+    id: string;
+    email: string;
+    role: UserRole;
+    institutionId: string | null;
+    fullName: string;
+  };
+}
+
+/**
+ * The engaged-session context captured when an operator enters support mode.
+ * Persisted (with the operator's own token) so the banner can render and the
+ * session can be ended even across a page refresh.
+ */
+export interface SupportSessionContext {
+  id: string;
+  targetId: string;
+  targetEmail: string;
+  targetRole: string;
+  targetName: string;
+  institutionId: string | null;
+  institutionName: string | null;
+  institutionCode: string | null;
+  scope: SupportScope;
+  allowedModules: string[];
+  reason: string;
+  reasonTemplate: string | null;
+  operatorEmail: string;
+  expiresAt: string;
+  startedAt: string;
+}
+
+/**
+ * Support-mode overlay stashed in the auth store while an operator is
+ * impersonating a tenant user. `null` whenever the operator is acting as
+ * themselves — every support-related code path guards on this being non-null.
+ */
+export interface SupportModeState {
+  operatorToken: string;
+  operatorUser: User;
+  session: SupportSessionContext;
+}

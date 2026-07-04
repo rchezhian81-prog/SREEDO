@@ -14,6 +14,7 @@ import { useI18n } from "@/i18n/I18nProvider";
 import { usePermissions } from "@/lib/use-permissions";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { RuntimeBanner } from "@/components/RuntimeBanner";
+import { SupportModeBanner } from "@/components/SupportModeBanner";
 import { Toaster } from "@/components/toast";
 
 type NavItem = {
@@ -142,16 +143,46 @@ function isActive(href: string, pathname: string) {
     : pathname.startsWith(href);
 }
 
+/**
+ * Map a sidebar href to a coarse support-module key, for gating the nav while a
+ * module-limited support session is engaged. Returns null for hrefs that don't
+ * correspond to any support module (those are hidden in module-limited mode).
+ * This is defense-in-depth only — the backend enforces scope on every request.
+ */
+function hrefToSupportModule(href: string): string | null {
+  if (href === "/dashboard") return "overview";
+  if (href.startsWith("/students")) return "students";
+  if (href.startsWith("/teachers") || href.startsWith("/staff")) return "staff";
+  if (href.startsWith("/fees")) return "fees";
+  if (href.startsWith("/attendance")) return "attendance";
+  if (href.startsWith("/exams")) return "exams";
+  if (
+    href.startsWith("/announcements") ||
+    href.startsWith("/messages") ||
+    href.startsWith("/messaging") ||
+    href.startsWith("/communication")
+  )
+    return "communication";
+  if (href.startsWith("/reports")) return "reports";
+  if (href.startsWith("/documents")) return "documents";
+  if (href.startsWith("/invoices")) return "billing";
+  if (href.startsWith("/settings")) return "settings";
+  return null;
+}
+
 function SidebarContent({
   navItems,
   pathname,
   subtitle,
   onNavigate,
+  readOnly = false,
 }: {
   navItems: NavItem[];
   pathname: string;
   subtitle: string;
   onNavigate?: () => void;
+  // Support-mode only: a read-only session shows a pill and keeps the full nav.
+  readOnly?: boolean;
 }) {
   const branding = useBrandingStore((s) => s.branding);
   return (
@@ -187,6 +218,13 @@ function SidebarContent({
           </div>
         </div>
       </div>
+
+      {readOnly && (
+        <div className="mb-1 flex items-center gap-2 rounded-lg bg-amber-500/20 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-amber-200">
+          <Icon name="lock" className="h-3.5 w-3.5" />
+          Read-only
+        </div>
+      )}
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto py-1">
         {navItems.map((item) => {
@@ -362,7 +400,7 @@ export default function DashboardLayout({
   const router = useRouter();
   const pathname = usePathname();
   const { t } = useI18n();
-  const { user, accessToken, refreshToken, logout } = useAuthStore();
+  const { user, accessToken, refreshToken, logout, support } = useAuthStore();
   const mode = useModeStore((s) => s.mode);
   const setMode = useModeStore((s) => s.setMode);
   // Effective-permission gate for the super-admin nav (owners hold every key, so
@@ -379,8 +417,9 @@ export default function DashboardLayout({
       return;
     }
     // Students and parents belong to the cookie-based portal, not the staff
-    // dashboard — send them there.
-    if (user?.role === "student" || user?.role === "parent") {
+    // dashboard — send them there. Exception: while an operator is in support
+    // mode AS a student/parent, keep them in the dashboard (support != null only).
+    if ((user?.role === "student" || user?.role === "parent") && !support) {
       router.replace("/portal/login");
       return;
     }
@@ -395,7 +434,7 @@ export default function DashboardLayout({
     } else if (user && user.role !== "super_admin" && inSuperArea) {
       router.replace("/dashboard");
     }
-  }, [hydrated, accessToken, user, pathname, router]);
+  }, [hydrated, accessToken, user, pathname, router, support]);
 
   // Close the mobile drawer whenever the route changes.
   useEffect(() => setSidebarOpen(false), [pathname]);
@@ -425,7 +464,12 @@ export default function DashboardLayout({
 
   const isSuper = user?.role === "super_admin";
   const inSuperArea = pathname.startsWith("/super-admin");
-  const navItems = isSuper
+  // Support-mode nav gating (defense-in-depth; the server enforces scope on every
+  // request). All support branches guard on `support` being non-null, so the nav
+  // is byte-for-byte unchanged when not in a support session.
+  const supportScope = support?.session.scope ?? null;
+  const supportReadOnly = support !== null && supportScope === "read_only";
+  let navItems = isSuper
     ? // Filter the super-admin nav by the caller's effective permissions. Items
       // without a `perm` always show; owners hold every key so keep everything.
       SUPER_ADMIN_NAV.filter((item) => canNav(item.perm))
@@ -441,6 +485,16 @@ export default function DashboardLayout({
             enabledModules.length === 0 ||
             enabledModules.includes(item.moduleKey)
         );
+  // In a module-limited support session, keep only /dashboard plus items whose
+  // mapped module is in the session's allowed set.
+  if (support && supportScope === "module_limited") {
+    const allowed = support.session.allowedModules;
+    navItems = navItems.filter((item) => {
+      if (item.href === "/dashboard") return true;
+      const mod = hrefToSupportModule(item.href);
+      return mod !== null && allowed.includes(mod);
+    });
+  }
 
   // While unauthenticated or mid-redirect to the correct area, show a spinner.
   // A super admin on the shared /security page is allowed to stay (it renders
@@ -472,6 +526,7 @@ export default function DashboardLayout({
             navItems={navItems}
             pathname={pathname}
             subtitle={subtitle}
+            readOnly={supportReadOnly}
           />
         </div>
       </aside>
@@ -489,6 +544,7 @@ export default function DashboardLayout({
               pathname={pathname}
               subtitle={subtitle}
               onNavigate={() => setSidebarOpen(false)}
+              readOnly={supportReadOnly}
             />
           </div>
         </div>
@@ -500,6 +556,7 @@ export default function DashboardLayout({
           onMenu={() => setSidebarOpen(true)}
           onLogout={handleLogout}
         />
+        <SupportModeBanner />
         <RuntimeBanner />
         <main
           id="main-content"
