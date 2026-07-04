@@ -2045,6 +2045,9 @@ export interface SupportSession {
   reasonTemplate: string | null;
   ip: string | null;
   userAgent: string | null;
+  /** Phase 2 (I): tenant-notification delivery outcome for this session. */
+  notifyStatus: SupportNotifyStatus | null;
+  notifyDetail: SupportNotifyDetail | null;
   startedAt: string;
   expiresAt: string | null;
   endedAt: string | null;
@@ -2174,4 +2177,141 @@ export interface SupportModeState {
   operatorToken: string;
   operatorUser: User;
   session: SupportSessionContext;
+}
+
+// --- Super Admin G: Support Access — Phase 2 (reports, notifications, approvals) ---
+
+/** Tenant-notification delivery outcome recorded on a support session. */
+export type SupportNotifyStatus = "sent" | "failed" | "skipped";
+
+/** One tenant-notification delivery event (per session phase). */
+export interface SupportNotifyEvent {
+  phase: "started" | "ended";
+  status: SupportNotifyStatus;
+  recipient: string | null;
+  at: string;
+  error?: string;
+}
+
+/**
+ * The `notifyDetail` payload stored on a session (already secret-masked by the
+ * server). Carries the latest phase outcome at the top level plus an `events`
+ * trail. Never contains the issued token or any stored secret.
+ */
+export interface SupportNotifyDetail {
+  recipient: string | null;
+  at: string;
+  phase: "started" | "ended";
+  status: SupportNotifyStatus;
+  error?: string;
+  events?: SupportNotifyEvent[];
+}
+
+/** The ten support-access report datasets (the `type` query value). */
+export type SupportReportType =
+  | "all"
+  | "active"
+  | "expired"
+  | "revoked"
+  | "tenant-wise"
+  | "operator-wise"
+  | "reason-wise"
+  | "scope-wise"
+  | "long-running"
+  | "high-risk";
+
+/** Shared report/export filter set (mirrors the history filters, minus targetId). */
+export interface SupportReportFilters {
+  dateFrom?: string;
+  dateTo?: string;
+  institutionId?: string;
+  operatorId?: string;
+  status?: string;
+  scope?: string;
+  reasonTemplate?: string;
+}
+
+/** Stable totals over the filtered set (same for every report type of one filter). */
+export interface SupportReportTotals {
+  sessionCount: number;
+  avgDurationMinutes: number;
+  activeCount: number;
+  revokedCount: number;
+  expiredCount: number;
+  notificationSentCount: number;
+  notificationFailedCount: number;
+}
+
+/**
+ * One aggregate row of a grouped report (tenant-/operator-/reason-/scope-wise).
+ * Only the dimension keys for the requested type are populated; all groups share
+ * the per-group aggregate counters.
+ */
+export interface SupportReportGroup {
+  institutionId?: string | null;
+  institutionName?: string | null;
+  institutionCode?: string | null;
+  operatorId?: string | null;
+  operatorEmail?: string | null;
+  operatorName?: string | null;
+  reasonTemplate?: string | null;
+  scope?: string | null;
+  sessions: number;
+  avgDurationMinutes: number;
+  activeCount: number;
+  revokedCount: number;
+  expiredCount: number;
+}
+
+/**
+ * A support-access report dataset (GET /platform/support/reports). Row-based
+ * types return `rows` (masked session projections); grouped types return `groups`.
+ */
+export interface SupportReport {
+  type: SupportReportType;
+  filters: SupportReportFilters;
+  totals: SupportReportTotals;
+  rows?: SupportSession[];
+  groups?: SupportReportGroup[];
+}
+
+/** An approval request's lifecycle status. */
+export type SupportApprovalStatus = "pending" | "approved" | "rejected";
+
+/**
+ * A support-access approval request (GET/POST /platform/support/approvals). The
+ * joined display fields (`*Email`, `institutionName/Code`) are present on the list
+ * projection; the create/decide single-row projection omits them.
+ */
+export interface SupportApproval {
+  id: string;
+  requestedBy: string | null;
+  requestedByEmail?: string | null;
+  targetId: string;
+  targetEmail?: string | null;
+  institutionId: string | null;
+  institutionName?: string | null;
+  institutionCode?: string | null;
+  reason: string | null;
+  reasonTemplate: string | null;
+  scope: SupportScope;
+  allowedModules: string[];
+  expiryMinutes: number;
+  riskReason: string | null;
+  status: SupportApprovalStatus;
+  decidedBy: string | null;
+  decidedByEmail?: string | null;
+  decidedAt: string | null;
+  decisionReason: string | null;
+  consumedAt: string | null;
+  consumedSessionId: string | null;
+  createdAt: string;
+}
+
+/** Paginated approval list (GET /platform/support/approvals). */
+export interface SupportApprovalPage {
+  rows: SupportApproval[];
+  total: number;
+  page: number;
+  pageSize: number;
 }

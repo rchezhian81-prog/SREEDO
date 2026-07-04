@@ -2,7 +2,12 @@
 // the console (via _support/taxonomy.ts) and the global SupportModeBanner, so the
 // status/scope vocabulary and countdown formatting never drift. No JSX.
 
-import type { SupportScope, SupportStatus } from "@/types";
+import type {
+  SupportApprovalStatus,
+  SupportNotifyStatus,
+  SupportScope,
+  SupportStatus,
+} from "@/types";
 
 /** Badge tones the shared UI supports (no violet). */
 export type Tone = "slate" | "green" | "amber" | "red" | "blue";
@@ -54,6 +59,52 @@ export function scopeLabel(scope: string | undefined): string {
     default:
       return scope ? humanizeToken(scope) : "—";
   }
+}
+
+// ---- tenant-notification status → tone / label ----
+// sent→green, skipped→slate, failed→red, absent→slate.
+export function notifyTone(status: SupportNotifyStatus | string | null | undefined): Tone {
+  switch (status) {
+    case "sent":
+      return "green";
+    case "failed":
+      return "red";
+    case "skipped":
+    default:
+      return "slate";
+  }
+}
+
+export function notifyLabel(status: SupportNotifyStatus | string | null | undefined): string {
+  switch (status) {
+    case "sent":
+      return "Sent";
+    case "failed":
+      return "Failed";
+    case "skipped":
+      return "Skipped";
+    default:
+      return "Not sent";
+  }
+}
+
+// ---- approval status → tone / label ----
+// pending→amber, approved→green, rejected→red.
+export function approvalTone(status: SupportApprovalStatus | string | undefined): Tone {
+  switch (status) {
+    case "approved":
+      return "green";
+    case "rejected":
+      return "red";
+    case "pending":
+    default:
+      return "amber";
+  }
+}
+
+export function approvalLabel(status: string | undefined): string {
+  if (!status) return "—";
+  return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
 /** "bug_investigation" → "Bug investigation". */

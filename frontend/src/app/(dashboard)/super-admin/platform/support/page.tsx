@@ -11,16 +11,20 @@ import { SummaryCards } from "./_support/SummaryCards";
 import { StartForm } from "./_support/StartForm";
 import { ActiveSessions } from "./_support/ActiveSessions";
 import { HistoryTable } from "./_support/HistoryTable";
+import { ReportsTable } from "./_support/ReportsTable";
+import { ApprovalsTable } from "./_support/ApprovalsTable";
 import { GovernanceCards } from "./_support/GovernanceCards";
 import { SessionDrawer } from "./_support/SessionDrawer";
 
-type Tab = "overview" | "start" | "active" | "history" | "governance";
+type Tab = "overview" | "start" | "active" | "history" | "reports" | "approvals" | "governance";
 
 const TABS: { value: Tab; label: string; icon: IconName }[] = [
   { value: "overview", label: "Overview", icon: "grid" },
   { value: "start", label: "Start session", icon: "userPlus" },
   { value: "active", label: "Active", icon: "shield" },
   { value: "history", label: "History", icon: "file" },
+  { value: "reports", label: "Reports", icon: "barChart" },
+  { value: "approvals", label: "Approvals", icon: "clipboard" },
   { value: "governance", label: "Governance", icon: "lock" },
 ];
 
@@ -97,6 +101,15 @@ export default function PlatformSupportPage() {
           onOpenSession={setOpenSessionId}
         />
       )}
+      {tab === "reports" && (
+        <ReportsTable
+          templates={templates}
+          institutions={institutions}
+          reloadKey={reloadKey}
+          onOpenSession={setOpenSessionId}
+        />
+      )}
+      {tab === "approvals" && <ApprovalsTable reloadKey={reloadKey} />}
       {tab === "governance" && (
         <GovernanceCards reloadKey={reloadKey} onOpenSession={setOpenSessionId} />
       )}
