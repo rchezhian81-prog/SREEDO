@@ -1,4 +1,5 @@
 import { useAuthStore } from "@/stores/auth-store";
+import { toast } from "@/components/toast";
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
@@ -18,7 +19,11 @@ let refreshPromise: Promise<boolean> | null = null;
 /** Single-flight token refresh shared across concurrent 401s. */
 async function refreshSession(): Promise<boolean> {
   refreshPromise ??= (async () => {
-    const { refreshToken, setTokens, logout } = useAuthStore.getState();
+    const { refreshToken, setTokens, logout, support } = useAuthStore.getState();
+    // A 401 during support mode means the scoped impersonation token expired or
+    // was revoked. Never resurrect the operator's token from here — surface the
+    // 401 so support mode ends. Inert (falls through) when not in support mode.
+    if (support) return false;
     if (!refreshToken) return false;
     try {
       const res = await fetch(`${API_URL}/auth/refresh`, {
@@ -72,6 +77,11 @@ async function request<T>(
       if (typeof data.error === "string") message = data.error;
     } catch {
       // non-JSON error body — keep statusText
+    }
+    // Support mode only: a 403 means the server's scope enforcement blocked this
+    // action for the impersonated user — surface it gracefully. Inert otherwise.
+    if (res.status === 403 && useAuthStore.getState().support) {
+      toast.error(message || "This action is outside the support session's scope.");
     }
     throw new ApiError(res.status, message);
   }

@@ -22,6 +22,7 @@ import {
   userSearchQuerySchema,
 } from "./platform.schema";
 import * as service from "./platform.service";
+import * as support from "./support.service";
 import * as revenue from "./platform-revenue.service";
 import * as subs from "./subscriptions.service";
 import * as billing from "../billing/billing.service";
@@ -184,7 +185,17 @@ platformRouter.get("/users", requirePermission("platform:impersonate"), async (r
  *   post: { tags: [Platform], summary: "Start a support impersonation session (reason required; audited; returns a scoped token + expiry, never secrets)", security: [{ bearerAuth: [] }], responses: { 200: { description: "{ impersonating, token, expiresAt, user }" }, 400: { description: Missing reason or invalid target } } }
  */
 platformRouter.post("/impersonate", requirePermission("platform:impersonate"), async (req, res) => {
-  res.json(await service.impersonate(impersonateSchema.parse(req.body), actor(req)));
+  // Back-compat shim: the legacy endpoint delegates to the GOVERNED start path
+  // (Super Admin G) so it issues an enforceable, revocable read-only imp token —
+  // no unenforced impersonation start remains. Response shape + audit action preserved.
+  const { userId, reason } = impersonateSchema.parse(req.body);
+  const result = await support.startSupportSession(
+    { userId, reason, scope: "read_only", modules: undefined, expiryMinutes: 30 },
+    actor(req),
+    { ip: clientIp(req), userAgent: req.get("user-agent") ?? null },
+    { auditAction: "impersonate.start" }
+  );
+  res.json({ impersonating: true, token: result.token, expiresAt: result.expiresAt, user: result.user });
 });
 
 /**
@@ -193,7 +204,7 @@ platformRouter.post("/impersonate", requirePermission("platform:impersonate"), a
  *   post: { tags: [Platform], summary: "End the caller's active support session(s) (audited; idempotent)", security: [{ bearerAuth: [] }], responses: { 200: { description: "{ ended }" } } }
  */
 platformRouter.post("/impersonate/end", requirePermission("platform:impersonate"), async (req, res) => {
-  res.json(await service.endImpersonation(actor(req)));
+  res.json(await support.endSupportSession({ actorId: req.user!.id }, actor(req), { auditAction: "impersonate.end" }));
 });
 
 /**

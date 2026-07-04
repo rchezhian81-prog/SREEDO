@@ -34,6 +34,10 @@ function populateUser(req: Request, payload: AccessTokenPayload): void {
     institutionId: payload.institutionId ?? null,
     sessionId: payload.sid,
   };
+  // Support-session context (null for every normal token). Exposes the token's
+  // `imp` claim to downstream handlers; the keystone gate `enforceSupportScope`
+  // already ran earlier on the api router.
+  req.support = payload.imp ?? null;
 }
 
 /**
