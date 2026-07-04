@@ -57,5 +57,13 @@ export async function recordSecurityEvent(event: SecurityEvent): Promise<void> {
 
 /** Client IP, honouring the `trust proxy` setting (real client behind nginx). */
 export function clientIp(req: Request): string | null {
-  return req.ip ?? null;
+  const ip = req.ip;
+  if (!ip) return null;
+  // A dual-stack listener surfaces an IPv4 client as an IPv4-mapped IPv6 address
+  // (e.g. "::ffff:127.0.0.1"). Normalize it back to plain IPv4 so captured IPs
+  // are consistent across requests and match IPv4 allowlist/CIDR entries; without
+  // this the same client can appear as "::ffff:1.2.3.4" on one request and
+  // "1.2.3.4" on another (the exact behaviour differs between hosts and is why
+  // an IP-allowlist round-trip that passes locally could fail on CI).
+  return ip.startsWith("::ffff:") && ip.includes(".") ? ip.slice("::ffff:".length) : ip;
 }
