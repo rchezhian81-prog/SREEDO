@@ -3,24 +3,43 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
-import { useAuthStore } from "@/stores/auth-store";
 import {
   Badge,
   Button,
-  Card,
   EmptyState,
   ErrorNote,
-  Input,
-  Modal,
   PageHeader,
   Select,
   Spinner,
 } from "@/components/ui";
-import type { PlatformAuditRow, PlatformInstitution } from "@/types";
+import { Icon, type IconName } from "@/components/icons";
+import type {
+  AuditCategoriesRef,
+  AuditSummary,
+  PlatformAuditRow,
+  PlatformInstitution,
+} from "@/types";
 import { usePlatformGuard } from "../_guard";
-import { compactDetail } from "../_utils";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
+import { compactDetail, formatNumber } from "../_utils";
+import { AlertsFeed } from "./_audit/AlertsFeed";
+import { DetailDrawer } from "./_audit/DetailDrawer";
+import { ExportModal } from "./_audit/ExportModal";
+import { Filters } from "./_audit/Filters";
+import { IntegrityCard } from "./_audit/IntegrityCard";
+import { RetentionCard } from "./_audit/RetentionCard";
+import { SavedFilters } from "./_audit/SavedFilters";
+import { SummaryCards } from "./_audit/SummaryCards";
+import {
+  appendFilters,
+  EMPTY_FILTERS,
+  FILTER_KEYS,
+  formatDateTime,
+  resultLabel,
+  resultTone,
+  severityLabel,
+  severityTone,
+  type AuditFilterState,
+} from "./_audit/taxonomy";
 
 interface Paged {
   rows: PlatformAuditRow[];
@@ -28,62 +47,110 @@ interface Paged {
   page: number;
   pageSize: number;
 }
-type SortKey = "createdAt" | "action" | "actorEmail";
+type SortKey = "createdAt" | "action" | "actorEmail" | "severity";
+type Tab = "overview" | "events" | "governance";
+type Win = AuditSummary["window"];
 
-export default function PlatformAuditPage() {
+const TABS: { value: Tab; label: string; icon: IconName }[] = [
+  { value: "overview", label: "Overview", icon: "grid" },
+  { value: "events", label: "Events", icon: "file" },
+  { value: "governance", label: "Governance", icon: "shield" },
+];
+
+export default function AuditConsolePage() {
   const { ready, gate } = usePlatformGuard(
-    "Platform audit",
-    "Durable cross-tenant administrative trail"
+    "Audit Console",
+    "One consolidated, governed view of every platform action"
   );
 
+  // Reference data for the filter dropdowns.
   const [institutions, setInstitutions] = useState<PlatformInstitution[]>([]);
-  const [data, setData] = useState<Paged | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [detail, setDetail] = useState<PlatformAuditRow | null>(null);
+  const [categoriesRef, setCategoriesRef] = useState<AuditCategoriesRef | null>(null);
 
-  // Filters / paging / sort
-  const [q, setQ] = useState("");
-  const [institutionId, setInstitutionId] = useState("");
-  const [action, setAction] = useState("");
-  const [targetType, setTargetType] = useState("");
-  const [ip, setIp] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  // Console-wide UI state.
+  const [tab, setTab] = useState<Tab>("overview");
+  const [exportOpen, setExportOpen] = useState(false);
+  const [openEventId, setOpenEventId] = useState<string | null>(null);
+
+  // Summary/alerts window (shared by the Overview cards + alerts feed).
+  const [win, setWin] = useState<Win>("7d");
+  const [winFrom, setWinFrom] = useState("");
+  const [winTo, setWinTo] = useState("");
+
+  // Filters (immediate) → applied (debounced, drives the query).
+  const [filters, setFilters] = useState<AuditFilterState>(EMPTY_FILTERS);
+  const [applied, setApplied] = useState<AuditFilterState>(EMPTY_FILTERS);
+  const [seeded, setSeeded] = useState(false);
+  const [enableAutoDefault, setEnableAutoDefault] = useState(false);
+
+  // Paging + sort for the events table.
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [sort, setSort] = useState<SortKey>("createdAt");
   const [order, setOrder] = useState<"asc" | "desc">("desc");
 
+  // List result.
+  const [data, setData] = useState<Paged | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Seed filters from a deep link (?institutionId=, ?category=, …) once on mount.
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const seed: AuditFilterState = { ...EMPTY_FILTERS };
+    let any = false;
+    for (const k of FILTER_KEYS) {
+      const v = sp.get(k);
+      if (v) {
+        seed[k] = v;
+        any = true;
+      }
+    }
+    if (any) {
+      setFilters(seed);
+      setApplied(seed);
+      setTab("events");
+    } else {
+      setEnableAutoDefault(true);
+    }
+    setSeeded(true);
+  }, []);
+
+  // Debounce filter edits into the applied set used by the query.
+  useEffect(() => {
+    const t = setTimeout(() => setApplied(filters), 300);
+    return () => clearTimeout(t);
+  }, [filters]);
+
+  // Reset to page 1 whenever the applied filters change.
+  useEffect(() => {
+    setPage(1);
+  }, [applied]);
+
+  // Load reference data once.
   useEffect(() => {
     if (!ready) return;
     api
-      .get<{ rows: PlatformInstitution[] }>("/platform/institutions?pageSize=100&sort=name&order=asc")
+      .get<{ rows: PlatformInstitution[] }>(
+        "/platform/institutions?pageSize=100&sort=name&order=asc"
+      )
       .then((d) => setInstitutions(d.rows))
+      .catch(() => undefined);
+    api
+      .get<AuditCategoriesRef>("/platform/audit/categories")
+      .then(setCategoriesRef)
       .catch(() => undefined);
   }, [ready]);
 
-  // Honour a deep link from the institution detail page (?institutionId=…).
-  useEffect(() => {
-    const param = new URLSearchParams(window.location.search).get("institutionId");
-    if (param) setInstitutionId(param);
-  }, []);
-
   const buildQuery = useCallback(() => {
     const p = new URLSearchParams();
-    if (q.trim()) p.set("q", q.trim());
-    if (institutionId) p.set("institutionId", institutionId);
-    if (action.trim()) p.set("action", action.trim());
-    if (targetType.trim()) p.set("targetType", targetType.trim());
-    if (ip.trim()) p.set("ip", ip.trim());
-    if (dateFrom) p.set("dateFrom", dateFrom);
-    if (dateTo) p.set("dateTo", dateTo);
+    appendFilters(p, applied);
     p.set("page", String(page));
     p.set("pageSize", String(pageSize));
     p.set("sort", sort);
     p.set("order", order);
     return p;
-  }, [q, institutionId, action, targetType, ip, dateFrom, dateTo, page, pageSize, sort, order]);
+  }, [applied, page, pageSize, sort, order]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -98,15 +165,24 @@ export default function PlatformAuditPage() {
     }
   }, [buildQuery]);
 
+  // Only fetch the (potentially large) list while the Events tab is active.
   useEffect(() => {
-    if (ready) load();
-  }, [ready, load]);
+    if (ready && seeded && tab === "events") load();
+  }, [ready, seeded, tab, load]);
 
-  // Debounce free-text inputs; reset to page 1 on any filter change.
-  useEffect(() => {
-    const t = setTimeout(() => setPage(1), 0);
-    return () => clearTimeout(t);
-  }, [q, institutionId, action, targetType, ip, dateFrom, dateTo, pageSize, sort, order]);
+  const patchFilters = (patch: Partial<AuditFilterState>) =>
+    setFilters((prev) => ({ ...prev, ...patch }));
+
+  const filterByActor = (actorId: string) => {
+    setFilters((prev) => ({ ...prev, actorId }));
+    setOpenEventId(null);
+    setTab("events");
+  };
+
+  const onSummaryActorClick = (field: keyof AuditFilterState, value: string) => {
+    setFilters((prev) => ({ ...prev, [field]: value }));
+    setTab("events");
+  };
 
   const toggleSort = (key: SortKey) => {
     if (sort === key) setOrder((o) => (o === "asc" ? "desc" : "asc"));
@@ -117,33 +193,13 @@ export default function PlatformAuditPage() {
     setPage(1);
   };
 
-  const download = async (format: "csv" | "xlsx") => {
-    const token = useAuthStore.getState().accessToken;
-    const p = buildQuery();
-    p.delete("page");
-    p.delete("pageSize");
-    p.set("format", format);
-    const res = await fetch(`${API_URL}/platform/audit/export?${p.toString()}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!res.ok) {
-      setError("Failed to export audit log");
-      return;
-    }
-    const url = URL.createObjectURL(await res.blob());
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `platform-audit.${format}`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
-  };
-
   if (!ready) return gate;
 
   const rows = data?.rows ?? [];
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const sortArrow = (key: SortKey) => (sort === key ? (order === "asc" ? " ↑" : " ↓") : "");
+  const sortableTh = "cursor-pointer select-none px-4 py-3 hover:text-slate-700";
 
   return (
     <>
@@ -151,165 +207,224 @@ export default function PlatformAuditPage() {
         <Link href="/super-admin/platform" className="hover:text-slate-600">
           Platform
         </Link>{" "}
-        / <span className="text-slate-600">Audit</span>
+        / <span className="text-slate-600">Audit Console</span>
       </nav>
 
       <PageHeader
-        title="Platform audit"
-        subtitle="Durable cross-tenant administrative trail"
+        title="Audit Console"
+        subtitle="One consolidated, governed view of every platform action"
         action={
-          <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" onClick={() => download("csv")}>
-              Export CSV
-            </Button>
-            <Button variant="secondary" onClick={() => download("xlsx")}>
-              Export XLSX
-            </Button>
-          </div>
+          <Button variant="secondary" onClick={() => setExportOpen(true)}>
+            <Icon name="package" className="h-4 w-4" />
+            Export
+          </Button>
         }
       />
 
-      <Card className="mb-6">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Input placeholder="Search action / actor / target / IP…" value={q} onChange={(e) => setQ(e.target.value)} />
-          <Select value={institutionId} onChange={(e) => setInstitutionId(e.target.value)}>
-            <option value="">All institutions</option>
-            {institutions.map((inst) => (
-              <option key={inst.id} value={inst.id}>
-                {inst.name} ({inst.code})
-              </option>
-            ))}
-          </Select>
-          <Input placeholder="Action e.g. institution.suspend" value={action} onChange={(e) => setAction(e.target.value)} />
-          <Input placeholder="Target type e.g. institution" value={targetType} onChange={(e) => setTargetType(e.target.value)} />
-          <Input placeholder="IP address" value={ip} onChange={(e) => setIp(e.target.value)} />
-          <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-          <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+      {/* Tab strip */}
+      <div className="mb-6 inline-flex rounded-xl border border-slate-200 bg-white p-1">
+        {TABS.map((t) => (
+          <button
+            key={t.value}
+            onClick={() => setTab(t.value)}
+            className={`inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold transition ${
+              tab === t.value
+                ? "bg-brand-600 text-white"
+                : "text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            <Icon name={t.icon} className="h-4 w-4" />
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "overview" && (
+        <div className="space-y-8">
+          <SummaryCards
+            window={win}
+            from={winFrom}
+            to={winTo}
+            onWindowChange={setWin}
+            onCustomChange={(f, t) => {
+              setWinFrom(f);
+              setWinTo(t);
+            }}
+            onActorClick={onSummaryActorClick}
+            onOpenEvent={setOpenEventId}
+          />
+          <AlertsFeed window={win} from={winFrom} to={winTo} onOpenEvent={setOpenEventId} />
         </div>
-      </Card>
-
-      <ErrorNote message={error} />
-
-      {loading ? (
-        <Spinner />
-      ) : rows.length === 0 ? (
-        <EmptyState message="No audit entries for these filters." />
-      ) : (
-        <>
-          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
-                <tr>
-                  <th className="cursor-pointer select-none px-4 py-3 hover:text-slate-700" onClick={() => toggleSort("createdAt")}>
-                    Time{sortArrow("createdAt")}
-                  </th>
-                  <th className="cursor-pointer select-none px-4 py-3 hover:text-slate-700" onClick={() => toggleSort("action")}>
-                    Action{sortArrow("action")}
-                  </th>
-                  <th className="px-4 py-3">Institution</th>
-                  <th className="cursor-pointer select-none px-4 py-3 hover:text-slate-700" onClick={() => toggleSort("actorEmail")}>
-                    Actor{sortArrow("actorEmail")}
-                  </th>
-                  <th className="px-4 py-3">IP</th>
-                  <th className="px-4 py-3">Detail</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {rows.map((row) => (
-                  <tr
-                    key={row.id}
-                    className="cursor-pointer align-top hover:bg-slate-50"
-                    onClick={() => setDetail(row)}
-                  >
-                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                      {new Date(row.createdAt).toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge tone="blue">{row.action}</Badge>
-                    </td>
-                    <td className="px-4 py-3 text-slate-600">
-                      {row.institutionName ?? <span className="text-slate-400">—</span>}
-                    </td>
-                    <td className="px-4 py-3 text-slate-600">
-                      {row.actorEmail ?? "—"}
-                      {row.actorRole && (
-                        <span className="block text-xs capitalize text-slate-400">
-                          {row.actorRole.replace("_", " ")}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs text-slate-500">{row.ip ?? "—"}</td>
-                    <td className="max-w-xs px-4 py-3">
-                      <span className="block truncate font-mono text-xs text-slate-500">
-                        {compactDetail(row.detail)}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination */}
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
-            <div className="flex items-center gap-2">
-              <span>Rows per page</span>
-              <Select value={String(pageSize)} onChange={(e) => setPageSize(Number(e.target.value))} className="w-20">
-                {[25, 50, 100, 200].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="flex items-center gap-2">
-              <span>
-                Page {page} of {totalPages} · {total} total
-              </span>
-              <Button variant="secondary" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>
-                ← Prev
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page >= totalPages}
-              >
-                Next →
-              </Button>
-            </div>
-          </div>
-        </>
       )}
 
-      {/* Detail drawer */}
-      <Modal title="Audit event" open={detail !== null} onClose={() => setDetail(null)}>
-        {detail && (
-          <div className="space-y-2 text-sm">
-            <Row label="Time" value={new Date(detail.createdAt).toLocaleString()} />
-            <Row label="Action" value={detail.action} />
-            <Row label="Actor" value={`${detail.actorEmail ?? "—"} (${detail.actorRole ?? "—"})`} />
-            <Row label="Institution" value={detail.institutionName ?? "—"} />
-            <Row label="Target type" value={detail.targetType ?? "—"} />
-            <Row label="Target ID" value={detail.targetId ?? "—"} mono />
-            <Row label="IP" value={detail.ip ?? "—"} mono />
-            <div>
-              <p className="mb-1 font-medium text-slate-700">Metadata</p>
-              <pre className="max-h-64 overflow-auto rounded-lg bg-slate-50 p-3 font-mono text-xs text-slate-700">
-                {JSON.stringify(detail.detail ?? {}, null, 2)}
-              </pre>
-            </div>
-          </div>
-        )}
-      </Modal>
-    </>
-  );
-}
+      {tab === "events" && (
+        <div className="space-y-4">
+          <Filters
+            filters={filters}
+            onChange={patchFilters}
+            onReset={() => setFilters(EMPTY_FILTERS)}
+            institutions={institutions}
+            categoriesRef={categoriesRef}
+          />
+          <SavedFilters
+            currentFilters={filters}
+            onApply={setFilters}
+            enableAutoDefault={enableAutoDefault}
+          />
 
-function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
-  return (
-    <div className="flex gap-2">
-      <span className="w-28 shrink-0 font-medium text-slate-500">{label}</span>
-      <span className={mono ? "font-mono text-xs text-slate-700" : "text-slate-700"}>{value}</span>
-    </div>
+          <ErrorNote message={error} />
+
+          {loading ? (
+            <Spinner />
+          ) : rows.length === 0 ? (
+            <EmptyState message="No audit entries for these filters." />
+          ) : (
+            <>
+              <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                <table className="w-full text-left text-sm">
+                  <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+                    <tr>
+                      <th className={sortableTh} onClick={() => toggleSort("createdAt")}>
+                        Time{sortArrow("createdAt")}
+                      </th>
+                      <th className={sortableTh} onClick={() => toggleSort("severity")}>
+                        Severity{sortArrow("severity")}
+                      </th>
+                      <th className="px-4 py-3">Category</th>
+                      <th className={sortableTh} onClick={() => toggleSort("action")}>
+                        Action{sortArrow("action")}
+                      </th>
+                      <th className="px-4 py-3">Result</th>
+                      <th className="px-4 py-3">Institution</th>
+                      <th className={sortableTh} onClick={() => toggleSort("actorEmail")}>
+                        Actor{sortArrow("actorEmail")}
+                      </th>
+                      <th className="px-4 py-3">IP</th>
+                      <th className="px-4 py-3">Detail</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {rows.map((row) => (
+                      <tr
+                        key={row.id}
+                        className="cursor-pointer align-top hover:bg-slate-50"
+                        onClick={() => setOpenEventId(row.id)}
+                      >
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                          {formatDateTime(row.createdAt)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <Badge tone={severityTone(row.severity)}>
+                            {severityLabel(row.severity)}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-500">
+                          {row.category ?? "—"}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs text-slate-700">
+                          {row.action}
+                        </td>
+                        <td className="px-4 py-3">
+                          <Badge tone={resultTone(row.result)}>
+                            {resultLabel(row.result)}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-3 text-slate-600">
+                          {row.institutionId ? (
+                            <Link
+                              href={`/super-admin/platform/tenants/${row.institutionId}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-brand-600 hover:text-brand-700"
+                            >
+                              {row.institutionName ?? row.institutionCode ?? "View"}
+                            </Link>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-slate-600">
+                          {row.actorEmail ?? "—"}
+                          {row.actorRole && (
+                            <span className="block text-xs capitalize text-slate-400">
+                              {row.actorRole.replace(/_/g, " ")}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs text-slate-500">
+                          {row.ip ?? "—"}
+                        </td>
+                        <td className="max-w-xs px-4 py-3">
+                          <span className="block truncate font-mono text-xs text-slate-500">
+                            {compactDetail(row.detail)}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination */}
+              <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
+                <div className="flex items-center gap-2">
+                  <span>Rows per page</span>
+                  <Select
+                    value={String(pageSize)}
+                    onChange={(e) => setPageSize(Number(e.target.value))}
+                    className="w-20"
+                  >
+                    {[25, 50, 100, 200].map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span>
+                    Page {page} of {totalPages} · {formatNumber(total)} total
+                  </span>
+                  <Button
+                    variant="secondary"
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page <= 1}
+                  >
+                    ← Prev
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={page >= totalPages}
+                  >
+                    Next →
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {tab === "governance" && (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <RetentionCard />
+          <IntegrityCard />
+        </div>
+      )}
+
+      <ExportModal
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        filters={applied}
+        sort={sort}
+        order={order}
+      />
+
+      <DetailDrawer
+        id={openEventId}
+        onClose={() => setOpenEventId(null)}
+        onFilterActor={filterByActor}
+      />
+    </>
   );
 }

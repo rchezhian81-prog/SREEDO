@@ -1710,7 +1710,9 @@ export interface PlatformUserSearchRow {
   institutionCode: string;
 }
 
-/** A row from GET /platform/audit (paginated cross-tenant audit log). */
+/** A row from GET /platform/audit (paginated cross-tenant audit log). The
+ *  consolidated Audit Console adds computed category/severity/result and the
+ *  extracted `reason` on top of the frozen store columns. */
 export interface PlatformAuditRow {
   id: string;
   action: string;
@@ -1725,6 +1727,133 @@ export interface PlatformAuditRow {
   detail: Record<string, unknown> | null;
   ip: string | null;
   createdAt: string;
+  reason?: string | null;
+  category?: string;
+  severity?: string;
+  result?: string;
+}
+
+// --- Super Admin F: Audit Consolidation (/platform/audit/*) ---
+
+/** Category counts for the summary dashboard buckets. */
+export interface AuditBuckets {
+  authSecurity: number;
+  tenant: number;
+  billingInvoice: number;
+  rbacSecurity: number;
+  support: number;
+  export: number;
+}
+
+/** A top actor by event count (GET /platform/audit/summary). */
+export interface AuditTopActor {
+  actorEmail: string;
+  count: number;
+}
+
+/** A top tenant by event count (GET /platform/audit/summary). */
+export interface AuditTopTenant {
+  institutionName: string;
+  institutionCode: string;
+  count: number;
+}
+
+/** Dashboard summary over a window (GET /platform/audit/summary). */
+export interface AuditSummary {
+  window: "today" | "7d" | "30d" | "custom";
+  totalEvents: number;
+  highRiskCount: number;
+  failedBlockedCount: number;
+  buckets: AuditBuckets;
+  topActors: AuditTopActor[];
+  topTenants: AuditTopTenant[];
+  recentCritical: PlatformAuditRow[];
+}
+
+/** A read-only suspicious-activity alert (GET /platform/audit/alerts). Each
+ *  links back to a concrete audit row via `auditId`. */
+export interface AuditAlert {
+  key: string;
+  type: string;
+  severity: string;
+  title: string;
+  description: string;
+  count: number;
+  auditId: string;
+  action: string;
+  actorEmail: string | null;
+  lastAt: string;
+}
+
+/** One before/after change extracted from an event's detail. */
+export interface AuditDiffRow {
+  field: string;
+  from: unknown;
+  to: unknown;
+  kind: "added" | "removed" | "changed";
+}
+
+/** Single audit event detail (GET /platform/audit/:id). `metadata` is the full
+ *  detail AFTER server-side secret masking. */
+export interface AuditEventDetail {
+  id: string;
+  action: string;
+  category: string;
+  severity: string;
+  result: string;
+  timestamp: string;
+  ip: string | null;
+  userAgent: string | null;
+  reason: string | null;
+  actor: { id: string | null; email: string | null; role: string | null };
+  target: { type: string | null; id: string | null; name: string | null };
+  institution: { id: string; name: string; code: string } | null;
+  diff: AuditDiffRow[];
+  metadata: Record<string, unknown>;
+}
+
+/** A saved audit filter (GET/POST/PATCH /platform/audit/saved-filters). */
+export interface AuditSavedFilter {
+  id: string;
+  name: string;
+  ownerId: string | null;
+  isShared: boolean;
+  isDefault: boolean;
+  filters: Record<string, unknown>;
+  createdByEmail: string | null;
+  createdAt: string;
+  updatedAt: string;
+  isOwn: boolean;
+}
+
+/** Audit retention policy + live store stats (GET/PUT /platform/audit/retention).
+ *  Policy VISIBILITY only — the platform never auto-deletes audit history. */
+export interface AuditRetention {
+  status: "not_configured" | "configured" | "archived";
+  retentionDays: number | null;
+  archiveEnabled: boolean;
+  updatedByEmail: string | null;
+  updatedAt: string | null;
+  stats: {
+    totalEvents: number;
+    oldestEventAt: string | null;
+    growingLargeWarning: boolean;
+  };
+}
+
+/** Integrity status (GET /platform/audit/integrity). Hash-chaining is a
+ *  documented future enhancement — never faked. */
+export interface AuditIntegrity {
+  enabled: boolean;
+  status: string;
+  note: string;
+}
+
+/** Taxonomy reference for the filter dropdowns (GET /platform/audit/categories). */
+export interface AuditCategoriesRef {
+  categories: { value: string; label: string }[];
+  severities: string[];
+  results: string[];
 }
 
 // --- Background Job Queue ---

@@ -39,6 +39,7 @@ const nextConfig = {
   async redirects() {
     return [
       { source: "/super-admin", destination: "/super-admin/platform", permanent: false },
+      { source: "/super-admin/audit-logs", destination: "/super-admin/platform/audit", permanent: false },
       { source: "/super-admin/platform/institutions", destination: "/super-admin/platform/tenants", permanent: false },
       { source: "/super-admin/platform/institutions/new", destination: "/super-admin/platform/tenants/new", permanent: false },
       { source: "/super-admin/platform/institutions/:id", destination: "/super-admin/platform/tenants/:id", permanent: false },

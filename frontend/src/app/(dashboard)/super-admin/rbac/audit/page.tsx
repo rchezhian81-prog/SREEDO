@@ -145,14 +145,22 @@ export default function RbacAuditPage() {
         title="RBAC history"
         subtitle="Every role & permission change, audited"
         action={
-          <div className="w-56">
-            <Select value={action} onChange={(e) => setAction(e.target.value)}>
-              {AUDIT_ACTIONS.map((a) => (
-                <option key={a.value} value={a.value}>
-                  {a.label}
-                </option>
-              ))}
-            </Select>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/super-admin/platform/audit?category=Authorization%2FRBAC"
+              className="text-sm font-medium text-brand-600 hover:text-brand-700"
+            >
+              Open in Audit Console →
+            </Link>
+            <div className="w-56">
+              <Select value={action} onChange={(e) => setAction(e.target.value)}>
+                {AUDIT_ACTIONS.map((a) => (
+                  <option key={a.value} value={a.value}>
+                    {a.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
           </div>
         }
       />
