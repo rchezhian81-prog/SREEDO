@@ -406,6 +406,10 @@ const SECRET_VALUE_RE = /^(sk|pk|rk|gcp|whsec|xox[baprs]|bearer\s|eyj)[-_a-z0-9.
  *  with the mask marker. Applied to /:id detail and every exported cell. */
 export function maskSecrets(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(maskSecrets);
+  // Dates are objects but must pass through untouched — recursing into one via
+  // Object.entries() would flatten it to `{}`. (pg returns timestamptz as Date,
+  // so a masked row that carries Date columns would otherwise lose them.)
+  if (value instanceof Date) return value;
   if (value && typeof value === "object") {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {

@@ -122,6 +122,10 @@ describe("Super Admin G — Support Access Hardening", () => {
     const detail = await get(`${base}/sessions/${s.body.session.id}`, ownerTok);
     expect(detail.status).toBe(200);
     expect(detail.body.targetEmail).toBe("admin@acme.dev");
+    // Timestamps must survive the secret masker (Date columns, not flattened to {}).
+    expect(typeof detail.body.startedAt).toBe("string");
+    expect(Number.isNaN(new Date(detail.body.startedAt).getTime())).toBe(false);
+    expect(typeof detail.body.expiresAt).toBe("string");
 
     const summary = await get(`${base}/summary`, ownerTok);
     expect(summary.status).toBe(200);
