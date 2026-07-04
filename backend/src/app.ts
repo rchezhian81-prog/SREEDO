@@ -69,6 +69,7 @@ import { payrollRouter } from "./modules/payroll/payroll.routes";
 import { couponsRouter } from "./modules/billing/coupons.routes";
 import { saasPaymentsWebhookRouter } from "./modules/saaspayments/saaspayments.routes";
 import { platformRouter } from "./modules/platform/platform.routes";
+import { platformAuditRouter } from "./modules/platform/audit.routes";
 import { platformExtRouter } from "./modules/platform/platform-ext.routes";
 import { subscriptionsRouter } from "./modules/platform/subscriptions.routes";
 import {
@@ -250,6 +251,9 @@ export function createApp(): express.Express {
   // Governed read-only external API (X-Platform-Token, scoped). Mounted BEFORE the
   // JWT-guarded platformRouter so its token auth is reached instead of authenticate.
   api.use("/platform/ext", platformExtRouter);
+  // Audit Consolidation (F) owns /platform/audit/* — mounted BEFORE the platform
+  // router so it supersedes the old GET /audit + /audit/export handlers there.
+  api.use("/platform/audit", platformAuditRouter);
   api.use("/platform", platformRouter); // super-admin platform hardening
   api.use("/platform/admins", platformAdminsRouter); // super-admin platform-team management (I)
   api.use("/platform/rbac", platformRbacRouter); // super-admin RBAC roles + permission matrix (H)

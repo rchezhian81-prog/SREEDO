@@ -112,7 +112,7 @@ const COLLEGE_NAV: NavItem[] = SCHOOL_NAV.flatMap((item) =>
 const SUPER_ADMIN_NAV: NavItem[] = [
   { href: "/super-admin/platform", label: "Platform Overview", icon: "grid", perm: "platform:read" },
   { href: "/super-admin/platform/tenants", label: "Tenants", icon: "building", perm: "platform:read" },
-  { href: "/super-admin/platform/audit", label: "Platform Audit", icon: "file", perm: "platform:audit_read" },
+  { href: "/super-admin/platform/audit", label: "Audit Console", icon: "file", perm: "platform:audit_read" },
   { href: "/super-admin/platform/support", label: "Support Access", icon: "help", perm: "platform:impersonate" },
   { href: "/super-admin/admins", label: "Platform Admins", icon: "users", perm: "platform:manage_admins" },
   { href: "/super-admin/rbac", label: "Roles & Permissions", icon: "shield", perm: "platform:rbac_read" },
@@ -123,7 +123,6 @@ const SUPER_ADMIN_NAV: NavItem[] = [
   { href: "/super-admin/invoices", label: "Invoices", icon: "file", perm: "platform:read" },
   { href: "/super-admin/coupons", label: "Coupons", icon: "tag", perm: "platform:read" },
   { href: "/super-admin/settings", label: "Settings", icon: "gear", perm: "platform:settings_read" },
-  { href: "/super-admin/audit-logs", label: "Audit Logs", icon: "file", perm: "platform:audit_read" },
   { href: "/super-admin/exports", label: "Data Exports", icon: "package", perm: "platform:read" },
   { href: "/super-admin/health", label: "System Health", icon: "alert", perm: "platform:health_read" },
   { href: "/super-admin/observability", label: "Observability", icon: "barChart", perm: "observability:read" },

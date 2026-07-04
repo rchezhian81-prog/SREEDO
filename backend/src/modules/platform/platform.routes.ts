@@ -9,13 +9,11 @@ import { mailerConfigured, sendTestEmail, verifyMailer } from "../../utils/maile
 import { clientIp, recordSecurityEvent } from "../../utils/security-audit";
 import {
   assignSubscriptionSchema,
-  auditExportQuerySchema,
   createInstitutionSchema,
   grantPermissionSchema,
   impersonateSchema,
   institutionExportQuerySchema,
   listInstitutionsQuerySchema,
-  platformAuditQuerySchema,
   revenueQuerySchema,
   roleParamSchema,
   setLimitsSchema,
@@ -167,34 +165,9 @@ platformRouter.get("/health", requirePermission("platform:health_read"), async (
   res.json(await service.health());
 });
 
-/**
- * @openapi
- * /platform/audit:
- *   get: { tags: [Platform], summary: "Cross-tenant platform audit log (read-only, durable; search/filter/sort/paginate)", security: [{ bearerAuth: [] }], parameters: [{ in: query, name: q, schema: { type: string } }, { in: query, name: institutionId, schema: { type: string, format: uuid } }, { in: query, name: actorId, schema: { type: string, format: uuid } }, { in: query, name: action, schema: { type: string } }, { in: query, name: targetType, schema: { type: string } }, { in: query, name: ip, schema: { type: string } }, { in: query, name: dateFrom, schema: { type: string } }, { in: query, name: dateTo, schema: { type: string } }, { in: query, name: page, schema: { type: integer } }, { in: query, name: pageSize, schema: { type: integer } }, { in: query, name: sort, schema: { type: string, enum: [createdAt, action, actorEmail] } }, { in: query, name: order, schema: { type: string, enum: [asc, desc] } }], responses: { 200: { description: "Paged audit { rows, total, page, pageSize }" } } }
- */
-platformRouter.get("/audit", requirePermission("platform:audit_read"), async (req, res) => {
-  res.json(await service.listAudit(platformAuditQuerySchema.parse(req.query)));
-});
-
-/**
- * @openapi
- * /platform/audit/export:
- *   get: { tags: [Platform], summary: "Export the filtered audit log as CSV/XLSX", security: [{ bearerAuth: [] }], parameters: [{ in: query, name: format, schema: { type: string, enum: [csv, xlsx] } }, { in: query, name: q, schema: { type: string } }, { in: query, name: institutionId, schema: { type: string, format: uuid } }, { in: query, name: action, schema: { type: string } }, { in: query, name: dateFrom, schema: { type: string } }, { in: query, name: dateTo, schema: { type: string } }], responses: { 200: { description: "CSV or XLSX file of the filtered audit log" } } }
- */
-platformRouter.get("/audit/export", requirePermission("platform:audit_read"), async (req, res) => {
-  const q = auditExportQuerySchema.parse(req.query);
-  const { columns, rows } = await service.exportAudit(q);
-  await recordSecurityEvent({
-    action: "platform.audit_exported",
-    targetType: "platform_audit_log",
-    actorId: req.user!.id,
-    actorEmail: req.user!.email,
-    actorRole: req.user!.role,
-    detail: { format: q.format, rows: rows.length },
-    ip: clientIp(req),
-  });
-  sendSpreadsheet(res, q.format, "platform-audit", columns, rows, null);
-});
+// NOTE: GET /platform/audit and GET /platform/audit/export are now served by the
+// consolidated Audit Consolidation router (F), mounted at /platform/audit BEFORE
+// this router in app.ts. The old handlers were removed here to avoid a duplicate.
 
 /**
  * @openapi
