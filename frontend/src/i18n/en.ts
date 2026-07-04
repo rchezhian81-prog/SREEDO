@@ -124,6 +124,24 @@ export const en = {
   "login.twoFactorCode": "Authenticator code",
   "login.twoFactorHint": "Enter the 6-digit code from your authenticator app.",
   "login.verify": "Verify",
+  // 2FA setup required (login gate — role now mandates 2FA)
+  "login.setupTitle": "Set up two-factor authentication to continue",
+  "login.setupIntro":
+    "Your account now requires two-factor authentication. Add the key below to an authenticator app such as Google Authenticator or Authy, then enter the 6-digit code to finish.",
+  "login.setupKeyLabel": "Setup key",
+  "login.setupLinkLabel":
+    "Or use this setup link on the device with your authenticator app:",
+  "login.setupCodeLabel": "6-digit code",
+  "login.setupPreparing": "Preparing your setup key…",
+  "login.setupEnable": "Enable & continue",
+  "login.setupEnabling": "Enabling…",
+  "login.setupExpired": "Your setup session has expired. Please sign in again.",
+  "login.setupDoneTitle": "Two-factor enabled",
+  "login.setupDoneBody":
+    "Two-factor authentication is now enabled. Please sign in again — you'll be asked for a code from your authenticator app.",
+  "login.backToSignIn": "Back to sign in",
+  "login.copy": "Copy",
+  "login.copied": "Copied",
 
   // Forgot password
   "forgotPassword.title": "Forgot password",

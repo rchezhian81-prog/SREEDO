@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import {
   Button,
@@ -14,6 +14,7 @@ import {
 import { Icon } from "@/components/icons";
 import { toast } from "@/components/toast";
 import {
+  API_TOKEN_SCOPES,
   roleLabel,
   todayISO,
   type IpAllowlistState,
@@ -354,7 +355,7 @@ export function CreateApiTokenModal({
 }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [scopesText, setScopesText] = useState("");
+  const [scopes, setScopes] = useState<string[]>([]);
   const [expiresInDays, setExpiresInDays] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -363,17 +364,18 @@ export function CreateApiTokenModal({
     if (open) {
       setName("");
       setDescription("");
-      setScopesText("");
+      setScopes([]);
       setExpiresInDays("");
       setError(null);
       setSaving(false);
     }
   }, [open]);
 
-  const scopes = useMemo(
-    () => scopesText.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean),
-    [scopesText]
-  );
+  const toggleScope = (value: string) =>
+    setScopes((prev) =>
+      prev.includes(value) ? prev.filter((s) => s !== value) : [...prev, value]
+    );
+
   const days = expiresInDays.trim() ? Number(expiresInDays) : null;
   const daysValid =
     days === null || (Number.isInteger(days) && days >= 1 && days <= 3650);
@@ -423,28 +425,32 @@ export function CreateApiTokenModal({
             placeholder="What is this token used for?"
           />
         </Field>
-        <Field
-          label="Scopes (optional)"
-          hint="Space or comma separated, e.g. platform:read backup:read"
-        >
-          <Input
-            value={scopesText}
-            onChange={(e) => setScopesText(e.target.value)}
-            placeholder="platform:read backup:read"
-          />
-        </Field>
-        {scopes.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {scopes.map((s) => (
-              <span
-                key={s}
-                className="rounded-md bg-hover px-2 py-0.5 font-mono text-xs text-muted"
+        <fieldset className="block">
+          <legend className="mb-1.5 block text-sm font-medium text-ink">Scopes</legend>
+          <p className="mb-2 text-xs text-faint">
+            What this token may read from the external API. Grant the minimum
+            needed.
+          </p>
+          <div className="space-y-2">
+            {API_TOKEN_SCOPES.map((s) => (
+              <label
+                key={s.value}
+                className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-line bg-surface px-3 py-2 transition hover:bg-hover"
               >
-                {s}
-              </span>
+                <input
+                  type="checkbox"
+                  checked={scopes.includes(s.value)}
+                  onChange={() => toggleScope(s.value)}
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-brand-600"
+                />
+                <span className="min-w-0">
+                  <span className="block font-mono text-xs text-ink">{s.value}</span>
+                  <span className="block text-xs text-muted">{s.label}</span>
+                </span>
+              </label>
             ))}
           </div>
-        )}
+        </fieldset>
         <Field
           label="Expires in (days, optional)"
           error={daysValid ? undefined : "1–3650 days"}

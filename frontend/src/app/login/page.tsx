@@ -32,7 +32,21 @@ interface LoginResponse {
   user: User;
 }
 
-type LoginResult = LoginResponse | { twoFactorRequired: true };
+/** The minimal user shape echoed back with a 2FA-setup-required login. */
+interface SetupUser {
+  id: string;
+  email: string;
+  fullName: string;
+  role: string;
+}
+
+type LoginResult =
+  | LoginResponse
+  | { twoFactorRequired: true }
+  | { twoFactorSetupRequired: true; setupToken: string; user: SetupUser };
+
+/** Which step of the sign-in journey the page is currently showing. */
+type LoginStep = "login" | "setup" | "enabled";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -41,6 +55,22 @@ export default function LoginPage() {
   const mode = useModeStore((state) => state.mode);
   const [serverError, setServerError] = useState<string | null>(null);
   const [twoFactorRequired, setTwoFactorRequired] = useState(false);
+
+  // ── Mandatory-2FA enrolment gate ──────────────────────────────────────────
+  // The setupToken is a scoped, setup-only credential. It lives ONLY in this
+  // component's state — never in the persistent auth store / localStorage — and
+  // is never used as a session to reach the dashboard.
+  const [step, setStep] = useState<LoginStep>("login");
+  const [setupToken, setSetupToken] = useState<string | null>(null);
+  const [setupUser, setSetupUser] = useState<SetupUser | null>(null);
+  const [setup, setSetup] = useState<{ secret: string; otpauthUrl: string } | null>(
+    null
+  );
+  const [setupCode, setSetupCode] = useState("");
+  const [setupError, setSetupError] = useState<string | null>(null);
+  const [setupBusy, setSetupBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+
   const {
     register,
     handleSubmit,
@@ -54,6 +84,17 @@ export default function LoginPage() {
         ...values,
         totpCode: values.totpCode || undefined,
       });
+      if ("twoFactorSetupRequired" in res) {
+        // Role now mandates 2FA and the user hasn't enrolled: switch into the
+        // setup step and fetch a secret using the scoped setup token.
+        setSetupToken(res.setupToken);
+        setSetupUser(res.user);
+        setSetupCode("");
+        setSetupError(null);
+        setStep("setup");
+        await beginSetup(res.setupToken);
+        return;
+      }
       if ("twoFactorRequired" in res) {
         setTwoFactorRequired(true); // prompt for the authenticator code
         return;
@@ -62,6 +103,79 @@ export default function LoginPage() {
       router.replace("/dashboard");
     } catch (err) {
       setServerError(err instanceof ApiError ? err.message : t("login.serverError"));
+    }
+  };
+
+  // Fetch the authenticator secret with the setup token as an explicit bearer.
+  const beginSetup = async (token: string) => {
+    setSetupBusy(true);
+    setSetupError(null);
+    try {
+      const s = await api.post<{ secret: string; otpauthUrl: string }>(
+        "/auth/2fa/setup",
+        undefined,
+        token
+      );
+      setSetup(s);
+    } catch (err) {
+      setSetupError(
+        err instanceof ApiError && err.status === 401
+          ? t("login.setupExpired")
+          : err instanceof ApiError
+            ? err.message
+            : t("login.serverError")
+      );
+    } finally {
+      setSetupBusy(false);
+    }
+  };
+
+  const confirmEnable = async () => {
+    if (!setupToken) return;
+    setSetupBusy(true);
+    setSetupError(null);
+    try {
+      await api.post("/auth/2fa/enable", { code: setupCode }, setupToken);
+      // Enrolled — drop the scoped token from memory and confirm. The next
+      // sign-in goes through the normal twoFactorRequired code prompt.
+      setSetupToken(null);
+      setSetupUser(null);
+      setSetup(null);
+      setSetupCode("");
+      setStep("enabled");
+    } catch (err) {
+      setSetupError(
+        err instanceof ApiError && err.status === 401
+          ? t("login.setupExpired")
+          : err instanceof ApiError
+            ? err.message
+            : t("login.serverError")
+      );
+    } finally {
+      setSetupBusy(false);
+    }
+  };
+
+  // Return to a clean sign-in form, discarding any setup-only state.
+  const backToLogin = () => {
+    setStep("login");
+    setSetupToken(null);
+    setSetupUser(null);
+    setSetup(null);
+    setSetupCode("");
+    setSetupError(null);
+    setTwoFactorRequired(false);
+    setServerError(null);
+  };
+
+  const copySecret = async () => {
+    if (!setup) return;
+    try {
+      await navigator.clipboard.writeText(setup.secret);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard unavailable — the key is on screen to copy manually.
     }
   };
 
@@ -170,66 +284,175 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <div className="rounded-2xl border border-line bg-surface p-6 shadow-card">
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              <Field label={t("login.email")} error={fieldError(errors.email?.message)}>
-                <Input
-                  type="email"
-                  placeholder="admin@sreedo.edu"
-                  autoComplete="email"
-                  {...register("email")}
-                />
-              </Field>
-              <Field
-                label={t("login.password")}
-                error={fieldError(errors.password?.message)}
-              >
-                <Input
-                  type="password"
-                  placeholder="••••••••"
-                  autoComplete="current-password"
-                  {...register("password")}
-                />
-              </Field>
-              {!twoFactorRequired && (
-                <div className="-mt-1 flex justify-end">
-                  <Link
-                    href="/forgot-password"
-                    className={`text-xs font-medium hover:underline ${linkText}`}
+          {step === "login" && (
+            <div className="rounded-2xl border border-line bg-surface p-6 shadow-card">
+              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                <Field label={t("login.email")} error={fieldError(errors.email?.message)}>
+                  <Input
+                    type="email"
+                    placeholder="admin@sreedo.edu"
+                    autoComplete="email"
+                    {...register("email")}
+                  />
+                </Field>
+                <Field
+                  label={t("login.password")}
+                  error={fieldError(errors.password?.message)}
+                >
+                  <Input
+                    type="password"
+                    placeholder="••••••••"
+                    autoComplete="current-password"
+                    {...register("password")}
+                  />
+                </Field>
+                {!twoFactorRequired && (
+                  <div className="-mt-1 flex justify-end">
+                    <Link
+                      href="/forgot-password"
+                      className={`text-xs font-medium hover:underline ${linkText}`}
+                    >
+                      {t("login.forgotPassword")}
+                    </Link>
+                  </div>
+                )}
+                {twoFactorRequired && (
+                  <Field label={t("login.twoFactorCode")}>
+                    <Input
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      placeholder="123456"
+                      maxLength={6}
+                      autoFocus
+                      {...register("totpCode")}
+                    />
+                    <p className="mt-1 text-xs text-muted">{t("login.twoFactorHint")}</p>
+                  </Field>
+                )}
+                <ErrorNote message={serverError} />
+                <Button type="submit" disabled={isSubmitting} className="w-full">
+                  {isSubmitting
+                    ? t("login.signingIn")
+                    : twoFactorRequired
+                      ? t("login.verify")
+                      : t("login.signIn")}
+                </Button>
+              </form>
+              <p className="mt-4 text-center text-xs text-muted">
+                {t("login.portalPrompt")}{" "}
+                <Link href="/portal/login" className={`font-medium hover:underline ${linkText}`}>
+                  {t("login.usePortal")}
+                </Link>
+              </p>
+            </div>
+          )}
+
+          {step === "setup" && (
+            <div className="rounded-2xl border border-line bg-surface p-6 shadow-card">
+              <div className="mb-4 flex items-center gap-3">
+                <div
+                  className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br text-white ${tile}`}
+                >
+                  <Icon name="shield" className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <h2 className="text-base font-bold leading-tight text-ink">
+                    {t("login.setupTitle")}
+                  </h2>
+                  {setupUser && (
+                    <p className="truncate text-xs text-muted">{setupUser.email}</p>
+                  )}
+                </div>
+              </div>
+              <p className="mb-4 text-sm text-muted">{t("login.setupIntro")}</p>
+
+              {setupBusy && !setup ? (
+                <p className="py-6 text-center text-sm text-muted">
+                  {t("login.setupPreparing")}
+                </p>
+              ) : setup ? (
+                <div className="space-y-4">
+                  <div>
+                    <p className="mb-1.5 text-sm font-medium text-ink">
+                      {t("login.setupKeyLabel")}
+                    </p>
+                    <div className="flex items-stretch gap-2">
+                      <code className="min-w-0 flex-1 break-all rounded-xl border border-line bg-surface-2 px-3 py-2.5 font-mono text-sm text-ink">
+                        {setup.secret}
+                      </code>
+                      <Button type="button" variant="secondary" onClick={copySecret}>
+                        <Icon name={copied ? "check" : "clipboard"} className="h-4 w-4" />
+                        {copied ? t("login.copied") : t("login.copy")}
+                      </Button>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="mb-1.5 text-xs text-muted">{t("login.setupLinkLabel")}</p>
+                    <code className="block break-all rounded-lg border border-line bg-surface-2 px-3 py-2 font-mono text-[11px] text-muted">
+                      {setup.otpauthUrl}
+                    </code>
+                  </div>
+                  <Field label={t("login.setupCodeLabel")}>
+                    <Input
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      placeholder="123456"
+                      maxLength={6}
+                      autoFocus
+                      value={setupCode}
+                      onChange={(e) =>
+                        setSetupCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+                      }
+                    />
+                  </Field>
+                  <ErrorNote message={setupError} />
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={backToLogin}
+                      disabled={setupBusy}
+                    >
+                      {t("login.backToSignIn")}
+                    </Button>
+                    <Button
+                      type="button"
+                      className="flex-1"
+                      onClick={confirmEnable}
+                      disabled={setupBusy || setupCode.length < 6}
+                    >
+                      {setupBusy ? t("login.setupEnabling") : t("login.setupEnable")}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <ErrorNote message={setupError} />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={backToLogin}
+                    className="w-full"
                   >
-                    {t("login.forgotPassword")}
-                  </Link>
+                    {t("login.backToSignIn")}
+                  </Button>
                 </div>
               )}
-              {twoFactorRequired && (
-                <Field label={t("login.twoFactorCode")}>
-                  <Input
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    placeholder="123456"
-                    maxLength={6}
-                    autoFocus
-                    {...register("totpCode")}
-                  />
-                  <p className="mt-1 text-xs text-muted">{t("login.twoFactorHint")}</p>
-                </Field>
-              )}
-              <ErrorNote message={serverError} />
-              <Button type="submit" disabled={isSubmitting} className="w-full">
-                {isSubmitting
-                  ? t("login.signingIn")
-                  : twoFactorRequired
-                    ? t("login.verify")
-                    : t("login.signIn")}
+            </div>
+          )}
+
+          {step === "enabled" && (
+            <div className="rounded-2xl border border-line bg-surface p-6 text-center shadow-card">
+              <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-emerald-500/12 text-emerald-600 dark:text-emerald-400">
+                <Icon name="check" className="h-6 w-6" />
+              </div>
+              <h2 className="text-lg font-bold text-ink">{t("login.setupDoneTitle")}</h2>
+              <p className="mt-2 text-sm text-muted">{t("login.setupDoneBody")}</p>
+              <Button type="button" className="mt-5 w-full" onClick={backToLogin}>
+                {t("login.signIn")}
               </Button>
-            </form>
-            <p className="mt-4 text-center text-xs text-muted">
-              {t("login.portalPrompt")}{" "}
-              <Link href="/portal/login" className={`font-medium hover:underline ${linkText}`}>
-                {t("login.usePortal")}
-              </Link>
-            </p>
-          </div>
+            </div>
+          )}
 
           <p className="mt-6 text-center text-xs text-faint lg:text-left">
             © 2026 GoCampus · {modeLabel} Management ERP
