@@ -70,6 +70,8 @@ import { couponsRouter } from "./modules/billing/coupons.routes";
 import { saasPaymentsWebhookRouter } from "./modules/saaspayments/saaspayments.routes";
 import { platformRouter } from "./modules/platform/platform.routes";
 import { platformAuditRouter } from "./modules/platform/audit.routes";
+import { platformSupportRouter } from "./modules/platform/support.routes";
+import { enforceSupportScope } from "./middleware/support-scope";
 import { platformExtRouter } from "./modules/platform/platform-ext.routes";
 import { subscriptionsRouter } from "./modules/platform/subscriptions.routes";
 import {
@@ -174,6 +176,10 @@ export function createApp(): express.Express {
   // Bearer-token and server-to-server callers pass through untouched.
   api.use(csrfOriginGuard);
   api.use(auditLog);
+  // Support-access scope enforcement (Super Admin G): a strict NO-OP for any token
+  // without an `imp` support claim (and for missing/invalid tokens), so it cannot
+  // affect existing traffic; it only gates governed support sessions.
+  api.use(enforceSupportScope);
   api.use("/auth", authRouter);
   api.use("/users", usersRouter);
   api.use("/students", studentsRouter);
@@ -254,6 +260,7 @@ export function createApp(): express.Express {
   // Audit Consolidation (F) owns /platform/audit/* — mounted BEFORE the platform
   // router so it supersedes the old GET /audit + /audit/export handlers there.
   api.use("/platform/audit", platformAuditRouter);
+  api.use("/platform/support", platformSupportRouter); // super-admin support-access console (before the catch-all platform routers)
   api.use("/platform", platformRouter); // super-admin platform hardening
   api.use("/platform/admins", platformAdminsRouter); // super-admin platform-team management (I)
   api.use("/platform/rbac", platformRbacRouter); // super-admin RBAC roles + permission matrix (H)

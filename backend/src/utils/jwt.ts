@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import jwt, { type SignOptions } from "jsonwebtoken";
 import { env } from "../config/env";
-import type { UserRole } from "../types";
+import type { SupportImpersonationClaim, UserRole } from "../types";
 
 export interface AccessTokenPayload {
   sub: string;
@@ -16,11 +16,26 @@ export interface AccessTokenPayload {
    * so a platform user whose role now mandates 2FA can enrol rather than dead-end.
    */
   scope?: "2fa_setup";
+  /**
+   * Support-access (impersonation) claim. Present ONLY on tokens issued for a
+   * governed support session; its presence lets `enforceSupportScope` gate the
+   * request while the target's own sub/email/role/institutionId keep tenant
+   * isolation + RBAC intact. Normal tokens never carry it.
+   */
+  imp?: SupportImpersonationClaim;
 }
 
-export function signAccessToken(payload: AccessTokenPayload): string {
+/**
+ * Signs an access token. `options.expiresIn` overrides the default TTL — support
+ * tokens use it so the token's own lifetime matches the session's `expiryMinutes`
+ * (the DB session row remains the authoritative, revocable source of truth).
+ */
+export function signAccessToken(
+  payload: AccessTokenPayload,
+  options?: { expiresIn?: SignOptions["expiresIn"] }
+): string {
   return jwt.sign(payload, env.jwtAccessSecret, {
-    expiresIn: env.jwtAccessTtl as SignOptions["expiresIn"],
+    expiresIn: options?.expiresIn ?? (env.jwtAccessTtl as SignOptions["expiresIn"]),
   });
 }
 

@@ -1,7 +1,6 @@
 import type { z } from "zod";
 import { query } from "../../db/postgres";
 import { ApiError } from "../../utils/api-error";
-import { signAccessToken } from "../../utils/jwt";
 import { invalidatePermissionCache } from "../../middleware/permissions";
 import { cached, invalidatePrefix } from "../../cache/cache";
 import * as superadmin from "../superadmin/superadmin.service";
@@ -9,7 +8,6 @@ import { institutionLimits, institutionStats, systemHealth } from "../adminconso
 import type {
   assignSubscriptionSchema,
   createInstitutionSchema,
-  impersonateSchema,
   setLimitsSchema,
   suspendSchema,
   updateInstitutionSchema,
@@ -492,114 +490,10 @@ export function health() {
   return systemHealth();
 }
 
-// --- Support impersonation (audited; never returns secrets) ---
-
-export async function impersonate(
-  input: z.infer<typeof impersonateSchema>,
-  actor: Actor
-) {
-  const { rows } = await query<{
-    id: string;
-    email: string;
-    role: string;
-    institutionId: string | null;
-    fullName: string;
-  }>(
-    `SELECT id, email, role, institution_id AS "institutionId", full_name AS "fullName"
-     FROM users WHERE id = $1`,
-    [input.userId]
-  );
-  const target = rows[0];
-  if (!target) throw ApiError.notFound("User not found");
-  if (target.role === "super_admin") {
-    throw ApiError.badRequest("Cannot impersonate a platform super admin");
-  }
-  if (!target.institutionId) {
-    throw ApiError.badRequest("Target is not a tenant user");
-  }
-
-  // Single-session guard (server-side): refuse a second concurrent support
-  // session for this super admin while one is still active (un-ended, un-expired).
-  const active = await query(
-    `SELECT 1 FROM platform_impersonation_sessions
-     WHERE actor_id = $1 AND ended_at IS NULL AND expires_at > now() LIMIT 1`,
-    [actor.id]
-  );
-  if (active.rows[0]) {
-    throw ApiError.conflict(
-      "You already have an active support session. End it before starting another."
-    );
-  }
-
-  const token = signAccessToken({
-    sub: target.id,
-    email: target.email,
-    role: target.role as never,
-    institutionId: target.institutionId,
-  });
-  // Surface the support-session expiry (the access token's own exp) so the UI can
-  // show the countdown and end the session when it lapses. Decoded from the JWT
-  // payload (no secret involved); falls back to null if the shape is unexpected.
-  let expiresAt: string | null = null;
-  try {
-    const payload = JSON.parse(
-      Buffer.from(token.split(".")[1], "base64url").toString("utf8")
-    ) as { exp?: number };
-    if (payload.exp) expiresAt = new Date(payload.exp * 1000).toISOString();
-  } catch {
-    /* leave expiresAt null */
-  }
-  // Record the active session for the single-session guard + audited lifecycle.
-  await query(
-    `INSERT INTO platform_impersonation_sessions
-       (actor_id, target_id, target_email, reason, expires_at)
-     VALUES ($1,$2,$3,$4, COALESCE($5::timestamptz, now() + interval '30 minutes'))`,
-    [actor.id, target.id, target.email, input.reason, expiresAt]
-  );
-  await recordAudit(actor, {
-    action: "impersonate.start",
-    targetType: "user",
-    targetId: target.id,
-    institutionId: target.institutionId,
-    detail: { targetEmail: target.email, targetRole: target.role, reason: input.reason },
-  });
-
-  // Only the impersonation token + safe identity fields are returned — never the
-  // password hash, refresh token, or any stored secret.
-  return {
-    impersonating: true,
-    token,
-    expiresAt,
-    user: {
-      id: target.id,
-      email: target.email,
-      role: target.role,
-      institutionId: target.institutionId,
-      fullName: target.fullName,
-    },
-  };
-}
-
-/** End the caller's active support session(s) (audited). Idempotent. */
-export async function endImpersonation(actor: Actor) {
-  const { rows } = await query<{ target_id: string; target_email: string }>(
-    `UPDATE platform_impersonation_sessions
-       SET ended_at = now()
-     WHERE actor_id = $1 AND ended_at IS NULL
-     RETURNING target_id, target_email`,
-    [actor.id]
-  );
-  for (const r of rows) {
-    await recordAudit(actor, {
-      action: "impersonate.end",
-      targetType: "user",
-      targetId: r.target_id,
-      institutionId: null,
-      detail: { targetEmail: r.target_email },
-    });
-  }
-  return { ended: rows.length };
-}
+// --- Support impersonation ---
+// The start/end lifecycle moved to `support.service.ts` (Super Admin G — governed,
+// scope-enforced, revocable sessions). The legacy /platform/impersonate routes
+// delegate there so no unenforced impersonation path remains.
 
 // --- RBAC console (role ↔ permission management) ---
 

@@ -50,6 +50,7 @@ function highRiskSql(a = A): string {
       'platform.audit_exported','platform.institutions_exported',
       'invoice.exported','invoice.report_exported'
     )
+    OR ${a}.action LIKE 'support.%'
   )`;
 }
 
@@ -93,7 +94,7 @@ function severityRankSql(a = A): string {
 function resultSql(a = A): string {
   return `CASE
     WHEN ${a}.action LIKE '%.failed' THEN 'failed'
-    WHEN ${a}.action LIKE '%.blocked' THEN 'blocked'
+    WHEN ${a}.action LIKE '%.blocked' OR ${a}.action = 'support.scope_blocked' THEN 'blocked'
     ELSE 'success'
   END`;
 }
@@ -109,7 +110,7 @@ const CATEGORY_RULES: { category: (typeof AUDIT_CATEGORIES)[number]; match: (a: 
   { category: "Data Export", match: (a) => `(${a}.action LIKE '%_exported' OR ${a}.action LIKE '%.exported')` },
   { category: "Authentication", match: (a) => `${a}.action LIKE 'auth.%'` },
   { category: "Authorization/RBAC", match: (a) => `${a}.action LIKE 'rbac.%'` },
-  { category: "Support Access", match: (a) => `${a}.action LIKE 'impersonate.%'` },
+  { category: "Support Access", match: (a) => `(${a}.action LIKE 'impersonate.%' OR ${a}.action LIKE 'support.%')` },
   { category: "Backup/Restore", match: (a) => `(${a}.action LIKE 'backup.%' OR ${a}.action LIKE 'restore.%')` },
   { category: "Payment Gateway", match: (a) => `${a}.action LIKE 'payment_gateway.%'` },
   { category: "Communication", match: (a) => `${a}.action LIKE 'platform.email.%'` },
@@ -588,7 +589,7 @@ const ALERT_DEFS: AlertDef[] = [
     severity: "high_risk",
     title: "Support impersonation",
     description: "A support impersonation session was started.",
-    match: "a.action = 'impersonate.start'",
+    match: "a.action IN ('impersonate.start','support.session_started')",
   },
   {
     key: "tenant_suspend_archive",
