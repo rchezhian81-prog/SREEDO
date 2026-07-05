@@ -103,8 +103,16 @@ export async function runHealthChecks(): Promise<HealthCheck[]> {
     if (!storageConfigured() && storageMode !== "local") {
       return { status: "unknown", detail: "Object storage not configured" };
     }
+    // Status only — the raw ping detail carries the local disk PATH / the S3
+    // bucket+host, which must never surface in the observability dashboard or be
+    // persisted to service_health_history. Derive a safe, path-free detail.
     const p = await storage.ping();
-    return { status: p.ok ? "healthy" : "down", detail: p.detail };
+    const safeDetail = p.ok
+      ? storageMode === "s3"
+        ? "Object storage reachable"
+        : "Local disk writable"
+      : "Storage unreachable";
+    return { status: p.ok ? "healthy" : "down", detail: safeDetail };
   });
 
   const smtp = await probe("smtp", async () => {

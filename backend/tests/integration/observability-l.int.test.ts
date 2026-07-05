@@ -77,6 +77,11 @@ describe("Super Admin L — Health / Observability", () => {
       expect(s.status).toMatch(/healthy|degraded|down|unknown/);
       expect(typeof s.detail).toBe("string");
     }
+    // The storage card must be status-only — never the local disk PATH (local
+    // mode) or the S3 bucket/host, which are storage paths and must not surface.
+    const storageCard = res.body.services.find((s: { service: string }) => s.service === "storage");
+    expect(storageCard).toBeDefined();
+    expect(storageCard.detail).not.toMatch(/\/\w+\/\w+|uploads|\/home\//i);
     expect(res.body.metrics).toBeDefined();
     expect(res.body.incidents).toBeDefined();
     expect(res.body.alerts).toBeDefined();
