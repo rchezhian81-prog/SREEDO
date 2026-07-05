@@ -92,8 +92,51 @@ const DR_SELECT = `
   rollback_guide AS "rollbackGuide", owner_name AS "ownerName", owner_contact AS "ownerContact",
   sop_link AS "sopLink", last_reviewed_at AS "lastReviewedAt", updated_at AS "updatedAt"`;
 
+/** Sensible default guide content — used when the singleton row has no text yet, so
+ *  the DR guide is never blank (the richer migration seed is used in production). */
+const DEFAULT_DR_GUIDE = {
+  policy_summary:
+    "Automated logical backups run on the configured schedule. Each backup is a consistent point-in-time snapshot, gzip-compressed and checksummed (SHA-256), retained per the retention policy and stored in S3-compatible object storage when configured, otherwise on the application server disk.",
+  restore_process:
+    "Restores run from a SUCCESS, checksum-VERIFIED, GLOBAL backup whose schema version matches the running app. Use Restore Preview (read-only) first, then raise a Restore Request. On approval, execution takes a fresh pre-restore backup, re-validates the checksum, and reloads every table in one transaction.",
+  approval_process:
+    "Every production restore requires a Restore Request approved by a super-admin (ideally not the requester), plus a typed final confirmation. Rejected/cancelled/expired requests can never be executed, and each approval is single-use.",
+  emergency_instructions:
+    "If the app is down and a restore is required: 1) enter maintenance, 2) verify the latest successful backup checksum, 3) raise + approve a Restore Request, 4) execute with the typed confirmation, 5) run the post-restore checklist.",
+  pre_restore_checklist:
+    "- Target backup is SUCCESS and checksum VERIFIED\n- Schema version matches the running app\n- A fresh pre-restore backup will be taken automatically\n- Maintenance window announced",
+  post_restore_checklist:
+    "- Login and core dashboards load\n- Row counts reconcile against the preview\n- A fresh backup has been taken\n- Audit + Security logging is recording",
+  rollback_guide:
+    "If a restore produced a bad state, restore again from the automatically-created pre-restore backup (trigger = pre_restore) via the same approved request -> execute flow.",
+};
+
 export async function getDrGuide() {
-  await query("INSERT INTO backup_dr_guide (id) VALUES (1) ON CONFLICT (id) DO NOTHING");
+  // Ensure the singleton exists AND carries content (seed defaults if it is blank —
+  // e.g. after a fresh install where the migration seed has not run).
+  await query(
+    `INSERT INTO backup_dr_guide
+       (id, policy_summary, restore_process, approval_process, emergency_instructions,
+        pre_restore_checklist, post_restore_checklist, rollback_guide)
+     VALUES (1,$1,$2,$3,$4,$5,$6,$7)
+     ON CONFLICT (id) DO UPDATE SET
+       policy_summary = coalesce(backup_dr_guide.policy_summary, EXCLUDED.policy_summary),
+       restore_process = coalesce(backup_dr_guide.restore_process, EXCLUDED.restore_process),
+       approval_process = coalesce(backup_dr_guide.approval_process, EXCLUDED.approval_process),
+       emergency_instructions = coalesce(backup_dr_guide.emergency_instructions, EXCLUDED.emergency_instructions),
+       pre_restore_checklist = coalesce(backup_dr_guide.pre_restore_checklist, EXCLUDED.pre_restore_checklist),
+       post_restore_checklist = coalesce(backup_dr_guide.post_restore_checklist, EXCLUDED.post_restore_checklist),
+       rollback_guide = coalesce(backup_dr_guide.rollback_guide, EXCLUDED.rollback_guide)`,
+    [
+      DEFAULT_DR_GUIDE.policy_summary,
+      DEFAULT_DR_GUIDE.restore_process,
+      DEFAULT_DR_GUIDE.approval_process,
+      DEFAULT_DR_GUIDE.emergency_instructions,
+      DEFAULT_DR_GUIDE.pre_restore_checklist,
+      DEFAULT_DR_GUIDE.post_restore_checklist,
+      DEFAULT_DR_GUIDE.rollback_guide,
+    ]
+  );
   const { rows } = await query(`SELECT ${DR_SELECT} FROM backup_dr_guide WHERE id = 1`);
   return rows[0];
 }

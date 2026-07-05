@@ -66,8 +66,12 @@ describe("Super Admin J — backup & restore hardening", () => {
     const xlsx = await get("/api/v1/backups/history/export?format=xlsx&reason=audit-review", tok.root).buffer(true);
     expect(xlsx.status).toBe(200);
     expect(xlsx.headers["content-type"]).toContain("spreadsheet");
-    // XLSX is a zip (PK magic).
-    expect(xlsx.body.slice(0, 2).toString()).toBe("PK");
+    expect(xlsx.headers["content-disposition"]).toMatch(/\.xlsx"/);
+    // XLSX is a zip (PK magic) — read the bytes Buffer-safely across supertest shapes.
+    const bytes = Buffer.isBuffer(xlsx.body) && xlsx.body.length
+      ? xlsx.body
+      : Buffer.from(xlsx.text ?? "", "binary");
+    expect(bytes.slice(0, 2).toString("latin1")).toBe("PK");
 
     // The export is audited.
     const audit = await get("/api/v1/platform/audit?action=backup.history_exported", tok.root);
