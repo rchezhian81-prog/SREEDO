@@ -65,7 +65,7 @@ type ComplianceQuery = z.infer<typeof complianceReportQuerySchema>;
 
 // The curated definition of "high-risk" platform actions in platform_audit_log.
 const HIGH_RISK_SQL = `(
-  action ~ '^(rbac|impersonate|backup|restore|security|export)\\.'
+  action ~ '^(rbac|impersonate|backup|restore|security|export|incident|alert)\\.'
   OR action LIKE 'platform.admin.%'
   OR action LIKE 'platform.security.%'
   OR action LIKE 'platform.settings%'

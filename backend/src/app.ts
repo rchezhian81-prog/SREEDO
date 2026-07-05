@@ -12,6 +12,7 @@ import { errorHandler, notFoundHandler } from "./middleware/error";
 import { apiRateLimiter } from "./middleware/rate-limit";
 import { requestContext } from "./middleware/request-context";
 import { requestLogger } from "./middleware/request-logger";
+import { errorCapture } from "./middleware/error-capture";
 import { observabilityRouter } from "./modules/observability/observability.routes";
 import { liveness, readiness } from "./modules/observability/observability.service";
 import { academicsRouter } from "./modules/academics/academics.routes";
@@ -133,6 +134,9 @@ export function createApp(): express.Express {
     })
   );
   app.use(requestLogger);
+  // Error Explorer capture (Super Admin L): dedupes 4xx/5xx into error_events.
+  // Mounted right after requestLogger so it observes the same request set.
+  app.use(errorCapture);
 
   app.get("/health", async (_req, res) => {
     let postgres = false;

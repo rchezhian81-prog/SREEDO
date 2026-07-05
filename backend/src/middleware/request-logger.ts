@@ -42,8 +42,9 @@ export function requestLogger(req: Request, res: Response, next: NextFunction): 
   const start = Date.now();
   res.on("finish", () => {
     const durationMs = Date.now() - start;
-    recordRequest(res.statusCode, durationMs);
     const entry = buildAccessLog(req, res, durationMs);
+    // Pass the path so metrics can track per-route latency (p95 / slow routes).
+    recordRequest(res.statusCode, durationMs, entry.path);
     log(res.statusCode >= 500 ? "error" : "info", "request", entry as unknown as Record<string, unknown>);
   });
   next();

@@ -8,6 +8,7 @@ import {
 } from "../communication/communication.service";
 import { enqueueDueScheduledBackups, runScheduledBackup } from "../backups/backups.service";
 import { enqueueDueScheduledExports, runScheduledExport } from "../exports/exports.service";
+import { evaluateAlertRules } from "../observability/alerts.service";
 import { runWebhookDeliveryJob } from "../integrations/webhooks.delivery";
 import { sweepSubscriptionLifecycle } from "../billing/billing.service";
 import { runRecurringBilling } from "../saaspayments/recurring.service";
@@ -69,6 +70,12 @@ const HANDLERS: Record<string, Handler> = {
   // queue retries it with backoff.
   webhook_deliver: async (job) => {
     await runWebhookDeliveryJob(job.payload, job.institutionId, job.attempts);
+  },
+
+  // Evaluate observability alert rules against live metrics (Super Admin L).
+  // Idempotent within each rule's cooldown, so a repeated tick is safe.
+  alert_evaluation: async () => {
+    await evaluateAlertRules();
   },
 };
 
@@ -181,6 +188,8 @@ export function startWorker(): void {
         await runSchedulerTick(null);
         await enqueueDueScheduledBackups();
         await enqueueDueScheduledExports();
+        // Observability alert evaluation (L) — cheap + cooldown-idempotent.
+        await evaluateAlertRules();
         await sweepSubscriptionLifecycle();
         // Online recurring billing + dunning (B4). A clean no-op unless the
         // operator enabled auto-charge AND the gateway is configured.
