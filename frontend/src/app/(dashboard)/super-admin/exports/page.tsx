@@ -1,235 +1,105 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { api, ApiError } from "@/lib/api";
-import {
-  Badge,
-  Button,
-  Card,
-  EmptyState,
-  ErrorNote,
-  Modal,
-  PageHeader,
-  Select,
-  Spinner,
-} from "@/components/ui";
-import type { AdminInstitutionBrief, DataExport } from "@/types";
+import { useState } from "react";
+import Link from "next/link";
+import { Button, PageHeader } from "@/components/ui";
+import { Icon, type IconName } from "@/components/icons";
+import { usePlatformGuard } from "../platform/_guard";
+import { OverviewTab } from "./_exports/OverviewTab";
+import { ExportsTab } from "./_exports/ExportsTab";
+import { PortabilityTab } from "./_exports/PortabilityTab";
+import { SchedulesTab } from "./_exports/SchedulesTab";
+import { RetentionTab } from "./_exports/RetentionTab";
 
-function statusTone(status: string): "green" | "amber" | "red" | "slate" {
-  switch (status) {
-    case "completed":
-      return "green";
-    case "pending":
-    case "running":
-      return "amber";
-    case "failed":
-      return "red";
-    default:
-      return "slate";
-  }
-}
+type Tab = "overview" | "exports" | "portability" | "schedules" | "retention";
+
+const TABS: { value: Tab; label: string; icon: IconName }[] = [
+  { value: "overview", label: "Overview", icon: "grid" },
+  { value: "exports", label: "Exports", icon: "fileDown" },
+  { value: "portability", label: "Portability", icon: "packageOpen" },
+  { value: "schedules", label: "Schedules", icon: "calendarClock" },
+  { value: "retention", label: "Retention", icon: "clock" },
+];
 
 export default function ExportsPage() {
-  const [institutions, setInstitutions] = useState<AdminInstitutionBrief[]>([]);
-  const [exports, setExports] = useState<DataExport[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const { ready, gate } = usePlatformGuard(
+    "Data Export Center",
+    "Governed, masked platform exports — history, portability, schedules & retention"
+  );
 
-  const [selectedId, setSelectedId] = useState("");
-  const [generating, setGenerating] = useState(false);
-  const [genError, setGenError] = useState<string | null>(null);
-  const [lastExport, setLastExport] = useState<DataExport | null>(null);
+  const [tab, setTab] = useState<Tab>("overview");
+  const [reloadKey, setReloadKey] = useState(0);
+  const bump = () => setReloadKey((k) => k + 1);
 
-  const [viewing, setViewing] = useState<DataExport | null>(null);
-
-  const loadExports = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      setExports(await api.get<DataExport[]>("/admin/exports"));
-    } catch (err) {
-      setLoadError(
-        err instanceof ApiError ? err.message : "Failed to load exports"
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    api
-      .get<AdminInstitutionBrief[]>("/admin/institutions")
-      .then(setInstitutions)
-      .catch(() => undefined);
-    loadExports();
-  }, [loadExports]);
-
-  const onGenerate = async () => {
-    if (!selectedId) return;
-    setGenerating(true);
-    setGenError(null);
-    try {
-      const created = await api.post<DataExport>(
-        `/admin/institutions/${selectedId}/export`
-      );
-      setLastExport(created);
-      await loadExports();
-    } catch (err) {
-      setGenError(
-        err instanceof ApiError ? err.message : "Failed to generate export"
-      );
-    } finally {
-      setGenerating(false);
-    }
+  // A date range picked from the Overview chips jumps to Exports with that filter.
+  const [presetRange, setPresetRange] = useState<{ dateFrom: string; dateTo: string } | null>(null);
+  const [presetKey, setPresetKey] = useState(0);
+  const applyRange = (range: { dateFrom: string; dateTo: string }) => {
+    setPresetRange(range);
+    setPresetKey((k) => k + 1);
+    setTab("exports");
   };
+
+  if (!ready) return gate;
 
   return (
     <>
+      <nav className="mb-2 text-xs text-faint">
+        <Link href="/super-admin/platform" className="hover:text-muted">
+          Platform
+        </Link>{" "}
+        / <span className="text-muted">Data Export Center</span>
+      </nav>
+
       <PageHeader
-        title="Backups / exports"
-        subtitle="Generate safe tenant data-export summaries (counts & metadata only)"
+        title="Data Export Center"
+        subtitle="Governed, masked platform exports — history, portability, schedules & retention"
+        action={
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={bump}>
+              <Icon name="history" className="h-4 w-4" />
+              Refresh
+            </Button>
+            <Link href="/super-admin/platform">
+              <Button variant="secondary">← Back</Button>
+            </Link>
+          </div>
+        }
       />
 
-      <Card className="mb-6">
-        <h2 className="mb-4 text-lg font-semibold text-slate-900">
-          Generate export
-        </h2>
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="w-72">
-            <span className="mb-1 block text-sm font-medium text-slate-700">
-              Institution
-            </span>
-            <Select
-              value={selectedId}
-              onChange={(e) => setSelectedId(e.target.value)}
-            >
-              <option value="">Select an institution…</option>
-              {institutions.map((inst) => (
-                <option key={inst.id} value={inst.id}>
-                  {inst.name} ({inst.code})
-                </option>
-              ))}
-            </Select>
-          </div>
-          <Button onClick={onGenerate} disabled={!selectedId || generating}>
-            {generating ? "Generating…" : "Generate export"}
-          </Button>
-        </div>
-        <div className="mt-3">
-          <ErrorNote message={genError} />
-        </div>
+      <div className="mb-6 inline-flex flex-wrap rounded-xl border border-line bg-surface p-1">
+        {TABS.map((t) => (
+          <button
+            key={t.value}
+            onClick={() => setTab(t.value)}
+            className={`inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold transition ${
+              tab === t.value ? "bg-brand-600 text-white" : "text-muted hover:bg-hover"
+            }`}
+          >
+            <Icon name={t.icon} className="h-4 w-4" />
+            {t.label}
+          </button>
+        ))}
+      </div>
 
-        {lastExport && (
-          <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
-            <p className="mb-2 text-sm font-medium text-emerald-800">
-              Export generated for {lastExport.summary.institution.name}
-            </p>
-            <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-slate-700">
-              {Object.entries(lastExport.summary.counts).map(([key, value]) => (
-                <span key={key}>
-                  <span className="capitalize text-slate-500">{key}:</span>{" "}
-                  <span className="font-medium">{value}</span>
-                </span>
-              ))}
-            </div>
-            <p className="mt-2 text-xs text-slate-500">
-              Generated {new Date(lastExport.summary.generatedAt).toLocaleString()}
-            </p>
-          </div>
-        )}
-      </Card>
-
-      <h2 className="mb-3 text-lg font-semibold text-slate-900">
-        Export history
-      </h2>
-      {loading ? (
-        <Spinner />
-      ) : loadError ? (
-        <ErrorNote message={loadError} />
-      ) : exports.length === 0 ? (
-        <EmptyState message="No exports generated yet" />
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
-              <tr>
-                <th className="px-4 py-3">Created</th>
-                <th className="px-4 py-3">Institution</th>
-                <th className="px-4 py-3">Kind</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {exports.map((row) => (
-                <tr key={row.id} className="hover:bg-slate-50">
-                  <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                    {new Date(row.createdAt).toLocaleString()}
-                  </td>
-                  <td className="px-4 py-3 font-medium text-slate-900">
-                    {row.institutionName ?? row.summary.institution.name}
-                  </td>
-                  <td className="px-4 py-3 capitalize text-slate-600">
-                    {row.kind}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge tone={statusTone(row.status)}>{row.status}</Badge>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <Button variant="secondary" onClick={() => setViewing(row)}>
-                      View summary
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {tab === "overview" && <OverviewTab reloadKey={reloadKey} onApplyRange={applyRange} />}
+      {tab === "exports" && (
+        <ExportsTab
+          presetRange={presetRange}
+          presetKey={presetKey}
+          reloadKey={reloadKey}
+          onChanged={bump}
+        />
       )}
-
-      <Modal
-        title="Export summary"
-        open={viewing !== null}
-        onClose={() => setViewing(null)}
-      >
-        {viewing && (
-          <div className="space-y-4">
-            <div>
-              <h3 className="mb-1 text-sm font-semibold text-slate-700">
-                Institution
-              </h3>
-              <p className="text-sm text-slate-600">
-                {viewing.summary.institution.name} (
-                {viewing.summary.institution.code}) —{" "}
-                <span className="capitalize">
-                  {viewing.summary.institution.type}
-                </span>
-              </p>
-            </div>
-            <div>
-              <h3 className="mb-2 text-sm font-semibold text-slate-700">
-                Counts
-              </h3>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {Object.entries(viewing.summary.counts).map(([key, value]) => (
-                  <div
-                    key={key}
-                    className="rounded-lg border border-slate-200 px-3 py-2"
-                  >
-                    <p className="text-xs capitalize text-slate-500">{key}</p>
-                    <p className="text-lg font-semibold text-slate-900">
-                      {value}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <p className="text-xs text-slate-500">
-              Generated {new Date(viewing.summary.generatedAt).toLocaleString()}
-            </p>
-          </div>
-        )}
-      </Modal>
+      {tab === "portability" && (
+        <PortabilityTab
+          reloadKey={reloadKey}
+          onChanged={bump}
+          onJumpToExports={() => setTab("exports")}
+        />
+      )}
+      {tab === "schedules" && <SchedulesTab reloadKey={reloadKey} onChanged={bump} />}
+      {tab === "retention" && <RetentionTab reloadKey={reloadKey} onChanged={bump} />}
     </>
   );
 }

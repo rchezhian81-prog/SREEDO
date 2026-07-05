@@ -115,6 +115,16 @@ function zip(files: { name: string; data: Buffer }[]): Buffer {
   return Buffer.concat([...local, centralBuf, end]);
 }
 
+/**
+ * Bundle multiple files into a single ZIP (deflate) — dependency-free, reusing the
+ * same native writer the XLSX packer uses. Used for multi-file exports / tenant
+ * data-portability packs (several CSV/JSON parts + a manifest). Never include
+ * secrets in the file contents — the caller is responsible for masking.
+ */
+export function toZip(files: { name: string; data: Buffer }[]): Buffer {
+  return zip(files);
+}
+
 export function toXlsx(headers: string[], rows: Cell[][]): Buffer {
   const dec = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
   const contentTypes =

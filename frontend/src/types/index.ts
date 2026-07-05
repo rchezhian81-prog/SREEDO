@@ -2503,3 +2503,162 @@ export interface SupportApprovalPage {
   page: number;
   pageSize: number;
 }
+
+// --- Super Admin K — Data Export Center ---
+// Field lists mirror the backend `PUBLIC_SELECT`, `summary()` and the schema
+// enums in backend/src/modules/exports/. The API NEVER returns storage paths /
+// keys — only a `hasArtifact` boolean — so nothing here references a storage key.
+
+export type ExportScope =
+  | "institutions"
+  | "platform_admins"
+  | "tenant_users"
+  | "invoices"
+  | "subscriptions"
+  | "packages"
+  | "coupons"
+  | "payments"
+  | "audit_logs"
+  | "security_reports"
+  | "support_history"
+  | "backup_metadata"
+  | "documents_metadata"
+  | "students"
+  | "staff"
+  | "fees"
+  | "attendance"
+  | "exams"
+  | "portability_pack";
+
+export type ExportFormat = "csv" | "xlsx" | "json" | "zip";
+
+export type ExportStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed"
+  | "expired"
+  | "cancelled";
+
+export type ExportApprovalStatus =
+  | "not_required"
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "cancelled"
+  | "expired";
+
+export type ExportScheduleFrequency = "daily" | "weekly" | "monthly";
+
+/** One export row (GET /exports, GET /exports/:id) — masked, no storage key. */
+export interface PlatformExport {
+  id: string;
+  name: string;
+  scope: ExportScope;
+  format: ExportFormat;
+  institutionId: string | null;
+  filters: Record<string, unknown> | null;
+  reason: string | null;
+  sensitive: boolean;
+  status: ExportStatus;
+  approvalStatus: ExportApprovalStatus;
+  approvedBy: string | null;
+  approvedAt: string | null;
+  approvalReason: string | null;
+  storageMode: string | null;
+  sizeBytes: number | null;
+  rowCount: number | null;
+  fileCount: number | null;
+  checksum: string | null;
+  checksumAlgo: string | null;
+  error: string | null;
+  expiresAt: string | null;
+  downloadCount: number;
+  lastDownloadedBy: string | null;
+  lastDownloadedAt: string | null;
+  archivedAt: string | null;
+  archivedBy: string | null;
+  archiveReason: string | null;
+  scheduleId: string | null;
+  requestedBy: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  hasArtifact: boolean;
+}
+
+/** Paginated export history (GET /exports). */
+export interface ExportPage {
+  rows: PlatformExport[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/** One recent export audit event (from ExportSummary.recentEvents). */
+export interface ExportAuditEvent {
+  action: string;
+  actorEmail: string | null;
+  targetId: string | null;
+  createdAt: string;
+}
+
+/** Dashboard summary (GET /exports/summary). */
+export interface ExportSummary {
+  totals: {
+    total: number;
+    completed: number;
+    running: number;
+    pending: number;
+    failed: number;
+    expired: number;
+    cancelled: number;
+  };
+  today: number;
+  sensitive: number;
+  pendingApproval: number;
+  portabilityPacks: number;
+  nearingExpiry: number;
+  storageUsedBytes: number;
+  downloads: number;
+  latestStatus: ExportStatus | null;
+  schedules: { total: number; enabled: number };
+  recentEvents: ExportAuditEvent[];
+}
+
+/** One scheduled export (GET/POST/PATCH /exports/schedules). */
+export interface ExportSchedule {
+  id: string;
+  name: string;
+  scope: ExportScope;
+  format: ExportFormat;
+  institutionId: string | null;
+  filters: Record<string, unknown> | null;
+  frequency: ExportScheduleFrequency;
+  runTime: string;
+  enabled: boolean;
+  reason: string | null;
+  nextRunAt: string | null;
+  lastRunAt: string | null;
+  lastStatus: string | null;
+  lastExportId: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Paginated schedule list (GET /exports/schedules). */
+export interface ExportSchedulePage {
+  rows: ExportSchedule[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/** Export retention defaults (GET/PATCH /exports/retention). */
+export interface ExportRetention {
+  defaultRetentionDays: number;
+  sensitiveRetentionDays: number;
+  updatedBy: string | null;
+  updatedAt: string | null;
+}

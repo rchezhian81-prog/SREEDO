@@ -51,6 +51,7 @@ import { dashboardRouter } from "./modules/dashboard/dashboard.routes";
 import { disciplinaryRouter } from "./modules/disciplinary/disciplinary.routes";
 import { documentsRouter } from "./modules/documents/documents.routes";
 import { examsRouter } from "./modules/exams/exams.routes";
+import { exportsRouter } from "./modules/exports/exports.routes";
 import { feesRouter } from "./modules/fees/fees.routes";
 import { homeworkRouter } from "./modules/homework/homework.routes";
 import { liveClassesRouter } from "./modules/liveclasses/liveclasses.routes";
@@ -219,6 +220,7 @@ export function createApp(): express.Express {
   api.use("/ai-insights", aiInsightsRouter);
   api.use("/observability", observabilityRouter); // super-admin platform observability
   api.use("/backups", backupsRouter); // super-admin backup / restore automation
+  api.use("/exports", exportsRouter); // super-admin Data Export Center (K)
   api.use("/admin", adminConsoleRouter); // super-admin platform console
   api.use("/activity", activityRouter); // institution-admin activity log (own tenant)
   api.use("/admissions", admissionsRouter); // online admissions + public enquiry
