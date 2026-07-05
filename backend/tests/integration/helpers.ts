@@ -10,6 +10,7 @@ export { query };
 export const app = createApp();
 
 const TABLES = [
+  "restore_requests",
   "backups",
   "jobs",
   "support_approval_requests",

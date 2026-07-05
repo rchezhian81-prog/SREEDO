@@ -1,16 +1,18 @@
+import { createHash } from "node:crypto";
 import { gzipSync, gunzipSync } from "node:zlib";
 import type { z } from "zod";
 import type { PoolClient } from "pg";
 import { query, withTransaction } from "../../db/postgres";
 import { ApiError } from "../../utils/api-error";
 import { env } from "../../config/env";
+import { deliverMail } from "../../utils/mailer";
 import { storage, storageMode } from "../../utils/storage";
 import { recordBackup, recordRestore } from "../../observability/metrics";
 import { enqueue } from "../jobs/jobs.service";
 import type {
   createBackupSchema,
+  historyQuerySchema,
   listBackupsQuerySchema,
-  restoreSchema,
   updateSettingsSchema,
 } from "./backups.schema";
 
@@ -33,8 +35,11 @@ interface AuditInput {
   detail?: Record<string, unknown>;
 }
 
-/** Durable platform audit entry (never includes secrets or storage paths). */
-async function recordAudit(actor: Actor, input: AuditInput): Promise<void> {
+/** Durable platform audit entry (never includes secrets or storage paths). Because
+ *  `backup.*` / `restore.*` actions are already classified high-risk (and restores
+ *  critical) by the audit + security consoles, one write here surfaces the event in
+ *  both the Audit Console and the Security Center high-risk feed. */
+export async function recordAudit(actor: Actor, input: AuditInput): Promise<void> {
   await query(
     `INSERT INTO platform_audit_log
        (action, target_type, target_id, institution_id, actor_id, actor_email, actor_role, detail, ip)
@@ -52,15 +57,26 @@ async function recordAudit(actor: Actor, input: AuditInput): Promise<void> {
   );
 }
 
-// Public projection — NEVER exposes storage_key (the raw object path).
+// Public projection — NEVER exposes storage_key (the raw object path). Offsite is
+// DERIVED from storage_mode ('s3' = an offsite copy exists); encryption is surfaced
+// separately from settings (no per-artifact key material is ever stored/returned).
 const PUBLIC_SELECT = `
   id, scope, institution_id AS "institutionId", status, trigger,
   storage_mode AS "storageMode", size_bytes AS "sizeBytes",
   table_count AS "tableCount", row_count AS "rowCount",
-  schema_version AS "schemaVersion", error,
+  schema_version AS "schemaVersion", error, logs_summary AS "logsSummary",
+  checksum, checksum_algo AS "checksumAlgo", checksum_status AS "checksumStatus",
+  checksum_verified_at AS "checksumVerifiedAt", checksum_verified_by AS "checksumVerifiedBy",
+  (storage_mode = 's3') AS "offsite",
+  archived_at AS "archivedAt", archived_by AS "archivedBy", archive_reason AS "archiveReason",
   (storage_key IS NOT NULL) AS "hasArtifact",
   created_by AS "createdBy", started_at AS "startedAt",
   completed_at AS "completedAt", created_at AS "createdAt"`;
+
+/** SHA-256 hex digest of a buffer (the backup artifact integrity checksum). */
+function sha256(buffer: Buffer): string {
+  return createHash("sha256").update(buffer).digest("hex");
+}
 
 // --- schema introspection (used by dump + restore) ---
 
@@ -180,11 +196,13 @@ async function buildDump(
 interface PerformBackupInput {
   scope: "global" | "institution";
   institutionId: string | null;
-  trigger: "manual" | "scheduled";
+  trigger: "manual" | "scheduled" | "pre_deploy" | "pre_restore";
   actor: Actor;
 }
 
-/** Runs a backup end-to-end: record → dump → store → finalise → retention. */
+/** Runs a backup end-to-end: record → dump → checksum → store → finalise →
+ *  retention. On failure the row is marked failed (metadata retained) and a
+ *  best-effort failure alert is dispatched. */
 export async function performBackup(input: PerformBackupInput) {
   const { rows } = await query<{ id: string }>(
     `INSERT INTO backups (scope, institution_id, status, trigger, created_by, started_at)
@@ -195,14 +213,22 @@ export async function performBackup(input: PerformBackupInput) {
 
   try {
     const dump = await buildDump(input.scope, input.institutionId);
+    const checksum = sha256(dump.buffer);
     const storageKey = `backups/${id}.json.gz`;
     await storage.put(storageKey, dump.buffer, "application/gzip");
+    const sizeKb = (dump.buffer.length / 1024).toFixed(1);
+    const logsSummary =
+      `${input.scope} backup via ${input.trigger}: ${dump.tableCount} tables, ` +
+      `${dump.rowCount} rows, ${sizeKb} KB, sha256 computed, stored to ${storageMode}.`;
 
     await query(
       `UPDATE backups SET status='success', storage_mode=$2, storage_key=$3, size_bytes=$4,
-         table_count=$5, row_count=$6, schema_version=$7, completed_at=now()
+         table_count=$5, row_count=$6, schema_version=$7, checksum=$8,
+         checksum_status='verified', checksum_verified_at=now(), checksum_verified_by=$9,
+         logs_summary=$10, completed_at=now()
        WHERE id=$1`,
-      [id, storageMode, storageKey, dump.buffer.length, dump.tableCount, dump.rowCount, dump.schemaVersion]
+      [id, storageMode, storageKey, dump.buffer.length, dump.tableCount, dump.rowCount,
+       dump.schemaVersion, checksum, input.actor.id, logsSummary]
     );
     recordBackup("success");
     await recordAudit(input.actor, {
@@ -216,16 +242,17 @@ export async function performBackup(input: PerformBackupInput) {
         tableCount: dump.tableCount,
         rowCount: dump.rowCount,
         storageMode,
+        checksumAlgo: "sha256",
       },
     });
     await applyRetention(input.scope, input.actor);
     return getBackup(id);
   } catch (err) {
     const safe = (err instanceof Error ? err.message : "Backup failed").slice(0, 500);
-    await query("UPDATE backups SET status='failed', error=$2, completed_at=now() WHERE id=$1", [
-      id,
-      safe,
-    ]);
+    await query(
+      "UPDATE backups SET status='failed', error=$2, logs_summary=$3, completed_at=now() WHERE id=$1",
+      [id, safe, `${input.scope} backup via ${input.trigger} FAILED: ${safe}`]
+    );
     recordBackup("failed");
     await recordAudit(input.actor, {
       action: "backup.failed",
@@ -233,6 +260,8 @@ export async function performBackup(input: PerformBackupInput) {
       institutionId: input.institutionId,
       detail: { scope: input.scope, trigger: input.trigger, error: safe },
     });
+    // Best-effort alert; never allowed to mask the original failure.
+    await sendBackupFailureAlert(id, input, safe).catch(() => undefined);
     throw new ApiError(500, `Backup failed: ${safe}`);
   }
 }
@@ -271,24 +300,88 @@ export async function listBackups(filters: z.infer<typeof listBackupsQuerySchema
   return rows;
 }
 
+/** Build the WHERE clause + params shared by the paginated history + its export. */
+function historyWhere(filters: z.infer<typeof historyQuerySchema>): { sql: string; params: unknown[] } {
+  const params: unknown[] = [];
+  const where: string[] = [];
+  if (filters.dateFrom) {
+    params.push(filters.dateFrom);
+    where.push(`created_at >= $${params.length}`);
+  }
+  if (filters.dateTo) {
+    params.push(filters.dateTo);
+    where.push(`created_at < ($${params.length}::date + 1)`);
+  }
+  if (filters.status) {
+    params.push(filters.status);
+    where.push(`status = $${params.length}`);
+  }
+  if (filters.scope) {
+    params.push(filters.scope);
+    where.push(`scope = $${params.length}`);
+  }
+  if (filters.trigger) {
+    params.push(filters.trigger);
+    where.push(`trigger = $${params.length}`);
+  }
+  if (filters.createdBy) {
+    params.push(filters.createdBy);
+    where.push(`created_by = $${params.length}`);
+  }
+  return { sql: where.length ? `WHERE ${where.join(" AND ")}` : "", params };
+}
+
+/** Paginated, filterable backup run history. */
+export async function listBackupHistory(filters: z.infer<typeof historyQuerySchema>) {
+  const { sql, params } = historyWhere(filters);
+  const sortCol =
+    filters.sort === "status" ? "status" : filters.sort === "sizeBytes" ? "size_bytes" : "created_at";
+  const order = filters.order === "asc" ? "ASC" : "DESC";
+  const total = Number(
+    (await query<{ n: number }>(`SELECT count(*)::int AS n FROM backups ${sql}`, params)).rows[0].n
+  );
+  const pageParams = [...params, filters.pageSize, (filters.page - 1) * filters.pageSize];
+  const { rows } = await query(
+    `SELECT ${PUBLIC_SELECT} FROM backups ${sql}
+     ORDER BY ${sortCol} ${order} NULLS LAST
+     LIMIT $${pageParams.length - 1} OFFSET $${pageParams.length}`,
+    pageParams
+  );
+  return { rows, total, page: filters.page, pageSize: filters.pageSize };
+}
+
+/** Rows for a CSV/XLSX export of the history (masked projection; no storage paths). */
+export async function backupHistoryExportRows(filters: z.infer<typeof historyQuerySchema>) {
+  const { sql, params } = historyWhere(filters);
+  const { rows } = await query(
+    `SELECT ${PUBLIC_SELECT} FROM backups ${sql} ORDER BY created_at DESC LIMIT 50000`,
+    params
+  );
+  return rows as Record<string, unknown>[];
+}
+
 export async function getBackup(id: string) {
   const { rows } = await query(`SELECT ${PUBLIC_SELECT} FROM backups WHERE id = $1`, [id]);
   if (!rows[0]) throw ApiError.notFound("Backup not found");
   return rows[0];
 }
 
-/** Internal: fetch the storage key (never exposed via the API). */
+/** Internal: fetch the storage key + integrity fields (never exposed via the API). */
 async function getBackupInternal(id: string) {
   const { rows } = await query<{
     id: string;
     scope: string;
     status: string;
+    trigger: string;
     storageKey: string | null;
+    checksum: string | null;
+    checksumStatus: string;
     schemaVersion: number | null;
     institutionId: string | null;
   }>(
-    `SELECT id, scope, status, storage_key AS "storageKey",
-            schema_version AS "schemaVersion", institution_id AS "institutionId"
+    `SELECT id, scope, status, trigger, storage_key AS "storageKey", checksum,
+            checksum_status AS "checksumStatus", schema_version AS "schemaVersion",
+            institution_id AS "institutionId"
      FROM backups WHERE id = $1`,
     [id]
   );
@@ -296,7 +389,42 @@ async function getBackupInternal(id: string) {
   return rows[0];
 }
 
-export async function downloadBackup(id: string, actor: Actor) {
+/**
+ * Verify a backup's integrity: re-read the stored artifact, recompute its SHA-256
+ * and compare to the checksum recorded at creation. Updates checksum_status
+ * (verified/failed) + verifier/time; audited either way.
+ */
+export async function verifyBackupChecksum(id: string, actor: Actor) {
+  const backup = await getBackupInternal(id);
+  if (backup.status !== "success" || !backup.storageKey) {
+    throw ApiError.badRequest("Only a successful backup with an artifact can be verified");
+  }
+  let ok = false;
+  let actual = "";
+  let detail = "";
+  try {
+    const buffer = await storage.get(backup.storageKey);
+    actual = sha256(buffer);
+    ok = Boolean(backup.checksum) && actual === backup.checksum;
+    detail = ok ? "checksum matches" : "checksum MISMATCH — artifact may be corrupted";
+  } catch (err) {
+    ok = false;
+    detail = `artifact unreadable: ${(err instanceof Error ? err.message : "error").slice(0, 200)}`;
+  }
+  await query(
+    `UPDATE backups SET checksum_status=$2, checksum_verified_at=now(), checksum_verified_by=$3 WHERE id=$1`,
+    [id, ok ? "verified" : "failed", actor.id]
+  );
+  await recordAudit(actor, {
+    action: ok ? "backup.verified" : "backup.verify_failed",
+    targetId: id,
+    institutionId: backup.institutionId,
+    detail: { result: ok ? "verified" : "failed", note: detail },
+  });
+  return { backupId: id, verified: ok, checksumStatus: ok ? "verified" : "failed", detail };
+}
+
+export async function downloadBackup(id: string, reason: string, actor: Actor) {
   const backup = await getBackupInternal(id);
   if (backup.status !== "success" || !backup.storageKey) {
     throw ApiError.badRequest("This backup has no downloadable artifact");
@@ -306,23 +434,66 @@ export async function downloadBackup(id: string, actor: Actor) {
     action: "backup.download",
     targetId: id,
     institutionId: backup.institutionId,
-    detail: { scope: backup.scope, sizeBytes: buffer.length },
+    detail: { scope: backup.scope, sizeBytes: buffer.length, reason },
   });
   const stamp = new Date().toISOString().slice(0, 10);
   return { buffer, filename: `backup-${id}-${stamp}.json.gz` };
 }
 
-export async function deleteBackup(id: string, actor: Actor) {
+/** Ids of the latest N successful GLOBAL backups (the rollback window). */
+async function latestSuccessfulGlobalIds(limit: number): Promise<string[]> {
+  const { rows } = await query<{ id: string }>(
+    `SELECT id FROM backups WHERE status='success' AND scope='global'
+     ORDER BY created_at DESC LIMIT $1`,
+    [limit]
+  );
+  return rows.map((r) => r.id);
+}
+
+/**
+ * Archive a backup: remove the stored artifact but ALWAYS keep the metadata row
+ * (status → 'archived'). Guarded so the latest successful backup and the rollback
+ * window are never silently lost — those need an explicit `override` + reason.
+ * Replaces hard deletion (no backup history is ever destroyed).
+ */
+export async function archiveBackup(
+  id: string,
+  input: { reason: string; override: boolean },
+  actor: Actor
+) {
   const backup = await getBackupInternal(id);
+  if (backup.status === "archived") {
+    return { archived: true, id, alreadyArchived: true };
+  }
+
+  if (backup.status === "success" && backup.scope === "global") {
+    const settings = (await getSettings()) as { retentionMinKeep: number };
+    const windowIds = await latestSuccessfulGlobalIds(Math.max(1, settings.retentionMinKeep));
+    if (windowIds[0] === id && !input.override) {
+      throw ApiError.badRequest(
+        "Refusing to archive the latest successful backup without override=true"
+      );
+    }
+    if (windowIds.includes(id) && !input.override) {
+      throw ApiError.badRequest(
+        "Refusing to archive a backup inside the rollback window without override=true"
+      );
+    }
+  }
+
   if (backup.storageKey) await storage.remove(backup.storageKey).catch(() => undefined);
-  await query("DELETE FROM backups WHERE id = $1", [id]);
+  await query(
+    `UPDATE backups SET status='archived', storage_key=NULL, archived_at=now(),
+       archived_by=$2, archive_reason=$3 WHERE id=$1`,
+    [id, actor.id, input.reason]
+  );
   await recordAudit(actor, {
-    action: "backup.delete",
+    action: "backup.archived",
     targetId: id,
     institutionId: backup.institutionId,
-    detail: { scope: backup.scope },
+    detail: { scope: backup.scope, reason: input.reason, override: input.override },
   });
-  return { deleted: true, id };
+  return { archived: true, id };
 }
 
 // --- restore ---
@@ -333,7 +504,7 @@ async function loadDump(storageKey: string): Promise<DumpFile> {
   return JSON.parse(gunzipSync(buffer).toString("utf8")) as DumpFile;
 }
 
-/** Non-destructive metadata preview of what a restore would load. */
+/** Non-destructive metadata preview of what a restore would load (safe/read-only). */
 export async function restorePreview(id: string) {
   const backup = await getBackupInternal(id);
   if (backup.status !== "success" || !backup.storageKey) {
@@ -351,58 +522,88 @@ export async function restorePreview(id: string) {
     schemaVersion: dump.meta.schemaVersion,
     currentSchemaVersion: currentVersion,
     schemaMatches: dump.meta.schemaVersion === currentVersion,
-    restorable: backup.scope === "global" && dump.meta.schemaVersion === currentVersion,
+    checksumStatus: backup.checksumStatus,
+    restorable:
+      backup.scope === "global" &&
+      dump.meta.schemaVersion === currentVersion &&
+      backup.checksumStatus !== "failed",
     tableCount: tables.length,
     totalRows: tables.reduce((s, t) => s + t.rowCount, 0),
     tables,
+    // Advisory impact — this restore OVERWRITES all current data.
+    impact: {
+      overwritesAllData: true,
+      downtimeRisk: "high",
+      recommendPreRestoreBackup: true,
+    },
   };
 }
 
 /**
- * Restore the whole database from a global backup. Destructive and guarded:
- * super-admin only (route), explicit confirmation always, and `force` required in
- * production. Runs in one transaction with FK checks/triggers disabled so tables
- * reload in any order; a failure rolls everything back. Every attempt is audited.
+ * The restore CORE — destructive. Validates the checksum, reloads every table in
+ * one transaction (FK checks/triggers disabled) and rolls back on any error. Only
+ * called by the approved restore-request execution path (never one-click). In
+ * production it additionally requires `force`. A failed checksum blocks the restore
+ * unless `force` (owner override) is set — the override is audited.
  */
-export async function restoreBackup(
-  id: string,
-  input: z.infer<typeof restoreSchema>,
-  actor: Actor
+export async function applyRestoreDump(
+  backupId: string,
+  actor: Actor,
+  opts: { force: boolean; requestId?: string | null }
 ) {
-  const backup = await getBackupInternal(id);
-
+  const backup = await getBackupInternal(backupId);
   if (backup.status !== "success" || !backup.storageKey) {
     throw ApiError.badRequest("Only a successful backup with an artifact can be restored");
   }
   if (backup.scope !== "global") {
     throw ApiError.badRequest("Only global backups can be restored");
   }
-  if (!input.confirm) {
-    throw ApiError.badRequest("Restore requires explicit confirmation (confirm=true)");
-  }
-  if (env.isProduction && !input.force) {
+  if (env.isProduction && !opts.force) {
     throw ApiError.badRequest("Restoring in production requires force=true");
   }
 
-  // Log the attempt up front (survives a failed/rolled-back restore).
   await recordAudit(actor, {
     action: "restore.start",
-    targetId: id,
+    targetId: backupId,
     institutionId: null,
-    detail: { force: input.force, production: env.isProduction },
+    detail: { force: opts.force, production: env.isProduction, requestId: opts.requestId ?? null },
   });
 
-  try {
-    const dump = await loadDump(backup.storageKey);
-    const currentVersion = Number(
-      (await query<{ n: number }>("SELECT count(*)::int AS n FROM schema_migrations")).rows[0].n
-    );
-    if (dump.meta.schemaVersion !== currentVersion) {
-      throw new Error(
-        `schema version mismatch (backup ${dump.meta.schemaVersion} vs current ${currentVersion})`
+  // Pre-flight validation (client errors ⇒ 400, surfaced BEFORE any destructive
+  // work so a corrupt/incompatible backup never truncates data).
+  const buffer = await storage.get(backup.storageKey);
+  const actual = sha256(buffer);
+  const checksumOk = Boolean(backup.checksum) && actual === backup.checksum;
+  if (!checksumOk) {
+    if (!opts.force) {
+      await recordAudit(actor, {
+        action: "restore.blocked",
+        targetId: backupId,
+        institutionId: null,
+        detail: { reason: "checksum verification failed", requestId: opts.requestId ?? null },
+      });
+      throw ApiError.badRequest(
+        "Checksum verification failed — the backup may be corrupted. Override with force=true (owner)."
       );
     }
+    await recordAudit(actor, {
+      action: "restore.checksum_override",
+      targetId: backupId,
+      institutionId: null,
+      detail: { requestId: opts.requestId ?? null },
+    });
+  }
+  const dump = JSON.parse(gunzipSync(buffer).toString("utf8")) as DumpFile;
+  const currentVersion = Number(
+    (await query<{ n: number }>("SELECT count(*)::int AS n FROM schema_migrations")).rows[0].n
+  );
+  if (dump.meta.schemaVersion !== currentVersion) {
+    throw ApiError.badRequest(
+      `Schema version mismatch (backup ${dump.meta.schemaVersion} vs current ${currentVersion}) — restore blocked`
+    );
+  }
 
+  try {
     let restoredRows = 0;
     await withTransaction(async (client) => {
       // Disable FK checks + triggers for this transaction only, so tables can be
@@ -435,19 +636,19 @@ export async function restoreBackup(
     recordRestore("success");
     await recordAudit(actor, {
       action: "restore.success",
-      targetId: id,
+      targetId: backupId,
       institutionId: null,
-      detail: { tableCount: dump.tables.length, rowCount: restoredRows },
+      detail: { tableCount: dump.tables.length, rowCount: restoredRows, requestId: opts.requestId ?? null },
     });
-    return { restored: true, backupId: id, tableCount: dump.tables.length, rowCount: restoredRows };
+    return { restored: true, backupId, tableCount: dump.tables.length, rowCount: restoredRows };
   } catch (err) {
     const safe = (err instanceof Error ? err.message : "Restore failed").slice(0, 500);
     recordRestore("failed");
     await recordAudit(actor, {
       action: "restore.failed",
-      targetId: id,
+      targetId: backupId,
       institutionId: null,
-      detail: { error: safe },
+      detail: { error: safe, requestId: opts.requestId ?? null },
     });
     throw new ApiError(500, `Restore failed: ${safe}`);
   }
@@ -456,9 +657,13 @@ export async function restoreBackup(
 // --- settings + retention ---
 
 const SETTINGS_SELECT = `
-  retention_count AS "retentionCount", schedule_enabled AS "scheduleEnabled",
-  schedule_frequency AS "scheduleFrequency", schedule_run_time AS "scheduleRunTime",
-  next_run_at AS "nextRunAt", updated_at AS "updatedAt"`;
+  retention_count AS "retentionCount", retention_min_keep AS "retentionMinKeep",
+  schedule_enabled AS "scheduleEnabled", schedule_frequency AS "scheduleFrequency",
+  schedule_run_time AS "scheduleRunTime", next_run_at AS "nextRunAt",
+  offsite_enabled AS "offsiteEnabled", last_offsite_test_at AS "lastOffsiteTestAt",
+  last_offsite_test_ok AS "lastOffsiteTestOk", last_offsite_test_detail AS "lastOffsiteTestDetail",
+  encryption_enabled AS "encryptionEnabled", failure_alert_enabled AS "failureAlertEnabled",
+  alert_emails AS "alertEmails", updated_at AS "updatedAt"`;
 
 export async function getSettings() {
   // The settings row is a migration-seeded singleton; recreate it defensively if
@@ -491,9 +696,14 @@ export async function updateSettings(input: z.infer<typeof updateSettingsSchema>
   const params: unknown[] = [];
   const map: Record<string, string> = {
     retentionCount: "retention_count",
+    retentionMinKeep: "retention_min_keep",
     scheduleEnabled: "schedule_enabled",
     scheduleFrequency: "schedule_frequency",
     scheduleRunTime: "schedule_run_time",
+    offsiteEnabled: "offsite_enabled",
+    encryptionEnabled: "encryption_enabled",
+    failureAlertEnabled: "failure_alert_enabled",
+    alertEmails: "alert_emails",
   };
   for (const [field, column] of Object.entries(map)) {
     if ((input as Record<string, unknown>)[field] !== undefined) {
@@ -524,43 +734,221 @@ export async function updateSettings(input: z.infer<typeof updateSettingsSchema>
   sets.push(`updated_by = $${params.length}`);
   await query(`UPDATE backup_settings SET ${sets.join(", ")} WHERE id = 1`, params);
 
+  // Audit the CHANGED fields only; alert_emails value is not echoed (recorded as a flag).
+  const changed: Record<string, unknown> = { ...input };
+  if ("alertEmails" in changed) changed.alertEmails = "<updated>";
   await recordAudit(actor, {
     action: "backup.settings_update",
     targetId: null,
     institutionId: null,
-    detail: { ...input },
+    detail: changed,
   });
   return getSettings();
 }
 
 /**
- * Retention: keep only the latest N successful backups of a scope; delete older
- * ones (artifact + row). When retention_count is NULL retention is OFF and
- * NOTHING is ever deleted.
+ * Retention: keep the latest N successful backups of a scope and ARCHIVE the older
+ * ones (artifact removed, metadata row retained as 'archived' — history is never
+ * destroyed). The rollback window (retention_min_keep) is always preserved. When
+ * retention_count is NULL retention is OFF and nothing is archived.
  */
 export async function applyRetention(scope: "global" | "institution", actor: Actor) {
-  const settings = (await getSettings()) as { retentionCount: number | null };
-  if (settings.retentionCount == null) return { deleted: 0 };
+  const settings = (await getSettings()) as { retentionCount: number | null; retentionMinKeep: number };
+  if (settings.retentionCount == null) return { archived: 0 };
+  const keep = Math.max(settings.retentionCount, settings.retentionMinKeep ?? 1);
 
   const { rows } = await query<{ id: string; storageKey: string | null }>(
     `SELECT id, storage_key AS "storageKey" FROM backups
      WHERE status = 'success' AND scope = $1
      ORDER BY created_at DESC OFFSET $2`,
-    [scope, settings.retentionCount]
+    [scope, keep]
   );
   for (const row of rows) {
     if (row.storageKey) await storage.remove(row.storageKey).catch(() => undefined);
-    await query("DELETE FROM backups WHERE id = $1", [row.id]);
+    await query(
+      `UPDATE backups SET status='archived', storage_key=NULL, archived_at=now(),
+         archive_reason='retention policy' WHERE id=$1`,
+      [row.id]
+    );
   }
   if (rows.length > 0) {
     await recordAudit(actor, {
       action: "backup.retention",
       targetId: null,
       institutionId: null,
-      detail: { scope, deleted: rows.length, keep: settings.retentionCount },
+      detail: { scope, archived: rows.length, keep },
     });
   }
-  return { deleted: rows.length };
+  return { archived: rows.length };
+}
+
+// --- dashboard summary ---
+
+/** Aggregated dashboard cards for the backup console (one round of small queries). */
+export async function summary() {
+  const settings = (await getSettings()) as Record<string, unknown>;
+
+  const counts = (
+    await query<{
+      total: number;
+      success: number;
+      failed: number;
+      archived: number;
+      checksum_verified: number;
+      checksum_failed: number;
+      offsite: number;
+      storage_used: string | null;
+      last_success_at: string | null;
+      last_success_size: string | null;
+    }>(
+      `SELECT
+         count(*)::int AS total,
+         count(*) FILTER (WHERE status='success')::int AS success,
+         count(*) FILTER (WHERE status='failed')::int AS failed,
+         count(*) FILTER (WHERE status='archived')::int AS archived,
+         count(*) FILTER (WHERE checksum_status='verified')::int AS checksum_verified,
+         count(*) FILTER (WHERE checksum_status='failed')::int AS checksum_failed,
+         count(*) FILTER (WHERE status='success' AND storage_mode='s3')::int AS offsite,
+         coalesce(sum(size_bytes) FILTER (WHERE status='success'),0)::text AS storage_used,
+         (SELECT completed_at FROM backups WHERE status='success' ORDER BY completed_at DESC LIMIT 1) AS last_success_at,
+         (SELECT size_bytes FROM backups WHERE status='success' ORDER BY completed_at DESC LIMIT 1)::text AS last_success_size
+       FROM backups`
+    )
+  ).rows[0];
+
+  const last = (
+    await query(
+      `SELECT ${PUBLIC_SELECT} FROM backups ORDER BY created_at DESC LIMIT 1`
+    )
+  ).rows[0] ?? null;
+
+  const restore = (
+    await query<{ pending: number; last_status: string | null; last_at: string | null }>(
+      `SELECT
+         count(*) FILTER (WHERE status='pending')::int AS pending,
+         (SELECT status FROM restore_requests ORDER BY created_at DESC LIMIT 1) AS last_status,
+         (SELECT created_at FROM restore_requests ORDER BY created_at DESC LIMIT 1) AS last_at
+       FROM restore_requests`
+    )
+  ).rows[0];
+
+  // Health warnings — surfaced on the dashboard.
+  const warnings: string[] = [];
+  const lastSuccessAt = counts.last_success_at ? new Date(counts.last_success_at) : null;
+  const staleDays = lastSuccessAt
+    ? (Date.now() - lastSuccessAt.getTime()) / 86_400_000
+    : Infinity;
+  if (!lastSuccessAt) warnings.push("No successful backup exists yet.");
+  else if (staleDays > 2) warnings.push(`Latest successful backup is ${Math.floor(staleDays)} days old.`);
+  if (counts.failed > 0) warnings.push(`${counts.failed} failed backup(s) recorded.`);
+  if (counts.checksum_failed > 0) warnings.push(`${counts.checksum_failed} backup(s) failed checksum verification.`);
+  if (!settings.encryptionEnabled) warnings.push("Backup-level encryption is not enabled (relies on storage at-rest encryption).");
+  if (storageMode !== "s3") warnings.push("Offsite (S3) storage is not configured — backups are on the app server disk only.");
+  if (!settings.scheduleEnabled) warnings.push("Automatic scheduled backups are disabled.");
+
+  return {
+    lastBackup: last,
+    lastSuccessAt: counts.last_success_at,
+    lastSuccessSizeBytes: counts.last_success_size ? Number(counts.last_success_size) : null,
+    schedule: {
+      enabled: settings.scheduleEnabled,
+      frequency: settings.scheduleFrequency,
+      runTime: settings.scheduleRunTime,
+      nextRunAt: settings.nextRunAt,
+    },
+    retention: {
+      retentionCount: settings.retentionCount,
+      retentionMinKeep: settings.retentionMinKeep,
+    },
+    totals: {
+      total: counts.total,
+      available: counts.success,
+      archived: counts.archived,
+      failed: counts.failed,
+    },
+    integrity: {
+      checksumVerified: counts.checksum_verified,
+      checksumFailed: counts.checksum_failed,
+    },
+    offsite: {
+      mode: storageMode,
+      configured: storageMode === "s3",
+      copies: counts.offsite,
+      lastTestAt: settings.lastOffsiteTestAt,
+      lastTestOk: settings.lastOffsiteTestOk,
+    },
+    encryption: { enabled: Boolean(settings.encryptionEnabled) },
+    storageUsedBytes: Number(counts.storage_used ?? 0),
+    restore: {
+      pendingRequests: restore.pending,
+      latestStatus: restore.last_status,
+      latestAt: restore.last_at,
+    },
+    warnings,
+  };
+}
+
+// --- failure alerting ---
+
+/** Resolve the alert recipient list: configured emails, else all active platform admins. */
+async function resolveAlertRecipients(configured: string | null): Promise<string[]> {
+  const list = (configured ?? "")
+    .split(/[,\n;]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (list.length > 0) return list;
+  const { rows } = await query<{ email: string }>(
+    `SELECT email FROM users WHERE role='super_admin' AND institution_id IS NULL AND is_active = true`
+  );
+  return rows.map((r) => r.email);
+}
+
+/**
+ * Best-effort backup-failure alert. Emails the configured platform admins (or all
+ * super admins) and records the outcome to the audit log. NEVER throws — a failed
+ * alert must not mask the underlying backup failure. Skips cleanly when SMTP or
+ * the alert setting is off (the dashboard warning still surfaces the failure).
+ */
+export async function sendBackupFailureAlert(
+  backupId: string,
+  input: { scope: string; trigger: string },
+  error: string
+) {
+  try {
+    const settings = (await getSettings()) as { failureAlertEnabled: boolean; alertEmails: string | null };
+    if (!settings.failureAlertEnabled) {
+      await recordAudit(SYSTEM_ACTOR, {
+        action: "backup.failure_alert",
+        targetId: backupId,
+        institutionId: null,
+        detail: { status: "skipped", reason: "alerts disabled" },
+      });
+      return;
+    }
+    const recipients = await resolveAlertRecipients(settings.alertEmails);
+    const subject = `[SRE EDU OS] Backup FAILED (${input.scope} / ${input.trigger})`;
+    const text =
+      `A ${input.scope} backup triggered by ${input.trigger} failed.\n\n` +
+      `Backup ID: ${backupId}\nError: ${error}\n\n` +
+      `Review the backup dashboard and run a manual backup once resolved. ` +
+      `This is an automated security notification from SRE EDU OS.`;
+
+    let sent = 0;
+    let lastStatus: "sent" | "skipped" | "failed" = "skipped";
+    for (const to of recipients) {
+      const res = await deliverMail({ to, subject, text });
+      lastStatus = res.status;
+      if (res.status === "sent") sent += 1;
+    }
+    await recordAudit(SYSTEM_ACTOR, {
+      action: "backup.failure_alert",
+      targetId: backupId,
+      institutionId: null,
+      detail: { status: recipients.length === 0 ? "skipped" : lastStatus, recipients: recipients.length, sent },
+    });
+  } catch {
+    // Swallow — alerting must never break the backup path.
+  }
 }
 
 // --- scheduled automation (driven by the job worker) ---

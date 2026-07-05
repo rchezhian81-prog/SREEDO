@@ -3,6 +3,7 @@ import path from "node:path";
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadBucketCommand,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -10,11 +11,20 @@ import { env } from "../config/env";
 
 export type StorageMode = "s3" | "local";
 
+/** Result of a real connectivity probe (used by the offsite backup "test" action). */
+export interface StoragePingResult {
+  ok: boolean;
+  /** Short, safe detail — NEVER contains keys/secrets. */
+  detail: string;
+}
+
 export interface Storage {
   readonly mode: StorageMode;
   put(key: string, body: Buffer, contentType: string): Promise<void>;
   get(key: string): Promise<Buffer>;
   remove(key: string): Promise<void>;
+  /** Live reachability check of the backing store (no secrets in the result). */
+  ping(): Promise<StoragePingResult>;
 }
 
 /** True only when all S3 settings are present (otherwise local disk is used). */
@@ -43,6 +53,18 @@ class LocalDiskStorage implements Storage {
   }
   async remove(key: string): Promise<void> {
     await unlink(path.join(this.root, key)).catch(() => undefined);
+  }
+  async ping(): Promise<StoragePingResult> {
+    // Prove the backup directory is writable with a tiny probe file (cleaned up).
+    try {
+      const probe = path.join(this.root, ".backup-probe");
+      await mkdir(this.root, { recursive: true });
+      await writeFile(probe, Buffer.from("ok"));
+      await unlink(probe).catch(() => undefined);
+      return { ok: true, detail: `Local disk writable (${this.root})` };
+    } catch (err) {
+      return { ok: false, detail: err instanceof Error ? err.message.slice(0, 200) : "Local disk not writable" };
+    }
   }
 }
 
@@ -81,6 +103,23 @@ class S3Storage implements Storage {
     await this.client.send(
       new DeleteObjectCommand({ Bucket: env.storageBucket, Key: key })
     );
+  }
+  async ping(): Promise<StoragePingResult> {
+    // HeadBucket confirms the endpoint + credentials + bucket without listing or
+    // exposing any object. Only a safe, host-level detail is returned.
+    try {
+      await this.client.send(new HeadBucketCommand({ Bucket: env.storageBucket }));
+      const host = (() => {
+        try {
+          return env.storageEndpoint ? new URL(env.storageEndpoint).host : "s3";
+        } catch {
+          return "s3";
+        }
+      })();
+      return { ok: true, detail: `Reached bucket "${env.storageBucket}" at ${host}` };
+    } catch (err) {
+      return { ok: false, detail: err instanceof Error ? err.message.slice(0, 200) : "S3 unreachable" };
+    }
   }
 }
 
