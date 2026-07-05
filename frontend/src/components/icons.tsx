@@ -59,6 +59,11 @@ import {
   Rocket,
   Video,
   KeyRound,
+  Database,
+  DownloadCloud,
+  HardDrive,
+  ShieldCheck,
+  History,
 } from "lucide-react";
 
 /*
@@ -128,6 +133,12 @@ const MAP = {
   rocket: Rocket,
   video: Video,
   key: KeyRound,
+  database: Database,
+  download: DownloadCloud,
+  hardDrive: HardDrive,
+  shieldCheck: ShieldCheck,
+  history: History,
+  lifeBuoy: LifeBuoy,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof MAP;

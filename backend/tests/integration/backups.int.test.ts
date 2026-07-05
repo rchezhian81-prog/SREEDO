@@ -37,6 +37,10 @@ describe("scheduled backup / restore automation", () => {
     instA = await createInstitution("BKP");
     await createUser({ email: "root@b.dev", password: PW, role: "super_admin", institutionId: null });
     tok.root = await tokenFor("root@b.dev", PW);
+    // A SECOND super-admin — restore approval blocks self-approval, so a different
+    // approver is required to exercise the restore workflow.
+    await createUser({ email: "root2@b.dev", password: PW, role: "super_admin", institutionId: null });
+    tok.root2 = await tokenFor("root2@b.dev", PW);
     await createUser({ email: "admin@b.dev", password: PW, role: "admin", institutionId: instA });
     tok.admin = await tokenFor("admin@b.dev", PW);
   });
@@ -51,6 +55,9 @@ describe("scheduled backup / restore automation", () => {
     expect(Number(b.sizeBytes)).toBeGreaterThan(0); // bigint serialises as a string
     expect(b.schemaVersion).toBeGreaterThan(0);
     expect(b.hasArtifact).toBe(true);
+    // A checksum is generated for every backup.
+    expect(b.checksum).toMatch(/^[a-f0-9]{64}$/);
+    expect(b.checksumStatus).toBe("verified");
     // The raw object key / storage path is never returned.
     expect(JSON.stringify(b)).not.toMatch(/storageKey|storage_key/i);
     expect(JSON.stringify(b)).not.toContain("backups/");
@@ -69,9 +76,14 @@ describe("scheduled backup / restore automation", () => {
     }
   });
 
-  it("downloads a backup artifact through the protected route", async () => {
+  it("downloads a backup artifact through the protected route (reason required)", async () => {
     const b = await makeBackup();
-    const res = await get(`/api/v1/backups/${b.id}/download`, tok.root).buffer(true);
+    // A reason is mandatory for a high-risk backup download.
+    expect((await get(`/api/v1/backups/${b.id}/download`, tok.root)).status).toBe(400);
+    const res = await get(
+      `/api/v1/backups/${b.id}/download?reason=routine-integrity-check`,
+      tok.root
+    ).buffer(true);
     expect(res.status).toBe(200);
     expect(res.headers["content-type"]).toContain("application/gzip");
     expect(res.headers["content-disposition"]).toMatch(/attachment; filename="backup-.*\.json\.gz"/);
@@ -83,19 +95,16 @@ describe("scheduled backup / restore automation", () => {
     const b = await makeBackup();
     expect((await get("/api/v1/backups", tok.admin)).status).toBe(403);
     expect((await post("/api/v1/backups", tok.admin, {})).status).toBe(403);
-    expect((await get(`/api/v1/backups/${b.id}/download`, tok.admin)).status).toBe(403);
+    expect((await get(`/api/v1/backups/${b.id}/download?reason=xxxxx`, tok.admin)).status).toBe(403);
     expect((await get(`/api/v1/backups/${b.id}/restore/preview`, tok.admin)).status).toBe(403);
-    expect((await post(`/api/v1/backups/${b.id}/restore`, tok.admin, { confirm: true })).status).toBe(403);
+    expect(
+      (await post(`/api/v1/backups/${b.id}/restore-requests`, tok.admin, { reason: "please restore" }))
+        .status
+    ).toBe(403);
     expect((await patch("/api/v1/backups/settings", tok.admin, { retentionCount: 1 })).status).toBe(403);
   });
 
-  it("requires explicit confirmation before a restore", async () => {
-    const b = await makeBackup();
-    expect((await post(`/api/v1/backups/${b.id}/restore`, tok.root, {})).status).toBe(400);
-    expect((await post(`/api/v1/backups/${b.id}/restore`, tok.root, { confirm: false })).status).toBe(400);
-  });
-
-  it("previews a restore without applying it", async () => {
+  it("previews a restore without applying it (read-only)", async () => {
     const b = await makeBackup();
     const res = await get(`/api/v1/backups/${b.id}/restore/preview`, tok.root);
     expect(res.status).toBe(200);
@@ -106,44 +115,87 @@ describe("scheduled backup / restore automation", () => {
     expect(Array.isArray(res.body.tables)).toBe(true);
   });
 
-  it("restores the database from a confirmed global backup", async () => {
+  it("restores the database only through the approve → execute workflow", async () => {
     const before = Number((await query("SELECT count(*)::int AS n FROM institutions")).rows[0].n);
     const b = await makeBackup();
-    const res = await post(`/api/v1/backups/${b.id}/restore`, tok.root, { confirm: true });
-    expect(res.status).toBe(200);
-    expect(res.body.restored).toBe(true);
-    expect(res.body.rowCount).toBeGreaterThan(0);
-    // Data is intact and auth/permissions survived the reload.
+
+    // 1) Request
+    const reqRes = await post(`/api/v1/backups/${b.id}/restore-requests`, tok.root, {
+      reason: "disaster recovery drill",
+      riskReason: "full overwrite",
+    });
+    expect(reqRes.status).toBe(201);
+    const reqId = reqRes.body.id;
+    const phrase = reqRes.body.confirmPhrase as string;
+
+    // 2) Self-approval is blocked; a different super-admin approves.
+    expect(
+      (await post(`/api/v1/backups/restore-requests/${reqId}/decide`, tok.root, {
+        decision: "approved",
+        reason: "self approve attempt",
+      })).status
+    ).toBe(403);
+    const approve = await post(`/api/v1/backups/restore-requests/${reqId}/decide`, tok.root2, {
+      decision: "approved",
+      reason: "approved for drill",
+    });
+    expect(approve.status).toBe(200);
+    expect(approve.body.status).toBe("approved");
+
+    // 3) Execute requires the exact typed confirmation phrase.
+    expect(
+      (await post(`/api/v1/backups/restore-requests/${reqId}/execute`, tok.root, {
+        confirmText: "nope",
+        reason: "executing drill",
+      })).status
+    ).toBe(400);
+    const exec = await post(`/api/v1/backups/restore-requests/${reqId}/execute`, tok.root, {
+      confirmText: phrase,
+      reason: "executing drill",
+    });
+    expect(exec.status).toBe(200);
+    expect(exec.body.executed).toBe(true);
+    expect(exec.body.preRestoreBackupId).toBeTruthy(); // a pre-restore backup was taken
+    expect(exec.body.rowCount).toBeGreaterThan(0);
+
+    // Data intact + auth/permissions survived the reload.
     const after = Number((await query("SELECT count(*)::int AS n FROM institutions")).rows[0].n);
     expect(after).toBe(before);
     expect((await get("/api/v1/backups", tok.root)).status).toBe(200);
-    // The restore attempt is durably audited.
-    const audit = await get("/api/v1/platform/audit?action=restore.success", tok.root);
+    // The restore execution is durably audited.
+    const audit = await get("/api/v1/platform/audit?action=restore.executed", tok.root);
     expect(audit.body.rows.length).toBeGreaterThanOrEqual(1);
   });
 
-  it("rejects restoring an institution-scoped backup", async () => {
+  it("rejects a restore request for an institution-scoped backup", async () => {
     const b = await makeBackup({ scope: "institution", institutionId: instA });
     expect(b.scope).toBe("institution");
-    const res = await post(`/api/v1/backups/${b.id}/restore`, tok.root, { confirm: true });
+    const res = await post(`/api/v1/backups/${b.id}/restore-requests`, tok.root, {
+      reason: "attempt institution restore",
+    });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/global/i);
   });
 
-  it("applies retention to keep only the latest N global backups", async () => {
+  it("applies retention by ARCHIVING older global backups (metadata retained)", async () => {
     expect((await patch("/api/v1/backups/settings", tok.root, { retentionCount: 1 })).status).toBe(200);
     const first = await makeBackup();
     await makeBackup();
     const list = await get("/api/v1/backups?scope=global", tok.root);
-    expect(list.body).toHaveLength(1); // older one pruned
-    expect(list.body.some((x: { id: string }) => x.id === first.id)).toBe(false);
+    // Nothing is hard-deleted — the older backup remains as 'archived' with no artifact.
+    const firstRow = list.body.find((x: { id: string }) => x.id === first.id);
+    expect(firstRow).toBeTruthy();
+    expect(firstRow.status).toBe("archived");
+    expect(firstRow.hasArtifact).toBe(false);
+    expect(list.body.filter((x: { status: string }) => x.status === "success")).toHaveLength(1);
   });
 
-  it("never deletes backups when retention is unset", async () => {
+  it("never archives backups when retention is unset", async () => {
     await makeBackup();
     await makeBackup();
     const list = await get("/api/v1/backups?scope=global", tok.root);
     expect(list.body.length).toBe(2);
+    expect(list.body.every((x: { status: string }) => x.status === "success")).toBe(true);
   });
 
   it("registers and runs a scheduled backup when due", async () => {
