@@ -1950,21 +1950,45 @@ export interface ObservabilityHealth {
   uptimeSeconds: number;
 }
 
-// --- Super Admin: Scheduled Backup / Restore Automation (/backups/*) ---
+// --- Super Admin J: Backup / Restore / DR hardening (/backups/*) ---
 
-/** A database backup (super-admin backup/restore automation). */
+export type BackupStatus =
+  | "pending"
+  | "running"
+  | "success"
+  | "failed"
+  | "archived";
+export type BackupTrigger =
+  | "manual"
+  | "scheduled"
+  | "pre_deploy"
+  | "pre_restore";
+export type BackupChecksumStatus = "not_verified" | "verified" | "failed";
+export type BackupFrequency = "daily" | "weekly" | "monthly";
+
+/** A database backup (super-admin backup/restore/DR automation). */
 export interface Backup {
   id: string;
   scope: "global" | "institution";
   institutionId: string | null;
-  status: "pending" | "running" | "success" | "failed";
-  trigger: "manual" | "scheduled";
+  status: BackupStatus;
+  trigger: BackupTrigger;
   storageMode: "s3" | "local" | null;
   sizeBytes: number | string | null; // bigint serialises as a string
   tableCount: number | null;
   rowCount: number | null;
   schemaVersion: number | null;
   error: string | null;
+  logsSummary: string | null;
+  checksum: string | null;
+  checksumAlgo: string | null;
+  checksumStatus: BackupChecksumStatus;
+  checksumVerifiedAt: string | null;
+  checksumVerifiedBy: string | null;
+  offsite: boolean;
+  archivedAt: string | null;
+  archivedBy: string | null;
+  archiveReason: string | null;
   hasArtifact: boolean;
   createdBy: string | null;
   startedAt: string | null;
@@ -1972,26 +1996,190 @@ export interface Backup {
   createdAt: string;
 }
 
+/** Overview dashboard aggregate (GET /backups/summary). */
+export interface BackupSummary {
+  lastBackup: Backup | null;
+  lastSuccessAt: string | null;
+  lastSuccessSizeBytes: number | string | null;
+  schedule: {
+    enabled: boolean;
+    frequency: BackupFrequency;
+    runTime: string;
+    nextRunAt: string | null;
+  };
+  retention: {
+    retentionCount: number | null;
+    retentionMinKeep: number | null;
+  };
+  totals: {
+    total: number;
+    available: number;
+    archived: number;
+    failed: number;
+  };
+  integrity: {
+    checksumVerified: number;
+    checksumFailed: number;
+  };
+  offsite: {
+    mode: string;
+    configured: boolean;
+    copies: number;
+    lastTestAt: string | null;
+    lastTestOk: boolean | null;
+  };
+  encryption: { enabled: boolean };
+  storageUsedBytes: number | string | null;
+  restore: {
+    pendingRequests: number;
+    latestStatus: string | null;
+    latestAt: string | null;
+  };
+  warnings: string[];
+}
+
 export interface BackupSettings {
   retentionCount: number | null;
+  retentionMinKeep: number | null;
   scheduleEnabled: boolean;
-  scheduleFrequency: "daily" | "weekly" | "monthly";
+  scheduleFrequency: BackupFrequency;
   scheduleRunTime: string;
   nextRunAt: string | null;
+  offsiteEnabled: boolean;
+  lastOffsiteTestAt: string | null;
+  lastOffsiteTestOk: boolean | null;
+  lastOffsiteTestDetail: string | null;
+  encryptionEnabled: boolean;
+  failureAlertEnabled: boolean;
+  alertEmails: string | null;
   updatedAt: string;
 }
 
-export interface BackupRestorePreview {
+/** Paginated backup history (GET /backups/history). */
+export interface BackupHistoryPage {
+  rows: Backup[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/** Off-site replication status (GET /backups/offsite). Never carries secrets. */
+export interface OffsiteStatus {
+  mode: "s3" | "local";
+  target: string | null;
+  configured: boolean;
+  endpointHost: string | null;
+  bucket: string | null;
+  syncStatus: "synced" | "failed" | "not_configured";
+  lastTestAt: string | null;
+  lastTestOk: boolean | null;
+  lastTestDetail: string | null;
+  note: string | null;
+}
+
+/** At-rest encryption posture (GET /backups/encryption) — documented limitation. */
+export interface EncryptionStatus {
+  implemented: false;
+  status: "not_enabled";
+  algorithm: string | null;
+  keyManagement: string | null;
+  atRestAcknowledged: boolean;
+  warning: string;
+}
+
+/** Editable disaster-recovery runbook (GET/PATCH /backups/dr-guide). */
+export interface DrGuide {
+  policySummary: string | null;
+  restoreProcess: string | null;
+  approvalProcess: string | null;
+  emergencyInstructions: string | null;
+  preRestoreChecklist: string | null;
+  postRestoreChecklist: string | null;
+  rollbackGuide: string | null;
+  ownerName: string | null;
+  ownerContact: string | null;
+  sopLink: string | null;
+  lastReviewedAt: string | null;
+  updatedAt: string;
+}
+
+/** Restore feasibility check (GET /backups/:id/restore/preview). */
+export interface RestorePreview {
   backupId: string;
   scope: string;
   createdAt: string;
   schemaVersion: number;
   currentSchemaVersion: number;
   schemaMatches: boolean;
+  checksumStatus: BackupChecksumStatus;
   restorable: boolean;
   tableCount: number;
   totalRows: number;
   tables: { name: string; rowCount: number }[];
+  impact: {
+    overwritesAllData: boolean;
+    downtimeRisk: string;
+    recommendPreRestoreBackup: boolean;
+  };
+}
+
+export type RestoreRequestScope = "full" | "database" | "files" | "config";
+export type RestoreRequestStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "cancelled"
+  | "expired"
+  | "executed"
+  | "failed";
+
+/** Impact preview snapshot stored on a restore request. */
+export interface RestoreImpactPreview {
+  overwritesAllData?: boolean;
+  downtimeRisk?: string;
+  recommendPreRestoreBackup?: boolean;
+  tableCount?: number;
+  totalRows?: number;
+  tables?: { name: string; rowCount: number }[];
+  [key: string]: unknown;
+}
+
+/** A governed, approval-gated restore request (GET /backups/restore-requests). */
+export interface RestoreRequest {
+  id: string;
+  backupId: string;
+  backupScope: string;
+  backupCreatedAt: string | null;
+  backupChecksumStatus: BackupChecksumStatus | null;
+  scope: RestoreRequestScope;
+  reason: string | null;
+  riskReason: string | null;
+  impactPreview: RestoreImpactPreview | null;
+  status: RestoreRequestStatus;
+  requestedBy: string | null;
+  requestedByEmail: string | null;
+  decidedBy: string | null;
+  decidedByEmail: string | null;
+  decidedAt: string | null;
+  decisionReason: string | null;
+  consumedAt: string | null;
+  executedAt: string | null;
+  executedBy: string | null;
+  executedByEmail: string | null;
+  executionResult: string | null;
+  executionDetail: string | null;
+  preRestoreBackupId: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+  confirmPhrase: string | null;
+}
+
+/** Paginated restore-request list (GET /backups/restore-requests). */
+export interface RestoreRequestPage {
+  rows: RestoreRequest[];
+  total: number;
+  page: number;
+  pageSize: number;
 }
 
 // --- Live Classes ---
