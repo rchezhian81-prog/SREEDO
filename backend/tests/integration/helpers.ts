@@ -32,6 +32,8 @@ const TABLES = [
   "fee_categories",
   "payment_webhook_events",
   "payment_orders",
+  "export_schedules",
+  "platform_exports",
   "data_exports",
   "payslip_lines",
   "payslips",

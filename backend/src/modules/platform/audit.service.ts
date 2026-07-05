@@ -40,7 +40,7 @@ const A = "a"; // default table alias for platform_audit_log
  */
 function highRiskSql(a = A): string {
   return `(
-    ${a}.action ~ '^(rbac|impersonate|backup|restore|security)\\.'
+    ${a}.action ~ '^(rbac|impersonate|backup|restore|security|export)\\.'
     OR ${a}.action LIKE 'platform.admin.%'
     OR ${a}.action LIKE 'platform.security.%'
     OR ${a}.action LIKE 'platform.settings%'

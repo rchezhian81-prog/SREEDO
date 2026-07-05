@@ -7,6 +7,7 @@ import {
   generateFeeReminders,
 } from "../communication/communication.service";
 import { enqueueDueScheduledBackups, runScheduledBackup } from "../backups/backups.service";
+import { enqueueDueScheduledExports, runScheduledExport } from "../exports/exports.service";
 import { runWebhookDeliveryJob } from "../integrations/webhooks.delivery";
 import { sweepSubscriptionLifecycle } from "../billing/billing.service";
 import { runRecurringBilling } from "../saaspayments/recurring.service";
@@ -57,6 +58,11 @@ const HANDLERS: Record<string, Handler> = {
   // Automated platform-wide database backup (enqueued by the schedule tick).
   scheduled_backup: async () => {
     await runScheduledBackup();
+  },
+
+  // Automated governed data export (enqueued by the export schedule tick).
+  scheduled_export: async (job) => {
+    await runScheduledExport(job.payload);
   },
 
   // Deliver one queued webhook event (HMAC-signed); throws on non-2xx so the
@@ -174,6 +180,7 @@ export function startWorker(): void {
       try {
         await runSchedulerTick(null);
         await enqueueDueScheduledBackups();
+        await enqueueDueScheduledExports();
         await sweepSubscriptionLifecycle();
         // Online recurring billing + dunning (B4). A clean no-op unless the
         // operator enabled auto-charge AND the gateway is configured.
