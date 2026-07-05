@@ -14,12 +14,15 @@ import {
   formatDateTime,
   formatDuration,
   humanizeRole,
+  notifyLabel,
+  notifyTone,
   scopeLabel,
   scopeTone,
   statusLabel,
   statusTone,
   templateLabel,
 } from "./taxonomy";
+import { ExportControls } from "./ExportControls";
 
 type SortKey = "createdAt" | "status" | "scope";
 const STATUSES: SupportStatus[] = ["active", "ended", "expired", "revoked", "failed"];
@@ -88,6 +91,14 @@ export function HistoryTable({
     return p.toString();
   }, [applied, page, pageSize, sort, order]);
 
+  // The active (non-empty) filters only — the export uses these (no page/sort/order),
+  // so a CSV/XLSX download always matches the currently-filtered table.
+  const exportParams = useMemo(() => {
+    const p: Record<string, string> = {};
+    for (const [k, v] of Object.entries(applied)) if (v.trim()) p[k] = v.trim();
+    return p;
+  }, [applied]);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -126,6 +137,10 @@ export function HistoryTable({
   return (
     <div className="space-y-4">
       <div className="space-y-3 rounded-2xl border border-line bg-surface p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Session history</h2>
+          <ExportControls endpoint="/platform/support/export" params={exportParams} filename="support-history" />
+        </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Select value={filters.institutionId} onChange={(e) => patch({ institutionId: e.target.value })} aria-label="Tenant">
             <option value="">All tenants</option>
@@ -241,7 +256,14 @@ export function HistoryTable({
                       <Badge tone={scopeTone(s.scope)}>{scopeLabel(s.scope)}</Badge>
                     </td>
                     <td className="px-4 py-3">
-                      <Badge tone={statusTone(s.status)}>{statusLabel(s.status)}</Badge>
+                      <span className="flex flex-col items-start gap-1">
+                        <Badge tone={statusTone(s.status)}>{statusLabel(s.status)}</Badge>
+                        {s.notifyStatus && (
+                          <Badge tone={notifyTone(s.notifyStatus)}>
+                            Notified: {notifyLabel(s.notifyStatus)}
+                          </Badge>
+                        )}
+                      </span>
                     </td>
                     <td className="px-4 py-3 text-muted">{formatDuration(s.durationMinutes)}</td>
                   </tr>

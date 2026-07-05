@@ -48,6 +48,9 @@ export const startSchema = z
     // 5 minutes .. 2 hours; default 30. The session row (not just the JWT) is the
     // authoritative, revocable source of truth.
     expiryMinutes: z.coerce.number().int().min(5).max(120).default(30),
+    // Phase 2 (L): a write-enabled start MUST reference a matching approved
+    // approval request. Ignored for read_only / module_limited scopes.
+    approvalId: z.string().uuid().optional(),
   })
   .refine((v) => v.scope !== "module_limited" || (v.modules && v.modules.length > 0), {
     message: "Select at least one module for a module-limited session",
@@ -89,4 +92,89 @@ export const summaryQuerySchema = z.object({
   window: z.enum(["today", "7d", "30d", "custom"]).default("7d"),
   dateFrom: isoDate.optional(),
   dateTo: isoDate.optional(),
+});
+
+// ---- Phase 2 (J): Reports ----
+
+/** The ten report datasets. Hyphenated keys are the `type` query values. */
+export const SUPPORT_REPORT_TYPES = [
+  "all",
+  "active",
+  "expired",
+  "revoked",
+  "tenant-wise",
+  "operator-wise",
+  "reason-wise",
+  "scope-wise",
+  "long-running",
+  "high-risk",
+] as const;
+
+/** Shared filter set for reports + exports (mirrors the history list filters). */
+const reportFilterFields = {
+  dateFrom: isoDate.optional(),
+  dateTo: isoDate.optional(),
+  institutionId: z.string().uuid().optional(),
+  operatorId: z.string().uuid().optional(),
+  status: z.enum(SUPPORT_STATUSES).optional(),
+  scope: z.enum(SUPPORT_SCOPES).optional(),
+  reasonTemplate: z.enum(REASON_TEMPLATES).optional(),
+};
+
+export const reportsQuerySchema = z.object({
+  type: z.enum(SUPPORT_REPORT_TYPES).default("all"),
+  ...reportFilterFields,
+});
+
+// ---- Phase 2 (F/J): Exports ----
+
+/** History export = the list filters + output format + optional governance reason
+ *  (the route requires a reason for a broad — no dateFrom — export). */
+export const exportQuerySchema = z.object({
+  dateFrom: isoDate.optional(),
+  dateTo: isoDate.optional(),
+  institutionId: z.string().uuid().optional(),
+  targetId: z.string().uuid().optional(),
+  operatorId: z.string().uuid().optional(),
+  status: z.enum(SUPPORT_STATUSES).optional(),
+  scope: z.enum(SUPPORT_SCOPES).optional(),
+  reasonTemplate: z.enum(REASON_TEMPLATES).optional(),
+  format: z.enum(["csv", "xlsx"]).default("csv"),
+  reason: z.string().trim().min(5, "A reason of at least 5 characters is required").max(500).optional(),
+});
+
+export const reportsExportQuerySchema = reportsQuerySchema.extend({
+  format: z.enum(["csv", "xlsx"]).default("csv"),
+  reason: z.string().trim().min(5, "A reason of at least 5 characters is required").max(500).optional(),
+});
+
+// ---- Phase 2 (L): Approval workflow ----
+
+export const APPROVAL_STATUSES = ["pending", "approved", "rejected"] as const;
+
+/** Request approval for a would-be high-risk session (the start params + why). */
+export const approvalCreateSchema = z
+  .object({
+    userId: z.string().uuid(),
+    reason: z.string().trim().min(8, "A reason of at least 8 characters is required").max(500),
+    reasonTemplate: z.enum(REASON_TEMPLATES).optional(),
+    scope: z.enum(SUPPORT_SCOPES).default("write_enabled"),
+    modules: z.array(z.enum(SUPPORT_MODULES)).optional(),
+    expiryMinutes: z.coerce.number().int().min(5).max(120).default(30),
+    riskReason: z.string().trim().min(5, "A risk justification of at least 5 characters is required").max(500),
+  })
+  .refine((v) => v.scope !== "module_limited" || (v.modules && v.modules.length > 0), {
+    message: "Select at least one module for a module-limited session",
+    path: ["modules"],
+  });
+
+export const approvalDecisionSchema = z.object({
+  decision: z.enum(["approved", "rejected"]),
+  reason: z.string().trim().min(5, "A decision reason of at least 5 characters is required").max(500),
+});
+
+export const approvalListQuerySchema = z.object({
+  status: z.enum(APPROVAL_STATUSES).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(200).default(50),
 });

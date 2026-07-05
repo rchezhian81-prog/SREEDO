@@ -87,3 +87,24 @@ export async function sendMail(options: {
     console.error(`Failed to send email to ${options.to}:`, err);
   }
 }
+
+/**
+ * Like `sendMail` but REPORTS the outcome (sent / skipped / failed) instead of
+ * swallowing it, while still never throwing. Used where the caller must record
+ * whether a transactional email actually went out (e.g. the Support-Access
+ * tenant notification, which persists the delivery result on the session row).
+ */
+export async function deliverMail(options: {
+  to: string;
+  subject: string;
+  text: string;
+  html?: string;
+}): Promise<{ status: "sent" | "skipped" | "failed"; error?: string }> {
+  if (!transporter) return { status: "skipped" };
+  try {
+    await transporter.sendMail({ from: env.smtpFrom, ...options });
+    return { status: "sent" };
+  } catch (err) {
+    return { status: "failed", error: err instanceof Error ? err.message : String(err) };
+  }
+}

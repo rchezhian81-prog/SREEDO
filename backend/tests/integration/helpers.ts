@@ -12,6 +12,7 @@ export const app = createApp();
 const TABLES = [
   "backups",
   "jobs",
+  "support_approval_requests",
   "platform_audit_log",
   "scheduled_report_runs",
   "scheduled_reports",

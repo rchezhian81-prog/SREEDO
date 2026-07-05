@@ -421,6 +421,19 @@ export function maskSecrets(value: unknown): unknown {
   return value;
 }
 
+/**
+ * Best-effort masking of secret-looking TOKENS embedded in a free-text string
+ * (e.g. an operator-typed support reason that pasted in a key/JWT). Conservative:
+ * only whitespace-delimited tokens that already match the secret-value shape are
+ * masked, so ordinary prose passes through untouched. Residual limitation: a
+ * secret without a recognizable prefix (sk_/pk_/whsec_/xox…/bearer/eyJ…) cannot
+ * be detected here and is not masked — do not treat free text as guaranteed clean.
+ */
+export function maskFreeText(input: unknown): unknown {
+  if (typeof input !== "string" || input.length === 0) return input;
+  return input.replace(/\S+/g, (tok) => (SECRET_VALUE_RE.test(tok) ? MASK : tok));
+}
+
 export interface DiffRow {
   field: string;
   from: unknown;

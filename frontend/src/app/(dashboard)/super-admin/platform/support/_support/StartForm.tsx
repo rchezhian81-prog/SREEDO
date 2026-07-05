@@ -16,15 +16,20 @@ import {
   Textarea,
 } from "@/components/ui";
 import { Icon } from "@/components/icons";
+import { toast } from "@/components/toast";
 import { useAuthStore } from "@/stores/auth-store";
 import type {
   PlatformUserSearchRow,
+  SupportApproval,
+  SupportApprovalPage,
   SupportScope,
   SupportStartResult,
   SupportTemplates,
 } from "@/types";
-import { moduleLabel, scopeLabel, scopeTone, templateLabel } from "./taxonomy";
+import { formatDateTime, moduleLabel, scopeLabel, scopeTone, templateLabel } from "./taxonomy";
 import { ScopeSelector } from "./ScopeSelector";
+
+const MIN_RISK = 5;
 
 const MIN_REASON = 8;
 
@@ -48,6 +53,7 @@ export function StartForm({ templates }: { templates: SupportTemplates | null })
   const router = useRouter();
   const enterSupport = useAuthStore((s) => s.enterSupport);
   const operatorEmail = useAuthStore((s) => s.user?.email ?? "");
+  const operatorId = useAuthStore((s) => s.user?.id ?? "");
 
   const [q, setQ] = useState("");
   const [results, setResults] = useState<PlatformUserSearchRow[]>([]);
@@ -64,6 +70,17 @@ export function StartForm({ templates }: { templates: SupportTemplates | null })
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Phase 2 (L): a write-enabled start requires a matching APPROVED, unconsumed
+  // approval request by this operator for this target. We resolve the operator's
+  // usable/pending approvals for the selected target to drive the start gate.
+  const [approvals, setApprovals] = useState<SupportApproval[]>([]);
+  const [pendingApprovals, setPendingApprovals] = useState<SupportApproval[]>([]);
+  const [approvalsLoading, setApprovalsLoading] = useState(false);
+  const [selectedApprovalId, setSelectedApprovalId] = useState("");
+  const [riskReason, setRiskReason] = useState("");
+  const [requesting, setRequesting] = useState(false);
+  const [approvalError, setApprovalError] = useState<string | null>(null);
 
   const scopes = templates?.scopes ?? ["read_only", "write_enabled", "module_limited"];
   const moduleKeys = templates?.modules ?? [];
@@ -93,6 +110,69 @@ export function StartForm({ templates }: { templates: SupportTemplates | null })
     return () => clearTimeout(t);
   }, [q, search]);
 
+  // Resolve THIS operator's approvals for the SELECTED target — the same match the
+  // server's start gate enforces (requester + target + write_enabled + unconsumed).
+  const loadApprovals = useCallback(async () => {
+    if (scope !== "write_enabled" || !selected || !operatorId) {
+      setApprovals([]);
+      setPendingApprovals([]);
+      return;
+    }
+    setApprovalsLoading(true);
+    try {
+      const [approved, pending] = await Promise.all([
+        api.get<SupportApprovalPage>("/platform/support/approvals?status=approved&pageSize=200"),
+        api.get<SupportApprovalPage>("/platform/support/approvals?status=pending&pageSize=200"),
+      ]);
+      const mine = (a: SupportApproval) =>
+        a.targetId === selected.id && a.requestedBy === operatorId && a.scope === "write_enabled";
+      const usable = approved.rows.filter((a) => mine(a) && !a.consumedAt);
+      setApprovals(usable);
+      setPendingApprovals(pending.rows.filter(mine));
+      setSelectedApprovalId((cur) => (usable.some((a) => a.id === cur) ? cur : usable[0]?.id ?? ""));
+    } catch {
+      setApprovals([]);
+      setPendingApprovals([]);
+    } finally {
+      setApprovalsLoading(false);
+    }
+  }, [scope, selected, operatorId]);
+
+  useEffect(() => {
+    loadApprovals();
+  }, [loadApprovals]);
+
+  const requestApproval = async () => {
+    if (!selected) return;
+    setApprovalError(null);
+    if (reason.trim().length < MIN_REASON) {
+      setApprovalError(`Enter a reason of at least ${MIN_REASON} characters above.`);
+      return;
+    }
+    if (riskReason.trim().length < MIN_RISK) {
+      setApprovalError(`Enter a risk justification of at least ${MIN_RISK} characters.`);
+      return;
+    }
+    setRequesting(true);
+    try {
+      await api.post<SupportApproval>("/platform/support/approvals", {
+        userId: selected.id,
+        reason: reason.trim(),
+        reasonTemplate: reasonTemplate || undefined,
+        scope: "write_enabled",
+        expiryMinutes,
+        riskReason: riskReason.trim(),
+      });
+      toast.success("Approval requested. An approver must approve it before you can start.");
+      setRiskReason("");
+      await loadApprovals();
+    } catch (err) {
+      setApprovalError(err instanceof ApiError ? err.message : "Failed to request approval");
+    } finally {
+      setRequesting(false);
+    }
+  };
+
   const onTemplate = (value: string) => {
     setReasonTemplate(value);
     const prefill = TEMPLATE_REASONS[value];
@@ -104,7 +184,11 @@ export function StartForm({ templates }: { templates: SupportTemplates | null })
   const reasonValid = reason.trim().length >= MIN_REASON;
   const modulesValid = scope !== "module_limited" || modules.length > 0;
   const expiryValid = expiryMinutes >= 5 && expiryMinutes <= 120;
-  const canSubmit = !!selected && reasonValid && modulesValid && expiryValid;
+  // A write-enabled start is gated on a usable (approved, unconsumed) approval.
+  const needsApproval = scope === "write_enabled";
+  const hasUsableApproval = approvals.length > 0 && !!selectedApprovalId;
+  const approvalOk = !needsApproval || hasUsableApproval;
+  const canSubmit = !!selected && reasonValid && modulesValid && expiryValid && approvalOk;
 
   const openConfirm = () => {
     setError(null);
@@ -112,6 +196,9 @@ export function StartForm({ templates }: { templates: SupportTemplates | null })
     if (!reasonValid) return setError(`Enter a reason of at least ${MIN_REASON} characters.`);
     if (!modulesValid) return setError("Select at least one module for a module-limited session.");
     if (!expiryValid) return setError("Expiry must be between 5 and 120 minutes.");
+    if (needsApproval && !hasUsableApproval) {
+      return setError("A write-enabled session requires an approved request. Request approval below.");
+    }
     setConfirmOpen(true);
   };
 
@@ -127,6 +214,7 @@ export function StartForm({ templates }: { templates: SupportTemplates | null })
         scope,
         modules: scope === "module_limited" ? modules : undefined,
         expiryMinutes,
+        approvalId: scope === "write_enabled" ? selectedApprovalId : undefined,
       });
 
       // Enter REAL support mode: swap identity to the target's scoped token and
@@ -168,6 +256,8 @@ export function StartForm({ templates }: { templates: SupportTemplates | null })
             : err.message
           : "Failed to start support session"
       );
+      // The approval may have been consumed/revoked between load and start — resync.
+      if (scope === "write_enabled") await loadApprovals();
     } finally {
       setBusy(false);
     }
@@ -304,6 +394,69 @@ export function StartForm({ templates }: { templates: SupportTemplates | null })
             onScopeChange={setScope}
             onModulesChange={setModules}
           />
+
+          {scope === "write_enabled" && (
+            <div className="space-y-2 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
+              <p className="flex items-center gap-2 text-sm font-semibold text-ink">
+                <Icon name="lock" className="h-4 w-4 text-amber-600" />
+                Approval required
+              </p>
+              {!selected ? (
+                <p className="text-xs text-muted">Choose a tenant user first.</p>
+              ) : approvalsLoading ? (
+                <Spinner />
+              ) : hasUsableApproval ? (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-emerald-600">
+                    Approved — this session will start against the request below.
+                  </p>
+                  {approvals.length > 1 && (
+                    <Field label="Use approval">
+                      <Select
+                        value={selectedApprovalId}
+                        onChange={(e) => setSelectedApprovalId(e.target.value)}
+                      >
+                        {approvals.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            Approved {formatDateTime(a.decidedAt)}
+                            {a.riskReason ? ` · ${a.riskReason.slice(0, 40)}` : ""}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                  )}
+                </div>
+              ) : pendingApprovals.length > 0 ? (
+                <p className="text-xs text-amber-600">
+                  You have a pending approval request for this user. Start stays disabled until an
+                  approver approves it (see the Approvals tab).
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted">
+                    A write-enabled session needs a pre-approved request. Add a risk justification, then
+                    request approval.
+                  </p>
+                  <Field label={`Risk justification (min ${MIN_RISK} characters)`}>
+                    <Textarea
+                      rows={2}
+                      placeholder="Why is full write access needed? What is the risk and mitigation?"
+                      value={riskReason}
+                      onChange={(e) => setRiskReason(e.target.value)}
+                    />
+                  </Field>
+                  <ErrorNote message={approvalError} />
+                  <Button
+                    variant="secondary"
+                    onClick={requestApproval}
+                    disabled={requesting || !reasonValid || riskReason.trim().length < MIN_RISK}
+                  >
+                    {requesting ? "Requesting…" : "Request approval"}
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
 
           <ErrorNote message={error} />
 

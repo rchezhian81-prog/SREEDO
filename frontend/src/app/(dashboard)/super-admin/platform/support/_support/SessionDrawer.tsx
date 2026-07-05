@@ -11,6 +11,8 @@ import {
   formatDuration,
   humanizeRole,
   moduleLabel,
+  notifyLabel,
+  notifyTone,
   scopeLabel,
   scopeTone,
   statusLabel,
@@ -142,6 +144,26 @@ export function SessionDrawer({
                 <Row label="Revoked by" value={session.revokedByEmail ?? session.revokedBy ?? "—"} />
               )}
               {session.revokeReason && <Row label="Revoke reason" value={session.revokeReason} />}
+              <Row
+                label="Tenant notified"
+                value={
+                  <span className="flex flex-col gap-1">
+                    <span>
+                      <Badge tone={notifyTone(session.notifyStatus)}>
+                        {notifyLabel(session.notifyStatus)}
+                      </Badge>
+                    </span>
+                    {session.notifyDetail && (
+                      <span className="text-xs text-faint">
+                        {session.notifyDetail.recipient
+                          ? `→ ${session.notifyDetail.recipient}`
+                          : "No tenant recipient"}
+                        {session.notifyDetail.at ? ` · ${formatDateTime(session.notifyDetail.at)}` : ""}
+                      </span>
+                    )}
+                  </span>
+                }
+              />
               <Row label="IP" value={session.ip ?? "—"} mono />
               <Row label="User agent" value={session.userAgent ?? "—"} mono />
             </dl>
