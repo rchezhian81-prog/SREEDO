@@ -207,7 +207,7 @@ describe("Super Admin K — Data Export Center", () => {
     expect((await get(`/api/v1/exports/${id}/download?reason=expired-try`, tok.root)).status).toBe(400);
   });
 
-  it("generates a tenant data-portability pack (masked ZIP) and requires a reason", async () => {
+  it("gates a tenant data-portability pack behind approval, then builds a masked ZIP", async () => {
     // Reason is mandatory (schema min 8).
     const noReason = await post("/api/v1/exports/portability", tok.root, { institutionId: instId });
     expect(noReason.status).toBe(400);
@@ -217,12 +217,25 @@ describe("Super Admin K — Data Export Center", () => {
       reason: "tenant offboarding data request",
     });
     expect(pack.status).toBe(201);
-    expect(pack.body.status).toBe("completed");
+    // The highest-risk export is created PENDING approval — no artifact yet.
+    expect(pack.body.status).toBe("pending");
+    expect(pack.body.approvalStatus).toBe("pending");
     expect(pack.body.scope).toBe("portability_pack");
     expect(pack.body.format).toBe("zip");
-    expect(pack.body.hasArtifact).toBe(true);
-    expect(pack.body.fileCount).toBeGreaterThanOrEqual(7);
+    expect(pack.body.hasArtifact).toBe(false);
     const id = pack.body.id;
+
+    // Not downloadable until approved; self-approval is blocked.
+    expect((await get(`/api/v1/exports/${id}/download?reason=too-early`, tok.root)).status).toBe(400);
+    const self = await post(`/api/v1/exports/${id}/decide`, tok.root, { decision: "approved", reason: "approving my own" });
+    expect(self.status).toBe(403);
+
+    // A different super-admin approves → the pack is built.
+    const approve = await post(`/api/v1/exports/${id}/decide`, tok.root2, { decision: "approved", reason: "offboarding cleared" });
+    expect(approve.status).toBe(200);
+    expect(approve.body.status).toBe("completed");
+    expect(approve.body.hasArtifact).toBe(true);
+    expect(approve.body.fileCount).toBeGreaterThanOrEqual(7);
 
     const man = await get(`/api/v1/exports/${id}/manifest`, tok.root);
     expect(man.status).toBe(200);

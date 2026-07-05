@@ -64,6 +64,12 @@ import {
   HardDrive,
   ShieldCheck,
   History,
+  FileDown,
+  CalendarClock,
+  PackageOpen,
+  ShieldAlert,
+  Clock,
+  Filter,
 } from "lucide-react";
 
 /*
@@ -135,10 +141,17 @@ const MAP = {
   key: KeyRound,
   database: Database,
   download: DownloadCloud,
+  downloadCloud: DownloadCloud,
   hardDrive: HardDrive,
   shieldCheck: ShieldCheck,
   history: History,
   lifeBuoy: LifeBuoy,
+  fileDown: FileDown,
+  calendarClock: CalendarClock,
+  packageOpen: PackageOpen,
+  shieldAlert: ShieldAlert,
+  clock: Clock,
+  filter: Filter,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof MAP;

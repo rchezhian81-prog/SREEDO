@@ -599,6 +599,8 @@ async function buildManifest(opts: {
 async function generateArtifact(row: InternalRow, actor: Actor) {
   await query("UPDATE platform_exports SET status='running', started_at=now() WHERE id=$1", [row.id]);
   try {
+    // The portability pack is multi-file; build it via its dedicated assembler.
+    if (row.scope === "portability_pack") return await buildPortabilityArtifact(row, actor);
     const source = SCOPE_SOURCES[row.scope];
     if (!source) throw new Error(`Unsupported export scope: ${row.scope}`);
     const dataset = await source.generate(row.filters ?? {}, row.institutionId, actor);
@@ -1013,13 +1015,56 @@ export async function generatePortabilityPack(
   if (!inst) throw ApiError.notFound("Institution not found");
 
   const packName = (name && name.trim()) || `Portability pack — ${String(inst.name)}`;
+  // The portability pack is the highest-risk export (full tenant data) — it is
+  // ALWAYS approval-gated: created pending, generated only after a DIFFERENT
+  // super-admin approves (which invokes buildPortabilityArtifact via generateArtifact).
   const { rows } = await query<{ id: string }>(
     `INSERT INTO platform_exports
        (name, scope, format, institution_id, filters, reason, sensitive, status, approval_status, requested_by)
-     VALUES ($1,'portability_pack','zip',$2,'{}'::jsonb,$3,true,'running','not_required',$4) RETURNING id`,
+     VALUES ($1,'portability_pack','zip',$2,'{}'::jsonb,$3,true,'pending','pending',$4) RETURNING id`,
     [packName, institutionId, maskFreeText(reason), actor.id]
   );
   const id = rows[0].id;
+  await recordAudit(actor, {
+    action: "export.requested",
+    targetId: id,
+    institutionId,
+    detail: { scope: "portability_pack", approvalRequired: true, reason: maskFreeText(reason) },
+  });
+  await recordSecurityEvent({
+    action: "export.requested",
+    targetType: "export",
+    targetId: id,
+    actorId: actor.id,
+    actorEmail: actor.email,
+    actorRole: actor.role,
+    institutionId,
+    detail: { scope: "portability_pack", approvalRequired: true },
+    ip: actor.ip,
+  });
+  return getExport(id);
+}
+
+/**
+ * Build the portability ZIP for an APPROVED pack row — invoked from generateArtifact
+ * once a different super-admin approves the pending request. Assembles masked tenant
+ * datasets + README + manifest with per-file checksums; never includes secrets.
+ */
+async function buildPortabilityArtifact(row: InternalRow, actor: Actor) {
+  const institutionId = String(row.institutionId);
+  const id = row.id;
+  const inst = (
+    await query<Row>(
+      `SELECT id, name, code, type, is_active AS "isActive", created_at AS "createdAt"
+       FROM institutions WHERE id = $1`,
+      [institutionId]
+    )
+  ).rows[0];
+  if (!inst) throw ApiError.notFound("Institution not found");
+  const reason = String(
+    (await query<{ reason: string | null }>("SELECT reason FROM platform_exports WHERE id = $1", [id]))
+      .rows[0]?.reason ?? ""
+  );
 
   try {
     // Assemble the per-tenant datasets (all masked; no secrets, no storage paths).
