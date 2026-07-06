@@ -18,6 +18,8 @@ const TABLES = [
   "error_events",
   "restore_requests",
   "backups",
+  "job_attempts",
+  "worker_heartbeats",
   "jobs",
   "support_approval_requests",
   "platform_audit_log",
