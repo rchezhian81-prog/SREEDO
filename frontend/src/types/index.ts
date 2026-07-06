@@ -1950,6 +1950,424 @@ export interface ObservabilityHealth {
   uptimeSeconds: number;
 }
 
+// --- Super Admin L: Health / Observability console (/observability/*) ---
+//
+// The composed Health & Observability views. Every timestamp is an ISO string;
+// `null` is used wherever the backend can return null. Shapes mirror the FIXED
+// backend contract (opsdashboard/incidents/alerts/errors services). Status-only —
+// the backend never emits secrets, stacks, headers or raw storage paths.
+
+/** A single dependency health check (status + secret-free detail). */
+export type ServiceStatus = "healthy" | "degraded" | "down" | "unknown";
+
+export type IncidentSeverity = "info" | "minor" | "major" | "critical";
+export type IncidentStatus =
+  | "open"
+  | "investigating"
+  | "monitoring"
+  | "resolved"
+  | "closed";
+export type IncidentType =
+  | "api"
+  | "database"
+  | "frontend"
+  | "worker"
+  | "email"
+  | "storage"
+  | "backup"
+  | "payment"
+  | "security"
+  | "other";
+export type AlertRuleType =
+  | "api_down"
+  | "db_down"
+  | "mongo_down"
+  | "worker_down"
+  | "scheduler_stalled"
+  | "queue_depth_high"
+  | "job_failure_spike"
+  | "error_rate_high"
+  | "latency_high"
+  | "smtp_failures"
+  | "storage_high"
+  | "backup_failed"
+  | "gateway_degraded"
+  | "disk_low"
+  | "memory_high"
+  | "security_event";
+export type AlertStatus = "triggered" | "acknowledged" | "resolved" | "suppressed";
+export type ErrorTriageStatus = "new" | "investigating" | "resolved" | "ignored";
+
+/** One dependency's current health check. */
+export interface OpsServiceCheck {
+  service: string;
+  status: ServiceStatus;
+  responseTimeMs: number | null;
+  detail: string;
+}
+
+/** Rolled-up service status counts. */
+export interface OpsOverall {
+  status: ServiceStatus;
+  healthy: number;
+  degraded: number;
+  down: number;
+  unknown: number;
+}
+
+/** Headline health dashboard — GET /observability/summary. */
+export interface OpsHealthDashboard {
+  overall: OpsOverall;
+  services: OpsServiceCheck[];
+  metrics: {
+    requestsTotal: number;
+    errorsTotal: number;
+    apiErrorRatePct: number;
+    avgResponseMs: number;
+    byStatusClass: Record<string, number>;
+    queueDepth: number;
+    pendingJobs: number;
+    runningJobs: number;
+    failedJobsToday: number;
+    stuckJobs: number;
+  };
+  incidents: { active: number; critical: number };
+  alerts: {
+    open: number;
+    recent: Array<
+      Pick<Alert, "id" | "ruleName" | "type" | "severity" | "status" | "service" | "triggeredAt">
+    >;
+  };
+  uptime: {
+    windowChecks: number;
+    healthyChecks: number;
+    since: string | null;
+    note: string;
+  };
+  backupStorage: {
+    lastSuccessAt: string | null;
+    failed: number;
+    storageUsedBytes: number;
+  };
+  deploy: { lastDeployAt: string | null; note: string };
+}
+
+/** GET /observability/services and POST /observability/services/run. */
+export interface OpsServiceList {
+  overall: OpsOverall;
+  services: OpsServiceCheck[];
+}
+
+/** One health-history row for a service. */
+export interface OpsServiceHistoryEntry {
+  status: ServiceStatus;
+  responseTimeMs: number | null;
+  detail: string;
+  checkedAt: string;
+}
+
+/** GET /observability/services/:name. */
+export interface OpsServiceDetail {
+  service: string;
+  current: OpsServiceCheck;
+  uptimePct: number | null;
+  counts: { total: number; healthy: number; degraded: number; down: number };
+  history: OpsServiceHistoryEntry[];
+}
+
+/** Per-service uptime aggregate. */
+export interface OpsUptimeService {
+  service: string;
+  total: number;
+  healthy: number;
+  degraded: number;
+  down: number;
+  unknown: number;
+  avgResponseMs: number | null;
+  lastCheckedAt: string | null;
+  uptimePct: number | null;
+}
+
+/** A recent degraded/down window. */
+export interface OpsUptimePeriod {
+  service: string;
+  status: ServiceStatus;
+  detail: string;
+  checkedAt: string;
+}
+
+/** GET /observability/uptime?window=. */
+export interface OpsUptime {
+  window: "24h" | "7d" | "30d";
+  services: OpsUptimeService[];
+  degradedPeriods: OpsUptimePeriod[];
+  sparse: boolean;
+  note: string;
+}
+
+/** One route's request stats (avg + p95). */
+export interface OpsRouteStat {
+  route: string;
+  count: number;
+  errors: number;
+  avgMs: number;
+  p95Ms: number;
+}
+
+/** GET /observability/performance. */
+export interface OpsPerformance {
+  requests: {
+    total: number;
+    errors: number;
+    errorRatePct: number;
+    avgResponseMs: number;
+    byStatusClass: Record<string, number>;
+  };
+  perRoute: OpsRouteStat[];
+  slowRoutes: OpsRouteStat[];
+  note: string;
+}
+
+/** Per-tenant document storage vs the plan limit. */
+export interface OpsTenantStorage {
+  institutionId: string;
+  institutionName: string;
+  institutionCode: string;
+  documents: number;
+  usedBytes: number;
+  usedMb: number;
+  limitMb: number | null;
+  usagePct: number | null;
+  nearLimit: boolean;
+  overLimit: boolean;
+}
+
+/** GET /observability/storage. */
+export interface OpsStorage {
+  totalBytes: number;
+  byCategory: { backups: number; exports: number; documents: number };
+  documentCategories: Array<{ category: string; bytes: number; count: number }>;
+  documentCount: number;
+  storageMode: string;
+  byTenant: OpsTenantStorage[];
+  nearOrOverLimit: OpsTenantStorage[];
+  largestTenants: OpsTenantStorage[];
+}
+
+/** GET /observability/smtp. */
+export interface OpsSmtpHealth {
+  configured: boolean;
+  status: "healthy" | "degraded" | "unknown";
+  verified: boolean;
+  delivery: {
+    sent: number;
+    failed: number;
+    skipped: number;
+    failureRatePct: number;
+  };
+  recentFailedRecipients: Array<{
+    recipient: string;
+    template: string;
+    createdAt: string;
+  }>;
+  note: string;
+}
+
+/** GET /observability/jobs-health. */
+export interface OpsJobsHealth {
+  queue: {
+    pending: number;
+    running: number;
+    success: number;
+    failed: number;
+    cancelled: number;
+  };
+  stuck: number;
+  failedTrend: Array<{ day: string; count: number }>;
+  processed: { success: number; failed: number; retried: number };
+  workerEnabled: boolean;
+  link: string;
+}
+
+/** GET /observability/integrations. Each card can be {unavailable:true}. */
+export interface OpsIntegrations {
+  backups:
+    | {
+        lastSuccessAt: string | null;
+        available: number;
+        failed: number;
+        storageUsedBytes: number;
+        warnings: number;
+      }
+    | { unavailable: true };
+  exports:
+    | {
+        total: number;
+        pendingApproval: number;
+        sensitive: number;
+        storageUsedBytes: number;
+      }
+    | { unavailable: true };
+  security: { alerts: number; critical: number };
+  audit: { last24h: number; highRisk24h: number };
+  links: { backups: string; exports: string; security: string; audit: string };
+}
+
+/** GET /observability/logs — masked recent error + audit rows. */
+export interface OpsLogsSummary {
+  source: "errors" | "audit" | "all";
+  errors: Array<{
+    id: string;
+    route: string;
+    method: string;
+    statusCode: number;
+    errorType: string | null;
+    message: string | null;
+    status: string;
+    count: number;
+    lastSeen: string;
+  }>;
+  audit: Array<{
+    id: string;
+    action: string;
+    actorEmail: string | null;
+    actorRole: string | null;
+    targetType: string | null;
+    ip: string | null;
+    createdAt: string;
+  }>;
+}
+
+/** A tracked incident (append-only lifecycle — never hard-deleted). */
+export interface Incident {
+  id: string;
+  title: string;
+  severity: IncidentSeverity;
+  status: IncidentStatus;
+  type: IncidentType;
+  impact: string | null;
+  rootCause: string | null;
+  resolution: string | null;
+  ownerId: string | null;
+  relatedAlertId: string | null;
+  relatedAuditId?: string | null;
+  startedAt: string;
+  resolvedAt: string | null;
+  createdBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  /** Present on GET /observability/incidents/:id. */
+  timeline?: IncidentEvent[];
+}
+
+/** One entry in an incident's append-only timeline. */
+export interface IncidentEvent {
+  id: string;
+  kind: string;
+  note: string | null;
+  fromStatus: string | null;
+  toStatus: string | null;
+  actorId: string | null;
+  createdAt: string;
+}
+
+/** GET /observability/incidents (paginated). */
+export interface IncidentListResult {
+  rows: Incident[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/** A configured alert rule. */
+export interface AlertRule {
+  id: string;
+  name: string;
+  type: AlertRuleType;
+  threshold: number | null;
+  windowMinutes: number;
+  severity: IncidentSeverity;
+  enabled: boolean;
+  notifyTarget: string | null;
+  cooldownMinutes: number;
+  lastTriggeredAt: string | null;
+  createdBy?: string | null;
+  updatedBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A durable alert-feed row (ack/resolve/link/note are transitions). */
+export interface Alert {
+  id: string;
+  ruleId: string | null;
+  ruleName: string;
+  type: string;
+  severity: IncidentSeverity;
+  status: AlertStatus;
+  service: string | null;
+  metricValue: number | null;
+  threshold: number | null;
+  details: Record<string, unknown> | null;
+  incidentId: string | null;
+  note: string | null;
+  triggeredAt: string;
+  acknowledgedBy?: string | null;
+  acknowledgedAt: string | null;
+  resolvedBy?: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+}
+
+/** GET /observability/alerts (paginated). */
+export interface AlertListResult {
+  rows: Alert[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/** A captured, de-duplicated error (message masked; never a stack/body). */
+export interface ErrorEvent {
+  id: string;
+  fingerprint: string;
+  route: string;
+  method: string;
+  statusCode: number;
+  errorType: string | null;
+  message: string | null;
+  lastRequestId?: string | null;
+  lastActorId?: string | null;
+  lastInstitutionId?: string | null;
+  status: ErrorTriageStatus;
+  count: number;
+  firstSeen: string;
+  lastSeen: string;
+}
+
+/** GET /observability/errors (paginated). */
+export interface ErrorListResult {
+  rows: ErrorEvent[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/** GET /observability/errors/summary. */
+export interface ErrorSummary {
+  window: "today" | "24h" | "7d" | "30d";
+  totals: {
+    distinctErrors: number;
+    totalOccurrences: number;
+    new: number;
+    investigating: number;
+    serverErrors: number;
+    clientErrors: number;
+  };
+  byRoute: Array<{ route: string; distinct: number; occurrences: number }>;
+  byStatusClass: Array<{ statusClass: string; occurrences: number }>;
+}
+
 // --- Super Admin J: Backup / Restore / DR hardening (/backups/*) ---
 
 export type BackupStatus =

@@ -10,6 +10,12 @@ export { query };
 export const app = createApp();
 
 const TABLES = [
+  "incident_events",
+  "incidents",
+  "alerts",
+  "alert_rules",
+  "service_health_history",
+  "error_events",
   "restore_requests",
   "backups",
   "jobs",

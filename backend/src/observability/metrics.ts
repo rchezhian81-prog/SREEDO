@@ -37,13 +37,101 @@ const state: State = {
 
 const byStatusClass = new Map<string, number>();
 
-export function recordRequest(status: number, durationMs: number): void {
+// --- Per-route latency tracking (Super Admin L — performance view) ----------
+//
+// A capped, in-process registry of per-route request stats used to compute p95
+// latency and the slowest routes "since deployment". Reset on restart (like the
+// counters above). Both the number of distinct routes and the per-route sample
+// buffer are capped so memory stays bounded no matter how many distinct paths
+// are hit. Route keys are normalised (ids collapsed to :id) to keep cardinality
+// meaningful and the map small.
+
+interface RouteStat {
+  count: number;
+  errors: number; // status >= 500
+  sumMs: number;
+  samples: number[]; // recent durations, capped for a rolling p95
+}
+
+const ROUTE_CAP = 200; // max distinct routes tracked
+const SAMPLE_CAP = 200; // max latency samples retained per route
+const perRoute = new Map<string, RouteStat>();
+
+/** Collapse UUIDs / numeric id segments to `:id` so per-route cardinality stays
+ *  bounded and meaningful (e.g. /students/<uuid> → /students/:id). */
+function normalizeRoute(path: string): string {
+  return (
+    path
+      .replace(
+        /\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi,
+        "/:id"
+      )
+      .replace(/\/\d+/g, "/:id") || "/"
+  ).slice(0, 200);
+}
+
+function recordRoute(route: string, status: number, durationMs: number): void {
+  const key = normalizeRoute(route);
+  let stat = perRoute.get(key);
+  if (!stat) {
+    if (perRoute.size >= ROUTE_CAP) return; // registry full — drop new routes
+    stat = { count: 0, errors: 0, sumMs: 0, samples: [] };
+    perRoute.set(key, stat);
+  }
+  stat.count += 1;
+  if (status >= 500) stat.errors += 1;
+  stat.sumMs += durationMs;
+  stat.samples.push(durationMs);
+  if (stat.samples.length > SAMPLE_CAP) stat.samples.shift();
+}
+
+/** Nearest-rank percentile from a sample array (0 when empty). */
+function percentile(samples: number[], p: number): number {
+  if (samples.length === 0) return 0;
+  const sorted = [...samples].sort((a, b) => a - b);
+  const rank = Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1);
+  return Math.round(sorted[Math.max(0, rank)]);
+}
+
+export interface PerRouteStat {
+  route: string;
+  count: number;
+  errors: number;
+  avgMs: number;
+  p95Ms: number;
+}
+
+/** Snapshot of per-route request stats (avg + p95), busiest first. */
+export function perRouteSnapshot(): PerRouteStat[] {
+  const out: PerRouteStat[] = [];
+  for (const [route, s] of perRoute) {
+    out.push({
+      route,
+      count: s.count,
+      errors: s.errors,
+      avgMs: s.count ? Math.round(s.sumMs / s.count) : 0,
+      p95Ms: percentile(s.samples, 95),
+    });
+  }
+  return out.sort((a, b) => b.count - a.count);
+}
+
+/** The `n` slowest routes by p95 latency (only routes with real traffic). */
+export function topSlowRoutes(n = 10): PerRouteStat[] {
+  return perRouteSnapshot()
+    .filter((r) => r.count > 0)
+    .sort((a, b) => b.p95Ms - a.p95Ms)
+    .slice(0, n);
+}
+
+export function recordRequest(status: number, durationMs: number, route?: string): void {
   state.requestsTotal += 1;
   if (status >= 500) state.errorsTotal += 1;
   state.durationSumMs += durationMs;
   state.durationCount += 1;
   const cls = `${Math.floor(status / 100)}xx`;
   byStatusClass.set(cls, (byStatusClass.get(cls) ?? 0) + 1);
+  if (route) recordRoute(route, status, durationMs);
 }
 
 export function recordJob(result: JobResult): void {
