@@ -194,9 +194,15 @@ const n = (v: unknown): number => Number(v ?? 0) || 0;
 
 type CardStatus = "healthy" | "warning" | "critical" | "unknown";
 
-/** Map the observability overall status onto the card vocabulary. */
+/** Map the observability overall status onto the card vocabulary. Accepts either
+ *  a bare status string or the `{ status, … }` object that healthDashboard()
+ *  returns (its `overall` is an object, not a string). */
 function overallToCard(overall: unknown): CardStatus {
-  const s = String(overall ?? "").toLowerCase();
+  const raw =
+    overall && typeof overall === "object" && "status" in overall
+      ? (overall as { status?: unknown }).status
+      : overall;
+  const s = String(raw ?? "").toLowerCase();
   if (s === "healthy" || s === "ok" || s === "operational") return "healthy";
   if (s === "degraded" || s === "warning") return "warning";
   if (s === "down" || s === "critical" || s === "outage") return "critical";
