@@ -16,6 +16,7 @@ import { errorCapture } from "./middleware/error-capture";
 import { observabilityRouter } from "./modules/observability/observability.routes";
 import { liveness, readiness } from "./modules/observability/observability.service";
 import { academicsRouter } from "./modules/academics/academics.routes";
+import { settingsRouter } from "./modules/settings/settings.routes";
 import { adminConsoleRouter } from "./modules/adminconsole/adminconsole.routes";
 import { activityRouter } from "./modules/activity/activity.routes";
 import { admissionsRouter } from "./modules/admissions/admissions.routes";
@@ -194,6 +195,7 @@ export function createApp(): express.Express {
   api.use("/students", studentsRouter);
   api.use("/teachers", teachersRouter);
   api.use("/", academicsRouter); // /academic-years, /classes, /sections, /subjects
+  api.use("/tenant-settings", settingsRouter); // unified Tenant Settings home (T1)
   api.use("/attendance", attendanceRouter);
   api.use("/timetable", timetableRouter);
   api.use("/exams", examsRouter);

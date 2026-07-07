@@ -9,6 +9,7 @@ import {
   createClassSchema,
   createSectionSchema,
   createSubjectSchema,
+  updateAcademicYearSchema,
   updateClassSubjectSchema,
 } from "./academics.schema";
 import * as academicsService from "./academics.service";
@@ -61,6 +62,53 @@ academicsRouter.post(
     res
       .status(201)
       .json(await academicsService.createAcademicYear(input, tenantId(req)));
+  }
+);
+
+/**
+ * @openapi
+ * /academic-years/{id}:
+ *   patch:
+ *     tags: [Academics]
+ *     summary: Edit an academic year (admin) — name / dates / current flag
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: Updated academic year }
+ *       404: { description: Not found }
+ */
+academicsRouter.patch(
+  "/academic-years/:id",
+  ...guard,
+  authorize("admin"),
+  async (req, res) => {
+    const input = updateAcademicYearSchema.parse(req.body);
+    res.json(
+      await academicsService.updateAcademicYear(uuidParam(req), input, tenantId(req))
+    );
+  }
+);
+
+/**
+ * @openapi
+ * /academic-years/{id}/current:
+ *   post:
+ *     tags: [Academics]
+ *     summary: Set an academic year as the current one for the tenant (admin)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: The now-current academic year }
+ *       404: { description: Not found }
+ */
+academicsRouter.post(
+  "/academic-years/:id/current",
+  ...guard,
+  authorize("admin"),
+  async (req, res) => {
+    res.json(
+      await academicsService.setCurrentAcademicYear(uuidParam(req), tenantId(req))
+    );
   }
 );
 

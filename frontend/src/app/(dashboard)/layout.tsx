@@ -85,6 +85,7 @@ const SCHOOL_NAV: NavItem[] = [
   { href: "/jobs", label: "Jobs", icon: "gear", adminOnly: true },
   { href: "/integrations", label: "Integrations", icon: "link", adminOnly: true },
   { href: "/branding", label: "Branding", icon: "palette", adminOnly: true },
+  { href: "/settings", label: "Settings", icon: "gear", adminOnly: true },
   { href: "/users", label: "Users", icon: "users", adminOnly: true },
   { href: "/activity", label: "Activity Log", icon: "file", adminOnly: true },
   { href: "/security", label: "Security", icon: "shield" },

@@ -7,6 +7,17 @@ export const createAcademicYearSchema = z.object({
   isCurrent: z.boolean().optional(),
 });
 
+// Partial edit of an academic year (name / dates / current flag). At least one
+// field must be present.
+export const updateAcademicYearSchema = z
+  .object({
+    name: z.string().min(1).max(50).optional(),
+    startDate: z.string().date().optional(),
+    endDate: z.string().date().optional(),
+    isCurrent: z.boolean().optional(),
+  })
+  .refine((o) => Object.keys(o).length > 0, { message: "No fields to update" });
+
 export const createClassSchema = z.object({
   name: z.string().min(1).max(100),
   gradeLevel: z.number().int().min(0).max(20),

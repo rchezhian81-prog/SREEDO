@@ -4233,3 +4233,31 @@ export interface HelpSummary {
   onboardingStatus: { sections: number; available: boolean };
   lastDocumentationUpdate: string | null;
 }
+
+// --- PR-T1 — Tenant Settings ---
+
+/**
+ * GET /tenant-settings — the unified Tenant Settings home payload. The
+ * institution's `type` (surfaced here as `mode`) is the single source of truth
+ * for School vs College; the `useModeStore` cache is reconciled from it.
+ */
+export interface TenantSettings {
+  institution: {
+    id: string;
+    name: string;
+    code: string;
+    isActive: boolean;
+    createdAt: string;
+  };
+  profileManagedBy: "platform";
+  mode: "school" | "college";
+  academicYears: AcademicYear[];
+  currentYear: AcademicYear | null;
+  branding: {
+    displayName?: string | null;
+    logoUrl?: string | null;
+    primaryColor?: string | null;
+    tagline?: string | null;
+  } | null;
+  enabledModules: string[];
+}

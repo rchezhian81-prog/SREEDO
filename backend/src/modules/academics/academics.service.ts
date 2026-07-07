@@ -7,6 +7,7 @@ import type {
   createClassSchema,
   createSectionSchema,
   createSubjectSchema,
+  updateAcademicYearSchema,
   updateClassSubjectSchema,
 } from "./academics.schema";
 
@@ -39,6 +40,76 @@ export async function createAcademicYear(
        RETURNING id, name, start_date AS "startDate", end_date AS "endDate",
                  is_current AS "isCurrent"`,
       [institutionId, input.name, input.startDate, input.endDate, input.isCurrent ?? false]
+    );
+    return rows[0];
+  });
+}
+
+const ACADEMIC_YEAR_COLUMNS = `id, name, start_date AS "startDate",
+  end_date AS "endDate", is_current AS "isCurrent"`;
+
+/** Edit an academic year (tenant-scoped). Setting isCurrent unsets the others. */
+export async function updateAcademicYear(
+  id: string,
+  input: z.infer<typeof updateAcademicYearSchema>,
+  institutionId: string
+) {
+  return withTransaction(async (client) => {
+    const { rows: exists } = await client.query(
+      "SELECT 1 FROM academic_years WHERE id = $1 AND institution_id = $2",
+      [id, institutionId]
+    );
+    if (!exists[0]) throw ApiError.notFound("Academic year not found");
+
+    if (input.isCurrent) {
+      await client.query(
+        "UPDATE academic_years SET is_current = false WHERE institution_id = $1",
+        [institutionId]
+      );
+    }
+    const map: Record<string, string> = {
+      name: "name",
+      startDate: "start_date",
+      endDate: "end_date",
+      isCurrent: "is_current",
+    };
+    const sets: string[] = [];
+    const params: unknown[] = [];
+    for (const [field, col] of Object.entries(map)) {
+      const v = (input as Record<string, unknown>)[field];
+      if (v !== undefined) {
+        params.push(v);
+        sets.push(`${col} = $${params.length}`);
+      }
+    }
+    if (!sets.length) throw ApiError.badRequest("No fields to update");
+    params.push(id, institutionId);
+    const { rows } = await client.query(
+      `UPDATE academic_years SET ${sets.join(", ")}
+       WHERE id = $${params.length - 1} AND institution_id = $${params.length}
+       RETURNING ${ACADEMIC_YEAR_COLUMNS}`,
+      params
+    );
+    return rows[0];
+  });
+}
+
+/** Mark one academic year current for the tenant (unsets the previous one). */
+export async function setCurrentAcademicYear(id: string, institutionId: string) {
+  return withTransaction(async (client) => {
+    const { rows: exists } = await client.query(
+      "SELECT 1 FROM academic_years WHERE id = $1 AND institution_id = $2",
+      [id, institutionId]
+    );
+    if (!exists[0]) throw ApiError.notFound("Academic year not found");
+    await client.query(
+      "UPDATE academic_years SET is_current = false WHERE institution_id = $1",
+      [institutionId]
+    );
+    const { rows } = await client.query(
+      `UPDATE academic_years SET is_current = true
+       WHERE id = $1 AND institution_id = $2 RETURNING ${ACADEMIC_YEAR_COLUMNS}`,
+      [id, institutionId]
     );
     return rows[0];
   });
