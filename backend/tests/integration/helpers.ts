@@ -10,6 +10,14 @@ export { query };
 export const app = createApp();
 
 const TABLES = [
+  // Communication Admin (Super Admin O) — O-only tables. Truncated per-test
+  // (deliveries/broadcasts BEFORE institutions/users, which live at the bottom);
+  // no other suite reads them, so a per-test reset is safe.
+  "email_template_versions",
+  "email_templates",
+  "email_deliveries",
+  "broadcasts",
+  "platform_comm_settings",
   "incident_events",
   "incidents",
   "alerts",

@@ -15,6 +15,11 @@ import { evaluateAlertRules } from "../observability/alerts.service";
 import { runWebhookDeliveryJob } from "../integrations/webhooks.delivery";
 import { sweepSubscriptionLifecycle } from "../billing/billing.service";
 import { runRecurringBilling } from "../saaspayments/recurring.service";
+import {
+  enqueueDueScheduledBroadcasts,
+  runBroadcastSend,
+  runDeliveryRetryJob,
+} from "../communication/commadmin.service";
 import { runSchedulerTick } from "./jobs.service";
 
 interface ClaimedJob {
@@ -81,6 +86,26 @@ const HANDLERS: Record<string, Handler> = {
   // Idempotent within each rule's cooldown, so a repeated tick is safe.
   alert_evaluation: async () => {
     await evaluateAlertRules();
+  },
+
+  // Send a platform broadcast (Super Admin O): resolves the audience, logs one
+  // email_delivery per recipient (trigger_source='broadcast', broadcast_id) and
+  // updates the recipient/sent/failed counts + status. `runBroadcastSend` is
+  // idempotent (skips an already sent/cancelled broadcast) and internally wrapped
+  // so a failure marks the broadcast 'failed' rather than throwing — it can never
+  // break job processing.
+  broadcast_send: async (job) => {
+    const broadcastId = (job.payload as { broadcastId?: string }).broadcastId;
+    if (!broadcastId) throw new Error("broadcast_send requires broadcastId");
+    await runBroadcastSend(broadcastId, job.id);
+  },
+
+  // Re-send a single failed platform email delivery (Super Admin O). Best-effort:
+  // a non-failed / missing delivery is a clean no-op.
+  email_delivery_retry: async (job) => {
+    const deliveryId = (job.payload as { deliveryId?: string }).deliveryId;
+    if (!deliveryId) throw new Error("email_delivery_retry requires deliveryId");
+    await runDeliveryRetryJob(deliveryId);
   },
 };
 
@@ -341,6 +366,11 @@ export function startWorker(): void {
         await runSchedulerTick(null);
         await enqueueDueScheduledBackups();
         await enqueueDueScheduledExports();
+        // Enqueue any due scheduled platform broadcasts (Super Admin O). Guarded
+        // like the other tick steps so it can never break the tick.
+        await enqueueDueScheduledBroadcasts().catch((err) =>
+          console.error("scheduled broadcast enqueue failed:", err)
+        );
         // Observability alert evaluation (L) — cheap + cooldown-idempotent.
         await evaluateAlertRules();
         await sweepSubscriptionLifecycle();
