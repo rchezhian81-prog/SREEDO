@@ -59,6 +59,7 @@ export async function listClasses(institutionId: string) {
                   'studentCount', (
                     SELECT count(*) FROM students st
                     WHERE st.section_id = s.id AND st.status = 'active'
+                      AND st.institution_id = $1
                   )
                 ) ORDER BY s.name
               ) FILTER (WHERE s.id IS NOT NULL),

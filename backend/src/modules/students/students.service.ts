@@ -1,5 +1,7 @@
+import type { PoolClient } from "pg";
 import { query, withTransaction } from "../../db/postgres";
 import { ApiError } from "../../utils/api-error";
+import { nextTenantNumber } from "../../utils/tenant-sequence";
 import { activePlan, assertWithinPlanLimit } from "../../utils/plan-limits";
 import { paginatedResponse, type Pagination } from "../../utils/pagination";
 import { invalidateDashboard } from "../dashboard/dashboard.routes";
@@ -42,8 +44,8 @@ const STUDENT_SELECT = `
   s.enrolled_at AS "enrolledAt",
   s.created_at AS "createdAt"
 FROM students s
-LEFT JOIN sections sec ON sec.id = s.section_id
-LEFT JOIN classes c ON c.id = sec.class_id`;
+LEFT JOIN sections sec ON sec.id = s.section_id AND sec.institution_id = s.institution_id
+LEFT JOIN classes c ON c.id = sec.class_id AND c.institution_id = s.institution_id`;
 
 // Writable student columns (formKey -> db column), shared by create / import /
 // update so the three paths can never drift. institution_id and admission_no are
@@ -94,13 +96,30 @@ function buildStudentInsert(
   };
 }
 
-async function nextAdmissionNo(): Promise<string> {
+async function nextAdmissionNo(
+  institutionId: string,
+  client?: PoolClient
+): Promise<string> {
   const year = new Date().getFullYear();
-  // Atomic sequence (migration 0009) — race-free unlike the old count(*)+1.
-  const { rows } = await query<{ nextval: string }>(
-    "SELECT nextval('student_admission_seq') AS nextval"
-  );
-  return `ADM-${year}-${String(Number(rows[0].nextval)).padStart(4, "0")}`;
+  // Per-tenant, race-free counter (migration 0105) — replaces the old GLOBAL
+  // student_admission_seq so two institutions can number independently.
+  const n = await nextTenantNumber(institutionId, "student_admission", client);
+  return `ADM-${year}-${String(n).padStart(4, "0")}`;
+}
+
+/** Rejects a section_id that does not belong to the caller's tenant before it is
+ *  stored (closes cross-tenant FK writes + the reciprocal read-echo). */
+async function assertSectionInTenant(
+  sectionId: string,
+  institutionId: string,
+  client?: PoolClient
+): Promise<void> {
+  const text = "SELECT 1 FROM sections WHERE id = $1 AND institution_id = $2";
+  const params = [sectionId, institutionId];
+  const { rows } = client
+    ? await client.query(text, params)
+    : await query(text, params);
+  if (!rows[0]) throw ApiError.badRequest("Section not found in this institution");
 }
 
 export async function listStudents(
@@ -162,7 +181,8 @@ export async function createStudent(
   institutionId: string
 ) {
   await assertWithinPlanLimit(institutionId, "students");
-  const admissionNo = input.admissionNo ?? (await nextAdmissionNo());
+  if (input.sectionId) await assertSectionInTenant(input.sectionId, institutionId);
+  const admissionNo = input.admissionNo ?? (await nextAdmissionNo(institutionId));
   const ins = buildStudentInsert(
     institutionId,
     admissionNo,
@@ -212,7 +232,10 @@ export async function importStudents(
     const imported = await withTransaction(async (client) => {
       let count = 0;
       for (const input of inputs) {
-        const admissionNo = input.admissionNo ?? (await nextAdmissionNo());
+        if (input.sectionId)
+          await assertSectionInTenant(input.sectionId, institutionId, client);
+        const admissionNo =
+          input.admissionNo ?? (await nextAdmissionNo(institutionId, client));
         const ins = buildStudentInsert(
           institutionId,
           admissionNo,
@@ -310,6 +333,7 @@ export async function updateStudent(
   input: z.infer<typeof updateStudentSchema>,
   institutionId: string
 ) {
+  if (input.sectionId) await assertSectionInTenant(input.sectionId, institutionId);
   const sets: string[] = [];
   const params: unknown[] = [];
   for (const [field, column] of Object.entries(UPDATE_COLUMN_MAP)) {

@@ -1,4 +1,5 @@
 import { withTransaction, query } from "../../db/postgres";
+import { ApiError } from "../../utils/api-error";
 import type { z } from "zod";
 import type { bulkMarkAttendanceSchema } from "./attendance.schema";
 
@@ -8,6 +9,21 @@ export async function bulkMark(
   institutionId: string
 ) {
   return withTransaction(async (client) => {
+    // Every studentId MUST belong to the caller's tenant. Without this check a
+    // foreign student UUID would be upserted here, and because attendance_records
+    // has a global UNIQUE(student_id, date) the ON CONFLICT would OVERWRITE the
+    // owning tenant's row (cross-tenant write). Reject the whole batch otherwise.
+    const studentIds = [...new Set(input.records.map((r) => r.studentId))];
+    if (studentIds.length) {
+      const { rows: valid } = await client.query<{ id: string }>(
+        "SELECT id FROM students WHERE institution_id = $1 AND id = ANY($2::uuid[])",
+        [institutionId, studentIds]
+      );
+      if (valid.length !== studentIds.length) {
+        throw ApiError.badRequest("One or more students are not in this institution");
+      }
+    }
+
     let upserted = 0;
     for (const record of input.records) {
       await client.query(

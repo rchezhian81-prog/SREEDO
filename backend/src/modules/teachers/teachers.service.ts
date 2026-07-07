@@ -1,5 +1,7 @@
+import type { PoolClient } from "pg";
 import { query, withTransaction } from "../../db/postgres";
 import { ApiError } from "../../utils/api-error";
+import { nextTenantNumber } from "../../utils/tenant-sequence";
 import { activePlan, assertWithinPlanLimit } from "../../utils/plan-limits";
 import { paginatedResponse, type Pagination } from "../../utils/pagination";
 import type { z } from "zod";
@@ -21,12 +23,14 @@ const TEACHER_COLUMNS = `
   is_active AS "isActive",
   created_at AS "createdAt"`;
 
-async function nextEmployeeNo(): Promise<string> {
-  // Atomic sequence (migration 0009) — race-free unlike the old count(*)+1.
-  const { rows } = await query<{ nextval: string }>(
-    "SELECT nextval('teacher_employee_seq') AS nextval"
-  );
-  return `EMP-${String(Number(rows[0].nextval)).padStart(4, "0")}`;
+async function nextEmployeeNo(
+  institutionId: string,
+  client?: PoolClient
+): Promise<string> {
+  // Per-tenant, race-free counter (migration 0105) — replaces the old GLOBAL
+  // teacher_employee_seq so two institutions can number independently.
+  const n = await nextTenantNumber(institutionId, "teacher_employee", client);
+  return `EMP-${String(n).padStart(4, "0")}`;
 }
 
 export async function listTeachers(
@@ -67,7 +71,7 @@ export async function createTeacher(
   institutionId: string
 ) {
   await assertWithinPlanLimit(institutionId, "staff");
-  const employeeNo = input.employeeNo ?? (await nextEmployeeNo());
+  const employeeNo = input.employeeNo ?? (await nextEmployeeNo(institutionId));
   const { rows } = await query(
     `INSERT INTO teachers (
        institution_id, employee_no, first_name, last_name, email, phone,
@@ -115,7 +119,8 @@ export async function importTeachers(
     const imported = await withTransaction(async (client) => {
       let count = 0;
       for (const input of inputs) {
-        const employeeNo = input.employeeNo ?? (await nextEmployeeNo());
+        const employeeNo =
+          input.employeeNo ?? (await nextEmployeeNo(institutionId, client));
         await client.query(
           `INSERT INTO teachers (
              institution_id, employee_no, first_name, last_name, email, phone,
