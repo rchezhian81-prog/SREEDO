@@ -17,6 +17,7 @@ import { observabilityRouter } from "./modules/observability/observability.route
 import { liveness, readiness } from "./modules/observability/observability.service";
 import { academicsRouter } from "./modules/academics/academics.routes";
 import { settingsRouter } from "./modules/settings/settings.routes";
+import { tenantRbacRouter } from "./modules/tenant-rbac/tenant-rbac.routes";
 import { adminConsoleRouter } from "./modules/adminconsole/adminconsole.routes";
 import { activityRouter } from "./modules/activity/activity.routes";
 import { admissionsRouter } from "./modules/admissions/admissions.routes";
@@ -196,6 +197,7 @@ export function createApp(): express.Express {
   api.use("/teachers", teachersRouter);
   api.use("/", academicsRouter); // /academic-years, /classes, /sections, /subjects
   api.use("/tenant-settings", settingsRouter); // unified Tenant Settings home (T1)
+  api.use("/tenant-rbac", tenantRbacRouter); // per-tenant role permissions (T2)
   api.use("/attendance", attendanceRouter);
   api.use("/timetable", timetableRouter);
   api.use("/exams", examsRouter);

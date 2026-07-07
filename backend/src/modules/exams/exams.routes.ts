@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { uuidParam } from "../../utils/params";
 import { z } from "zod";
-import { authenticate, authorize } from "../../middleware/auth";
+import { authenticate } from "../../middleware/auth";
+import { requirePermission } from "../../middleware/permissions";
 import { requireTenant, tenantId } from "../../middleware/tenant";
 import {
   accessibleStudentIds,
@@ -47,7 +48,7 @@ examsRouter.get("/", async (req, res) => {
   res.json(await examsService.listExams(tenantId(req)));
 });
 
-examsRouter.post("/", authorize("admin"), async (req, res) => {
+examsRouter.post("/", requirePermission("exams:manage"), async (req, res) => {
   const input = createExamSchema.parse(req.body);
   res.status(201).json(await examsService.createExam(input, tenantId(req)));
 });
@@ -105,7 +106,7 @@ examsRouter.get("/:id/results", async (req, res) => {
 
 examsRouter.post(
   "/:id/results",
-  authorize("admin", "teacher"),
+  requirePermission("exams:enter_marks"),
   async (req, res) => {
     const input = upsertResultsSchema.parse(req.body);
     res.json(

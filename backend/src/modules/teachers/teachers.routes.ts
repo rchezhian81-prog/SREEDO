@@ -1,7 +1,9 @@
 import { Router } from "express";
 import { uuidParam } from "../../utils/params";
-import { authenticate, authorize } from "../../middleware/auth";
+import { authenticate } from "../../middleware/auth";
+import { requirePermission } from "../../middleware/permissions";
 import { requireTenant, tenantId } from "../../middleware/tenant";
+import { requireStaff } from "../../utils/scope";
 import { parsePagination } from "../../utils/pagination";
 import {
   createTeacherSchema,
@@ -52,6 +54,7 @@ teachersRouter.use(authenticate, requireTenant);
  *       201: { description: Created teacher }
  */
 teachersRouter.get("/", async (req, res) => {
+  requireStaff(req); // staff directory carries PII — not student/parent-visible
   const queryParams = listTeachersQuerySchema.parse(req.query);
   const result = await teachersService.listTeachers(
     parsePagination(queryParams),
@@ -61,7 +64,7 @@ teachersRouter.get("/", async (req, res) => {
   res.json(result);
 });
 
-teachersRouter.post("/", authorize("admin"), async (req, res) => {
+teachersRouter.post("/", requirePermission("teachers:manage"), async (req, res) => {
   const input = createTeacherSchema.parse(req.body);
   res.status(201).json(await teachersService.createTeacher(input, tenantId(req)));
 });
@@ -92,7 +95,7 @@ teachersRouter.post("/", authorize("admin"), async (req, res) => {
  *       400: { description: Validation failed or duplicate employee number }
  *       403: { description: Plan limit exceeded }
  */
-teachersRouter.post("/import", authorize("admin"), async (req, res) => {
+teachersRouter.post("/import", requirePermission("teachers:manage"), async (req, res) => {
   const { rows } = importTeachersSchema.parse(req.body);
   const result = await teachersService.importTeachers(rows, tenantId(req));
   res.status(201).json(result);
@@ -127,15 +130,16 @@ teachersRouter.post("/import", authorize("admin"), async (req, res) => {
  *       204: { description: Deleted }
  */
 teachersRouter.get("/:id", async (req, res) => {
+  requireStaff(req); // staff PII — not student/parent-visible
   res.json(await teachersService.getTeacher(uuidParam(req), tenantId(req)));
 });
 
-teachersRouter.patch("/:id", authorize("admin"), async (req, res) => {
+teachersRouter.patch("/:id", requirePermission("teachers:manage"), async (req, res) => {
   const input = updateTeacherSchema.parse(req.body);
   res.json(await teachersService.updateTeacher(uuidParam(req), input, tenantId(req)));
 });
 
-teachersRouter.delete("/:id", authorize("admin"), async (req, res) => {
+teachersRouter.delete("/:id", requirePermission("teachers:manage"), async (req, res) => {
   await teachersService.removeTeacher(uuidParam(req), tenantId(req));
   res.status(204).end();
 });
