@@ -130,6 +130,7 @@ const SUPER_ADMIN_NAV: NavItem[] = [
   { href: "/super-admin/communication", label: "Communication Admin", icon: "mail", perm: "comm:dashboard_read" },
   { href: "/super-admin/backups", label: "Backups", icon: "shield", perm: "backup:read" },
   { href: "/super-admin/jobs", label: "Jobs", icon: "gear", perm: "jobs:read" },
+  { href: "/super-admin/help", label: "Help & SOP", icon: "bookOpen", perm: "help:read" },
   { href: "/security", label: "Security", icon: "shield" },
 ];
 
