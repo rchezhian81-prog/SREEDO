@@ -4005,3 +4005,231 @@ export interface OverviewModules {
   range: OverviewRange;
   moduleStatus: Record<string, OverviewModuleCard>;
 }
+
+// --- Super Admin Q — Help / SOP / Docs / Module Status Center (/help/*) ---
+// Read-only curated documentation served through the RBAC-gated /help/* API.
+// Shapes mirror backend/src/modules/help/help.types.ts exactly.
+
+export type HelpModuleStatus =
+  | "complete"
+  | "production_stable"
+  | "in_progress"
+  | "planned"
+  | "deprecated";
+
+export type HelpDocReviewStatus = "draft" | "reviewed" | "needs_review" | "deprecated";
+export type HelpSeverity = "low" | "medium" | "high" | "critical";
+export type HelpLimitationStatus = "accepted" | "planned" | "fixed" | "deferred" | "future";
+export type HelpDocType = "help" | "sop" | "checklist" | "playbook" | "release" | "limitation";
+
+export interface HelpLink {
+  label: string;
+  href: string;
+}
+
+/** Curated documentation metadata (Section J). */
+export interface DocMeta {
+  version: string;
+  lastUpdatedBy: string;
+  lastUpdated: string;
+  reviewedBy: string | null;
+  reviewStatus: HelpDocReviewStatus;
+  nextReviewDate: string | null;
+  moduleOwner: string | null;
+}
+
+/** GET /help/modules — a curated module-status register entry. */
+export interface ModuleStatusEntry {
+  key: string;
+  name: string;
+  letter: string | null;
+  status: HelpModuleStatus;
+  prNumber: number | null;
+  prCommit: string | null;
+  deployNumber: number | null;
+  lastSmokeResult: string | null;
+  lastUpdated: string;
+  ownerRole: string;
+  route: string | null;
+  docLink: string | null;
+  relatedLinks: HelpLink[];
+  knownLimitationsCount: number;
+}
+export interface HelpModulesResponse {
+  modules: ModuleStatusEntry[];
+}
+
+/** GET /help/articles — a help article. */
+export interface HelpArticle {
+  id: string;
+  title: string;
+  category: string;
+  module: string | null;
+  appliesToRole: string;
+  summary: string;
+  body: string;
+  relatedLinks: HelpLink[];
+  meta: DocMeta;
+}
+export interface HelpArticlesResponse {
+  articles: HelpArticle[];
+}
+
+/** GET /help/sops — a standard operating procedure. */
+export interface Sop {
+  id: string;
+  title: string;
+  purpose: string;
+  whenToUse: string;
+  requiredRole: string;
+  steps: string[];
+  safetyWarnings: string[];
+  approvalRequired: string | null;
+  auditExpectation: string;
+  smokeTestCheck: string;
+  relatedLinks: HelpLink[];
+  meta: DocMeta;
+}
+export interface HelpSopsResponse {
+  sops: Sop[];
+}
+
+export interface ChecklistItem {
+  text: string;
+  expectedResult: string;
+  productionRisk: boolean;
+  doNotTestOnRealData: boolean;
+}
+
+/** GET /help/checklists — a smoke-test checklist. */
+export interface Checklist {
+  id: string;
+  title: string;
+  module: string;
+  route: string | null;
+  warning: string | null;
+  items: ChecklistItem[];
+  meta: DocMeta;
+}
+export interface HelpChecklistsResponse {
+  checklists: Checklist[];
+}
+
+/** GET /help/limitations — a known-limitation register entry. */
+export interface Limitation {
+  id: string;
+  module: string;
+  title: string;
+  severity: HelpSeverity;
+  status: HelpLimitationStatus;
+  impact: string;
+  workaround: string;
+  ownerRole: string;
+  targetPhase: string | null;
+  lastUpdated: string;
+  link: string | null;
+}
+export interface HelpLimitationsResponse {
+  limitations: Limitation[];
+}
+
+/** GET /help/release-notes — a release note (refs are real-or-null, never fabricated). */
+export interface ReleaseNote {
+  id: string;
+  title: string;
+  module: string;
+  prNumber: number | null;
+  commit: string | null;
+  deployNumber: number | null;
+  date: string;
+  summary: string;
+  changes: string[];
+  migrationSummary: string | null;
+  safetyNotes: string | null;
+  smokeResult: string | null;
+  knownLimitations: string | null;
+  rollbackNote: string | null;
+}
+export interface HelpReleaseNotesResponse {
+  releaseNotes: ReleaseNote[];
+}
+
+/** GET /help/playbooks — an emergency playbook. */
+export interface Playbook {
+  id: string;
+  title: string;
+  severity: HelpSeverity;
+  symptoms: string[];
+  firstChecks: string[];
+  whatNotToDo: string[];
+  safeSteps: string[];
+  escalationPath: string;
+  relatedModules: string[];
+  auditSecurityNotes: string;
+  recoveryChecklist: string[];
+  meta: DocMeta;
+}
+export interface HelpPlaybooksResponse {
+  playbooks: Playbook[];
+}
+
+/** GET /help/onboarding — an admin onboarding guide section. */
+export interface OnboardingSection {
+  id: string;
+  order: number;
+  title: string;
+  body: string;
+  steps: string[];
+}
+export interface HelpOnboardingResponse {
+  sections: OnboardingSection[];
+}
+
+/** GET /help/search — a cross-type search hit. */
+export interface HelpSearchResult {
+  type: HelpDocType;
+  id: string;
+  title: string;
+  module: string | null;
+  snippet: string;
+}
+export interface HelpSearchResponse {
+  results: HelpSearchResult[];
+}
+
+/** One entry in the summary's recently-updated feed. */
+export interface HelpRecentDoc {
+  type: string;
+  id: string;
+  title: string;
+  module: string | null;
+  lastUpdated: string;
+}
+
+/** GET /help/summary — the Help/SOP center dashboard. */
+export interface HelpSummary {
+  generatedAt: string;
+  curatedInCode: boolean;
+  completion: {
+    total: number;
+    complete: number;
+    productionStable: number;
+    inProgress: number;
+    percentComplete: number;
+  };
+  counts: {
+    moduleDocs: number;
+    helpArticles: number;
+    sops: number;
+    checklists: number;
+    limitations: number;
+    releaseNotes: number;
+    playbooks: number;
+    onboardingSections: number;
+  };
+  recentlyUpdated: HelpRecentDoc[];
+  docsNeedingReview: { type: string; id: string; title: string }[];
+  criticalRunbooks: { id: string; title: string }[];
+  onboardingStatus: { sections: number; available: boolean };
+  lastDocumentationUpdate: string | null;
+}
