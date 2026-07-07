@@ -3783,3 +3783,225 @@ export interface CommIntegrations {
   audit: { actions: number };
   links: { observability: string; jobs: string; security: string; audit: string };
 }
+
+// --- Super Admin E — Platform Overview Dashboard (/overview/*) ---------------
+//
+// A READ-ONLY executive aggregator composed from the already-live module
+// summaries. Every KPI section is either its data (with `available: true`) or a
+// RBAC-hidden `{ available: false }` placeholder — NEVER rendered as zero. No
+// value is ever fabricated: a thin trend series returns an empty `series` plus a
+// "trend begins from collected data" note instead of a made-up line. Every
+// timestamp is an ISO string; `null` wherever the backend returns null. All free
+// text (announcement / maintenance / attention summaries) is already masked
+// server-side — the UI only renders what it is given.
+
+/** Coarse dashboard window preset (mirrors overview.schema `overviewWindowEnum`). */
+export type OverviewWindow =
+  | "today"
+  | "7d"
+  | "30d"
+  | "this_month"
+  | "last_month"
+  | "custom";
+
+/** Resolved range echoed back on every payload. */
+export interface OverviewRange {
+  window: OverviewWindow;
+  from: string;
+  to: string;
+}
+
+/** Cross-module card status vocabulary. */
+export type OverviewCardStatus = "healthy" | "warning" | "critical" | "unknown";
+
+/** Attention severity (prioritised critical → warning → info). */
+export type OverviewSeverity = "critical" | "warning" | "info";
+
+/**
+ * A KPI section is EITHER its data (spread under `available: true`) OR a
+ * `{ available: false }` restricted placeholder. Render the placeholder as a
+ * subtle "restricted" card — never as zeros.
+ */
+export type OverviewSection<T> = ({ available: true } & T) | { available: false };
+
+/** Observability overall roll-up carried on the health section (rendered via `status`). */
+export interface OverviewHealthOverall {
+  status?: string;
+  healthy?: number;
+  degraded?: number;
+  down?: number;
+  unknown?: number;
+}
+
+/** health — data fields beyond `status`/`drilldown` are absent in the degraded ("unknown") variant. */
+export interface OverviewHealthData {
+  status: OverviewCardStatus;
+  overall?: OverviewHealthOverall;
+  apiErrorRatePct?: number;
+  avgResponseMs?: number;
+  uptime?: { windowChecks: number; healthyChecks: number; note: string };
+  drilldown: string;
+}
+
+/** tenant — lifecycle counts straight from institutions.status. */
+export interface OverviewTenantData {
+  total: number;
+  active: number;
+  trial: number;
+  suspended: number;
+  archived: number;
+  newInRange: number;
+  drilldown: string;
+}
+
+/** subscription — counts absent in the degraded variant (only `drilldown`). */
+export interface OverviewSubscriptionData {
+  total?: number;
+  active?: number;
+  trialing?: number;
+  suspended?: number;
+  cancelled?: number;
+  expired?: number;
+  expiringSoon?: number;
+  grace?: number;
+  renewalDue?: number;
+  drilldown: string;
+}
+
+/** billing — revenue + invoice counts (always full when available). */
+export interface OverviewBillingData {
+  currency: string;
+  mixedCurrency: boolean;
+  mrr: number;
+  arr: number;
+  outstanding: number;
+  overdue: number;
+  paidAmount: number;
+  paidCount: number;
+  unpaidCount: number;
+  draftCount: number;
+  overdueCount: number;
+  drilldown: string;
+}
+
+/** security — counts absent in the degraded variant (only `drilldown`). */
+export interface OverviewSecurityData {
+  highRisk?: number;
+  failedLoginsToday?: number;
+  failedLoginsWeek?: number;
+  suspiciousLoginAttempts?: number;
+  activeSessions?: number;
+  adminsWithout2fa?: number;
+  ownersWithout2fa?: number;
+  supportSessions?: number;
+  rbacChanges?: number;
+  lockedAccounts?: number;
+  drilldown: string;
+}
+
+/** operations — data fields beyond `status`/`drilldown` are absent in the degraded variant. */
+export interface OverviewOperationsData {
+  status: OverviewCardStatus;
+  incidents?: number;
+  criticalIncidents?: number;
+  openAlerts?: number;
+  queueDepth?: number;
+  failedJobsToday?: number;
+  stuckJobs?: number;
+  lastBackupAt?: string | null;
+  failedBackups?: number;
+  failedExports?: number;
+  failedComms?: number;
+  drilldown: string;
+}
+
+/** maintenance / announcement (free text already masked server-side). */
+export interface OverviewMaintenanceData {
+  maintenanceMode?: boolean;
+  maintenanceMessage?: string | null;
+  maintenanceStartsAt?: string | null;
+  maintenanceEndsAt?: string | null;
+  announcementActive?: boolean;
+  announcementText?: string | null;
+  announcementVisibility?: "super_admin" | "tenant_admins" | "all_users" | null;
+  drilldown: string;
+}
+
+/** One compact cross-module status card (`available: false` when RBAC-hidden). */
+export interface OverviewModuleCard {
+  available: boolean;
+  status?: OverviewCardStatus;
+  metric?: number | string | null;
+  metricLabel?: string;
+  lastActivityAt?: string | null;
+  attention?: number;
+  drilldown?: string;
+}
+
+/** GET /overview/summary — the executive payload (RBAC-hidden per section). */
+export interface OverviewSummary {
+  generatedAt: string;
+  generatedBy: { email: string; role: string };
+  range: OverviewRange;
+  note: string;
+  health: OverviewSection<OverviewHealthData>;
+  tenant: OverviewSection<OverviewTenantData>;
+  subscription: OverviewSection<OverviewSubscriptionData>;
+  billing: OverviewSection<OverviewBillingData>;
+  security: OverviewSection<OverviewSecurityData>;
+  operations: OverviewSection<OverviewOperationsData>;
+  moduleStatus: Record<string, OverviewModuleCard>;
+  maintenance: OverviewSection<OverviewMaintenanceData>;
+}
+
+/** One prioritised "needs attention" row (summary already masked). */
+export interface OverviewAttentionItem {
+  severity: OverviewSeverity;
+  summary: string;
+  sourceModule: string;
+  createdAt: string;
+  actionLink: string;
+}
+
+/** GET /overview/attention — prioritised (critical first) list. */
+export interface OverviewAttention {
+  generatedAt: string;
+  items: OverviewAttentionItem[];
+}
+
+/** A single group-by-day point: `day` plus one or more numeric metric columns. */
+export type OverviewTrendPoint = { day: string } & Record<string, string | number>;
+
+/** A per-metric series; an EMPTY series carries the "begins from collected data" note. */
+export interface OverviewTrendSeries {
+  series: OverviewTrendPoint[];
+  note?: string;
+}
+
+/** GET /overview/trends — real group-by-day series only (no fabricated lines). */
+export interface OverviewTrends {
+  generatedAt: string;
+  range: OverviewRange;
+  trends: Record<string, OverviewTrendSeries>;
+}
+
+/** One quick-action tile; `allowed` reflects the caller's RBAC (backend is source of truth). */
+export interface OverviewQuickAction {
+  key: string;
+  label: string;
+  route: string;
+  perm: string;
+  allowed: boolean;
+}
+
+/** GET /overview/quick-actions. */
+export interface OverviewQuickActions {
+  actions: OverviewQuickAction[];
+}
+
+/** GET /overview/modules — cross-module status cards. */
+export interface OverviewModules {
+  generatedAt: string;
+  range: OverviewRange;
+  moduleStatus: Record<string, OverviewModuleCard>;
+}
