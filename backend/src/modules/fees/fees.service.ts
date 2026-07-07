@@ -24,7 +24,7 @@ const INVOICE_SELECT = `
   i.status,
   i.created_at AS "createdAt"
 FROM invoices i
-JOIN students s ON s.id = i.student_id`;
+JOIN students s ON s.id = i.student_id AND s.institution_id = i.institution_id`;
 
 function generateInvoiceNo(): string {
   const stamp = new Date().toISOString().slice(0, 10).replaceAll("-", "");
@@ -123,6 +123,13 @@ export async function createInvoice(
   input: z.infer<typeof createInvoiceSchema>,
   institutionId: string
 ) {
+  // The student billed MUST belong to the tenant (else a foreign student's UUID
+  // could be stored on this tenant's invoice and echoed back on read).
+  const { rows: sv } = await query(
+    "SELECT 1 FROM students WHERE id = $1 AND institution_id = $2",
+    [input.studentId, institutionId]
+  );
+  if (!sv[0]) throw ApiError.badRequest("Student not found in this institution");
   const { rows } = await query<{ id: string }>(
     `INSERT INTO invoices (institution_id, invoice_no, student_id, fee_structure_id, description, amount_due, due_date)
      VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -201,7 +208,7 @@ async function sendReceiptEmail(invoiceId: string, amount: number) {
     last_name: string;
   }>(
     `SELECT i.invoice_no, s.guardian_email, s.first_name, s.last_name
-     FROM invoices i JOIN students s ON s.id = i.student_id
+     FROM invoices i JOIN students s ON s.id = i.student_id AND s.institution_id = i.institution_id
      WHERE i.id = $1`,
     [invoiceId]
   );

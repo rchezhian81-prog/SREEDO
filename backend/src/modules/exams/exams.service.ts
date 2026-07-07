@@ -48,6 +48,28 @@ export async function upsertResults(
   );
   if (!rows[0]) throw ApiError.notFound("Exam not found");
 
+  // Every student/subject referenced MUST belong to the tenant — otherwise a
+  // foreign UUID could be stored under this tenant's exam and its name echoed
+  // back on read. Validate the distinct sets up front.
+  const studentIds = [...new Set(input.results.map((r) => r.studentId))];
+  const subjectIds = [...new Set(input.results.map((r) => r.subjectId))];
+  if (studentIds.length) {
+    const { rows: v } = await query<{ id: string }>(
+      "SELECT id FROM students WHERE institution_id = $1 AND id = ANY($2::uuid[])",
+      [institutionId, studentIds]
+    );
+    if (v.length !== studentIds.length)
+      throw ApiError.badRequest("One or more students are not in this institution");
+  }
+  if (subjectIds.length) {
+    const { rows: v } = await query<{ id: string }>(
+      "SELECT id FROM subjects WHERE institution_id = $1 AND id = ANY($2::uuid[])",
+      [institutionId, subjectIds]
+    );
+    if (v.length !== subjectIds.length)
+      throw ApiError.badRequest("One or more subjects are not in this institution");
+  }
+
   return withTransaction(async (client) => {
     let upserted = 0;
     for (const result of input.results) {
@@ -98,8 +120,8 @@ export async function examResults(
             er.max_marks AS "maxMarks",
             er.grade
      FROM exam_results er
-     JOIN students s ON s.id = er.student_id
-     JOIN subjects sub ON sub.id = er.subject_id
+     JOIN students s ON s.id = er.student_id AND s.institution_id = er.institution_id
+     JOIN subjects sub ON sub.id = er.subject_id AND sub.institution_id = er.institution_id
      WHERE er.exam_id = $1 AND er.institution_id = $2 ${sectionFilter}
      ORDER BY s.first_name, sub.name`,
     params
@@ -116,8 +138,8 @@ export async function studentReport(studentId: string, institutionId: string) {
             er.grade,
             er.remarks
      FROM exam_results er
-     JOIN exams e ON e.id = er.exam_id
-     JOIN subjects sub ON sub.id = er.subject_id
+     JOIN exams e ON e.id = er.exam_id AND e.institution_id = er.institution_id
+     JOIN subjects sub ON sub.id = er.subject_id AND sub.institution_id = er.institution_id
      WHERE er.student_id = $1 AND er.institution_id = $2
      ORDER BY e.start_date DESC NULLS LAST, sub.name`,
     [studentId, institutionId]
