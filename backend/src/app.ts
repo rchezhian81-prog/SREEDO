@@ -47,6 +47,7 @@ import { authRouter } from "./modules/auth/auth.routes";
 import { backupsRouter } from "./modules/backups/backups.routes";
 import { collegeRouter } from "./modules/college/college.routes";
 import { communicationRouter } from "./modules/communication/communication.routes";
+import { commAdminRouter } from "./modules/communication/commadmin.routes";
 import { customReportsRouter } from "./modules/customreports/customreports.routes";
 import { dashboardRouter } from "./modules/dashboard/dashboard.routes";
 import { disciplinaryRouter } from "./modules/disciplinary/disciplinary.routes";
@@ -214,6 +215,7 @@ export function createApp(): express.Express {
   api.use("/scheduled-reports", scheduledReportsRouter);
   api.use("/jobs", jobsRouter);
   api.use("/jobs-ops", jobsOpsRouter); // super-admin Background Jobs Console / Queue Governance (M)
+  api.use("/comm-admin", commAdminRouter); // super-admin Communication Admin (O) — platform email/templates/broadcasts
   api.use("/disciplinary", disciplinaryRouter);
   api.use("/communication", communicationRouter);
   api.use("/documents", documentsRouter);
