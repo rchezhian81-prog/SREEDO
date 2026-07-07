@@ -85,6 +85,7 @@ import {
 import { platformRbacRouter } from "./modules/platform/rbac.routes";
 import { platformSecurityRouter } from "./modules/platform/security.routes";
 import { platformSettingsRouter } from "./modules/platform/platform-settings.routes";
+import { overviewRouter } from "./modules/overview/overview.routes";
 import { tenantRouter } from "./modules/platform/tenant.routes";
 import { portalRouter } from "./modules/portal/portal.routes";
 import { reportCenterRouter } from "./modules/reportcenter/reportcenter.routes";
@@ -275,6 +276,7 @@ export function createApp(): express.Express {
   api.use("/platform/admins", platformAdminsRouter); // super-admin platform-team management (I)
   api.use("/platform/rbac", platformRbacRouter); // super-admin RBAC roles + permission matrix (H)
   api.use("/platform/security", platformSecurityRouter); // super-admin Security & Compliance Center (P)
+  api.use("/overview", overviewRouter); // super-admin Platform Overview dashboard (E) — read-only aggregator
   api.use("/platform", subscriptionsRouter); // super-admin subscription management (D)
   api.use("/platform", couponsRouter); // super-admin coupon / promotion management
   api.use("/platform", tenantRouter); // super-admin tenant/institution management
