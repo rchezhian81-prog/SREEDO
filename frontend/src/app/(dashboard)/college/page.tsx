@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth-store";
+import { useModeStore } from "@/stores/mode-store";
 import {
   Badge,
   Button,
@@ -97,6 +98,9 @@ export default function CollegeHubPage() {
     setSwitchError(null);
     try {
       await api.patch("/college/settings", { type: next });
+      // Reconcile the derived mode cache immediately so nav + terminology update
+      // without waiting for a remount / next /auth/me reconciliation.
+      useModeStore.getState().setMode(next);
       await load();
     } catch (err) {
       setSwitchError(
