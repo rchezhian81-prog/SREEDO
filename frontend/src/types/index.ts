@@ -3426,3 +3426,360 @@ export interface JobsIntegrations {
   security: { criticalJobAlerts: number };
   links: { observability: string; audit: string; security: string };
 }
+
+// --- Super Admin O — Communication Admin (/comm-admin/*) ---
+//
+// The composed Communication Admin views. Every timestamp is an ISO string;
+// `null` wherever the FIXED backend contract (commadmin.service) returns null.
+// The API masks every secret — provider status carries NO credentials; delivery
+// subject/failureReason/providerResponse are masked; secure links render as
+// "secure link omitted". The UI only ever renders what it is given.
+
+/** Template lifecycle status (email_templates.status CHECK). */
+export type CommTemplateStatus = "draft" | "active" | "disabled";
+
+/** Delivery status (email_deliveries.status CHECK / legacy invoice_emails). */
+export type DeliveryStatus =
+  | "pending"
+  | "sent"
+  | "delivered"
+  | "failed"
+  | "bounced"
+  | "skipped";
+
+/** Delivery trigger source (email_deliveries.trigger_source CHECK). */
+export type TriggerSource =
+  | "invoice"
+  | "subscription"
+  | "support"
+  | "security"
+  | "backup"
+  | "export"
+  | "platform_admin"
+  | "manual_test"
+  | "broadcast"
+  | "system";
+
+/** Broadcast audience selector. */
+export type BroadcastAudience =
+  | "platform_admins"
+  | "tenant_admins"
+  | "specific_tenant"
+  | "institution_type"
+  | "all_tenants";
+
+/** Broadcast delivery channel. */
+export type BroadcastChannel = "email" | "in_app" | "both";
+
+/** Broadcast lifecycle status. */
+export type BroadcastStatus =
+  | "draft"
+  | "scheduled"
+  | "sending"
+  | "sent"
+  | "failed"
+  | "cancelled";
+
+/** Template category (email_templates.category CHECK). */
+export type TemplateCategory =
+  | "onboarding"
+  | "security"
+  | "billing"
+  | "subscription"
+  | "support"
+  | "backup"
+  | "export"
+  | "platform"
+  | "broadcast"
+  | "general";
+
+/** Notification preference category (platform_comm_settings.categories keys). */
+export type PreferenceCategory =
+  | "invoice"
+  | "subscription"
+  | "support"
+  | "security"
+  | "backup"
+  | "export"
+  | "platform_admin"
+  | "broadcast";
+
+/** Dashboard / reports time window. */
+export type CommWindow = "today" | "24h" | "7d" | "30d" | "custom";
+
+/** GET /comm-admin/provider — SAFE provider status (NEVER user/pass/host). */
+export interface ProviderStatus {
+  configured: boolean;
+  /** not_configured | healthy | error */
+  status: string;
+  verified: boolean;
+  fromName: string;
+  fromEmail: string;
+  replyTo: string;
+  lastTestStatus: string | null;
+  lastTestAt: string | null;
+  lastSuccessAt: string | null;
+  lastFailedAt: string | null;
+  failureCount: number;
+  note: string;
+  links: { observability: string; settings: string };
+}
+
+/** A masked recent-failure row on the dashboard (recipient masked a***@domain). */
+export interface CommRecentFailure {
+  id: string;
+  template: string | null;
+  recipient: string;
+  failureReason: string | null;
+  createdAt: string;
+}
+
+/** GET /comm-admin/summary — the ~18-card communication dashboard. */
+export interface CommDashboard {
+  window: string;
+  provider: { configured: boolean; status: string; fromEmail: string };
+  templates: {
+    total: number;
+    active: number;
+    disabled: number;
+    draft: number;
+    builtin: number;
+    custom: number;
+  };
+  emails: {
+    sent: number;
+    failed: number;
+    pending: number;
+    skipped: number;
+    delivered: number;
+    total: number;
+  };
+  failureCount: number;
+  failureRatePct: number;
+  lastTest: { status: string; at: string | null } | null;
+  broadcasts: {
+    sent: number;
+    draft: number;
+    scheduled: number;
+    sending: number;
+    failed: number;
+    cancelled: number;
+  };
+  bySource: Record<string, number>;
+  recentFailures: CommRecentFailure[];
+  health: { ok: boolean; warnings: string[] };
+}
+
+/** One append-only template version snapshot. */
+export interface TemplateVersion {
+  version: number;
+  subject: string;
+  bodyText: string;
+  bodyHtml: string | null;
+  status: string;
+  changeNote: string | null;
+  changedBy: string | null;
+  createdAt: string;
+}
+
+/** GET /comm-admin/templates row + GET /comm-admin/templates/:key (adds versions). */
+export interface EmailTemplate {
+  id: string;
+  key: string;
+  name: string;
+  category: string;
+  subject: string;
+  bodyText: string;
+  bodyHtml: string | null;
+  status: CommTemplateStatus;
+  version: number;
+  isBuiltin: boolean;
+  description: string | null;
+  versions?: TemplateVersion[];
+}
+
+/** GET /comm-admin/templates. */
+export interface TemplateListResult {
+  rows: EmailTemplate[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/** GET /comm-admin/templates/:key/versions. */
+export interface TemplateVersionsResult {
+  key: string;
+  version: number;
+  versions: TemplateVersion[];
+}
+
+/** POST /comm-admin/templates/:key/preview — rendered sample output + warnings. */
+export interface TemplatePreview {
+  key: string;
+  subject: string;
+  bodyText: string;
+  bodyHtml: string | null;
+  unknownVars: string[];
+  warnings: string[];
+  availableVars: string[];
+}
+
+/** POST /comm-admin/provider/test and /comm-admin/templates/:key/test. */
+export interface TestSendResult {
+  sent: boolean;
+  status: string;
+  deliveryId: string | null;
+  preview: { subject: string; unknownVars: string[] };
+}
+
+/** One masked delivery-log row (email_deliveries UNION legacy invoice_emails).
+ *  subject / failureReason / providerResponse are masked; secure links omitted. */
+export interface DeliveryRow {
+  id: string;
+  template: string | null;
+  category: string | null;
+  subject: string | null;
+  recipient: string;
+  recipientName: string | null;
+  institutionId: string | null;
+  institutionName: string | null;
+  institutionCode: string | null;
+  triggerSource: TriggerSource;
+  status: DeliveryStatus;
+  failureReason: string | null;
+  providerResponse: string | null;
+  retryCount: number;
+  relatedType: string | null;
+  relatedId: string | null;
+  broadcastId: string | null;
+  jobId: string | null;
+  /** platform | invoice (legacy, read-only) */
+  source: string;
+  createdAt: string;
+  sentAt: string | null;
+}
+
+/** GET /comm-admin/deliveries/:id — same masked shape as a list row. */
+export type DeliveryDetail = DeliveryRow;
+
+/** GET /comm-admin/deliveries. */
+export interface DeliveryListResult {
+  rows: DeliveryRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/** POST /comm-admin/deliveries/:id/retry (append-only re-send). */
+export interface DeliveryRetryResult {
+  retried: boolean;
+  status: string;
+  delivery: {
+    id: string;
+    status: DeliveryStatus;
+    recipient?: string;
+    triggerSource?: TriggerSource;
+    retryCount?: number;
+    createdAt?: string;
+    sentAt?: string | null;
+  } | null;
+}
+
+/** A platform broadcast (reason is masked). */
+export interface Broadcast {
+  id: string;
+  title: string;
+  bodyText: string;
+  bodyHtml: string | null;
+  audience: BroadcastAudience;
+  audienceFilter: { institutionId?: string; institutionType?: string } & Record<string, unknown>;
+  channel: BroadcastChannel;
+  status: BroadcastStatus;
+  scheduledAt: string | null;
+  sentAt: string | null;
+  recipientCount: number;
+  sentCount: number;
+  failedCount: number;
+  reason: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** GET /comm-admin/broadcasts. */
+export interface BroadcastListResult {
+  rows: Broadcast[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/** POST /comm-admin/broadcasts/:id/preview-audience — resolved recipient count. */
+export interface AudiencePreview {
+  audience: BroadcastAudience;
+  audienceFilter: { institutionId?: string; institutionType?: string } & Record<string, unknown>;
+  recipientCount: number;
+  broad: boolean;
+}
+
+/** GET /comm-admin/preferences (singleton). */
+export interface CommPreferences {
+  categories: Record<string, boolean>;
+  updatedBy: string | null;
+  updatedAt: string | null;
+}
+
+/** PATCH /comm-admin/preferences result (warning set when security disabled). */
+export interface CommPreferencesUpdate {
+  categories: Record<string, boolean>;
+  warning: string | null;
+}
+
+/** GET /comm-admin/reports — communication report aggregates. */
+export interface CommReports {
+  window: string;
+  status: {
+    sent: number;
+    failed: number;
+    pending: number;
+    skipped: number;
+    delivered: number;
+    total: number;
+  };
+  byTemplate: Array<{ template: string | null; total: number; failed: number }>;
+  byCategory: Array<{ category: string | null; total: number }>;
+  bySource: Array<{ source: string; total: number; failed: number }>;
+  byTenant: Array<{ institutionId: string | null; institutionName: string | null; total: number }>;
+  broadcasts: {
+    total: number;
+    sent: number;
+    scheduled: number;
+    draft: number;
+    cancelled: number;
+    failed: number;
+    recipientsReached: number;
+  };
+  testSends: number;
+  securityEmails: number;
+}
+
+/** GET /comm-admin/integrations — links to Observability / Jobs / Security / Audit. */
+export interface CommIntegrations {
+  smtp:
+    | {
+        configured: boolean;
+        status: string;
+        verified: boolean;
+        delivery: {
+          sent: number;
+          failed: number;
+          skipped: number;
+          failureRatePct: number;
+        };
+      }
+    | { unavailable: true };
+  jobs: { byType: Array<{ type: string; total: number; failed: number }> };
+  security: { events: number };
+  audit: { actions: number };
+  links: { observability: string; jobs: string; security: string; audit: string };
+}

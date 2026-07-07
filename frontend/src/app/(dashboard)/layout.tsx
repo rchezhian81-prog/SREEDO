@@ -127,6 +127,7 @@ const SUPER_ADMIN_NAV: NavItem[] = [
   { href: "/super-admin/exports", label: "Data Exports", icon: "package", perm: "platform:read" },
   { href: "/super-admin/health", label: "System Health", icon: "alert", perm: "platform:health_read" },
   { href: "/super-admin/observability", label: "Observability", icon: "barChart", perm: "observability:read" },
+  { href: "/super-admin/communication", label: "Communication Admin", icon: "mail", perm: "comm:dashboard_read" },
   { href: "/super-admin/backups", label: "Backups", icon: "shield", perm: "backup:read" },
   { href: "/super-admin/jobs", label: "Jobs", icon: "gear", perm: "jobs:read" },
   { href: "/security", label: "Security", icon: "shield" },
