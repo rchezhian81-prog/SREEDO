@@ -3080,3 +3080,349 @@ export interface ExportRetention {
   updatedBy: string | null;
   updatedAt: string | null;
 }
+
+// --- Super Admin M — Background Jobs Console / Queue Governance (/jobs-ops/*) ---
+//
+// The composed Background Jobs views. Every timestamp is an ISO string; `null`
+// wherever the FIXED backend contract (jobsops.service) returns null. The API
+// masks every payload/error/result/reason — the UI only ever renders what it is
+// given (no secrets, stacks, headers or bodies are ever emitted).
+
+/** Persisted job statuses (mirrors jobs_status_check). */
+export type JobOpsStatus =
+  | "pending"
+  | "running"
+  | "success"
+  | "failed"
+  | "cancelled"
+  | "dead_letter";
+
+/** List/report filter statuses — persisted set plus the derived `stuck`. */
+export type JobFilterStatus = JobOpsStatus | "stuck";
+
+/** Per-attempt status (mirrors job_attempts.status CHECK). */
+export type JobAttemptStatus =
+  | "running"
+  | "success"
+  | "failed"
+  | "retry"
+  | "cancelled"
+  | "dead_letter";
+
+/** Derived worker liveness (from the heartbeat age). */
+export type WorkerStatus = "online" | "degraded" | "offline" | "unknown";
+
+/** Derived source-module buckets (SOURCE_MODULE in the service). */
+export type SourceModule =
+  | "Reports"
+  | "Communication"
+  | "Backup"
+  | "Export"
+  | "Integrations"
+  | "Observability"
+  | "System"
+  | "Other";
+
+/** Aggregated schedule source. */
+export type ScheduleSource = "reports" | "backup" | "export" | "system";
+
+/** Dashboard / reports time window. */
+export type JobWindow = "today" | "24h" | "7d" | "30d" | "custom";
+
+/** Job alert severity + status (reuses the Observability L alert store). */
+export type JobAlertSeverity = IncidentSeverity;
+export type JobAlertStatus = AlertStatus;
+
+/** A recent job alert summary row on the dashboard. */
+export interface JobAlertSummary {
+  id: string;
+  ruleName: string;
+  type: string;
+  severity: JobAlertSeverity;
+  status: JobAlertStatus;
+  service: string | null;
+  triggeredAt: string;
+}
+
+/** GET /jobs-ops/summary — the ~20-metric queue dashboard. */
+export interface JobsDashboard {
+  window: JobWindow;
+  statuses: {
+    pending: number;
+    running: number;
+    success: number;
+    failed: number;
+    cancelled: number;
+    dead_letter: number;
+  };
+  queueDepth: number;
+  stuck: number;
+  retriedInWindow: number;
+  failedInWindow: number;
+  failureRatePct: number;
+  avgJobDurationMs: number;
+  longestRunningJob: { id: string; type: string; startedAt: string | null; ageMs: number } | null;
+  workers: { total: number; active: number };
+  scheduler: { lastTickAt: string | null; status: string; note: string };
+  jobsNeedingAttention: number;
+  recentAlerts: JobAlertSummary[];
+}
+
+/** A related-entity reference surfaced on the detail view (opaque ids). */
+export interface JobRelatedLink {
+  type: string;
+  id: string;
+  key: string;
+}
+
+/** One row of the job list / dead-letter list (payload already masked). */
+export interface JobRow {
+  id: string;
+  type: string;
+  payload: Record<string, unknown>;
+  status: JobOpsStatus;
+  priority: number;
+  attempts: number;
+  maxAttempts: number;
+  queue: string;
+  runAt: string | null;
+  lockedAt: string | null;
+  lockedBy: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  error: string | null;
+  deadLetteredAt: string | null;
+  deadLetterReason: string | null;
+  dedupeKey: string | null;
+  institutionId: string | null;
+  institutionName: string | null;
+  institutionCode: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+  sourceModule: SourceModule;
+  stuck: boolean;
+}
+
+/** GET /jobs-ops/jobs and /dead-letter. */
+export interface JobListResult {
+  rows: JobRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/** One append-only attempt row (masked error/result). */
+export interface JobAttempt {
+  id: string;
+  attemptNumber: number;
+  status: JobAttemptStatus;
+  workerId: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  durationMs: number | null;
+  error: string | null;
+  retryReason: string | null;
+  backoffMs: number | null;
+  nextRetryAt: string | null;
+  resultSummary: string | null;
+  createdAt: string;
+}
+
+/** One recent audit event on the job detail. */
+export interface JobAuditEvent {
+  id: string;
+  action: string;
+  actorEmail: string | null;
+  actorRole: string | null;
+  detail: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+/** Per-type retry policy applied by the worker. */
+export interface JobRetryPolicy {
+  maxAttempts: number;
+  backoffStrategy: string;
+  backoffBaseMs: number;
+  module: SourceModule;
+  note: string;
+}
+
+/** GET /jobs-ops/jobs/:id — the full masked detail. NOTE: the backend response
+ *  overrides the numeric `attempts` counter with the attempt array, so on the
+ *  detail `attempts` is the timeline (use `attempts.length` for the count). */
+export interface JobDetail extends Omit<JobRow, "attempts"> {
+  relatedLinks: JobRelatedLink[];
+  attempts: JobAttempt[];
+  recentAudit: JobAuditEvent[];
+  retryPolicy: JobRetryPolicy;
+}
+
+/** GET /jobs-ops/jobs/:id/attempts. */
+export interface JobAttemptsResult {
+  rows: JobAttempt[];
+}
+
+/** POST /jobs-ops/bulk — per-id state rules; skipped carries the reason. */
+export interface JobBulkResult {
+  requested: number;
+  affected: number;
+  skipped: { id: string; reason: string }[];
+}
+
+/** One worker heartbeat with derived liveness. */
+export interface WorkerHeartbeat {
+  workerId: string;
+  lastHeartbeatAt: string | null;
+  currentJobId: string | null;
+  jobsProcessed: number;
+  jobsFailed: number;
+  queue: string | null;
+  hostname: string | null;
+  version: string | null;
+  firstSeenAt: string | null;
+  updatedAt: string | null;
+  status: WorkerStatus;
+  lastHeartbeatAgeMs: number;
+}
+
+/** GET /jobs-ops/workers. */
+export interface WorkersResult {
+  workers: WorkerHeartbeat[];
+  note: string;
+}
+
+/** One aggregated recurring schedule. */
+export interface JobSchedule {
+  source: ScheduleSource;
+  id: string;
+  name: string;
+  jobType: string;
+  frequency: string | null;
+  enabled: boolean;
+  status: string;
+  lastRunAt: string | null;
+  lastStatus: string | null;
+  nextRunAt: string | null;
+  institutionName?: string | null;
+  critical: boolean;
+  note?: string;
+}
+
+/** GET /jobs-ops/schedules. */
+export interface JobSchedulesResult {
+  schedules: JobSchedule[];
+}
+
+/** POST /jobs-ops/process — on-demand worker drain. */
+export interface JobProcessResult {
+  processed: number;
+  success: number;
+  failed: number;
+  retried: number;
+}
+
+/** POST /jobs-ops/run-scheduler — schedule tick enqueue counts. */
+export interface JobSchedulerRunResult {
+  reports: number;
+  backups: number;
+  exports: number;
+}
+
+/** A job/worker/scheduler alert row (reuses the L store; note masked). */
+export interface JobAlert {
+  id: string;
+  ruleId: string | null;
+  ruleName: string;
+  type: string;
+  severity: JobAlertSeverity;
+  status: JobAlertStatus;
+  service: string | null;
+  metricValue: number | null;
+  threshold: number | null;
+  incidentId: string | null;
+  note: string | null;
+  triggeredAt: string;
+  acknowledgedBy: string | null;
+  acknowledgedAt: string | null;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+}
+
+/** GET /jobs-ops/alerts (paginated). */
+export interface JobAlertListResult {
+  rows: JobAlert[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/** GET /jobs-ops/retry-policy — read-only summary. */
+export interface RetryPolicySummary {
+  default: {
+    maxAttempts: number;
+    backoffStrategy: string;
+    backoffBaseMs: number;
+    formula: string;
+  };
+  perType: Array<{
+    type: string;
+    module: SourceModule;
+    minMaxAttempts: number;
+    maxMaxAttempts: number;
+    jobs: number;
+  }>;
+  note: string;
+}
+
+/** GET /jobs-ops/reports — the aggregate report bundle. */
+export interface JobReports {
+  window: JobWindow;
+  volumeByType: Array<{ type: string; count: number }>;
+  statusSummary: {
+    pending: number;
+    running: number;
+    success: number;
+    failed: number;
+    cancelled: number;
+    dead_letter: number;
+  };
+  failureReport: Array<{ type: string; failures: number }>;
+  retryReport: Array<{ type: string; retries: number }>;
+  deadLetterReport: Array<{ type: string; count: number }>;
+  schedulerRunReport: Array<{ type: string; status: string; count: number }>;
+  moduleWise: Array<{ module: string; count: number; failed: number }>;
+  queueDepth: { pending: number; running: number; total: number };
+  longRunningJobs: Array<{ id: string; type: string; startedAt: string | null; ageMs: number }>;
+  workerPerformance: Array<{
+    workerId: string;
+    jobsProcessed: number;
+    jobsFailed: number;
+    lastHeartbeatAt: string | null;
+    hostname: string | null;
+    version: string | null;
+  }>;
+}
+
+/** GET /jobs-ops/integrations — links to Observability / Audit / Security. */
+export interface JobsIntegrations {
+  observability:
+    | {
+        queue: {
+          pending: number;
+          running: number;
+          success: number;
+          failed: number;
+          cancelled: number;
+        };
+        stuck: number;
+        failedTrend: Array<{ day: string; count: number }>;
+        processed: { success: number; failed: number; retried: number };
+        workerEnabled: boolean;
+      }
+    | { unavailable: true };
+  audit: { jobActions24h: number };
+  security: { criticalJobAlerts: number };
+  links: { observability: string; audit: string; security: string };
+}

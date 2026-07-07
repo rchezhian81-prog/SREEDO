@@ -1,5 +1,8 @@
+import os from "node:os";
 import { query } from "../../db/postgres";
 import { env } from "../../config/env";
+import { ApiError } from "../../utils/api-error";
+import { maskFreeText } from "../platform/audit.service";
 import { recordJob } from "../../observability/metrics";
 import { executeScheduledById } from "../scheduledreports/scheduledreports.service";
 import {
@@ -22,6 +25,8 @@ interface ClaimedJob {
   maxAttempts: number;
   institutionId: string | null;
   createdBy: string | null;
+  /** The worker id that holds the claim (from the claim's RETURNING locked_by). */
+  workerId: string | null;
 }
 
 type Handler = (job: ClaimedJob) => Promise<void>;
@@ -79,7 +84,7 @@ const HANDLERS: Record<string, Handler> = {
   },
 };
 
-const BACKOFF_BASE_MS = 30_000;
+export const BACKOFF_BASE_MS = 30_000;
 
 /** Exponential backoff: 30s, 60s, 120s, … keyed off the attempt just made. */
 function backoffMs(attempts: number): number {
@@ -112,16 +117,99 @@ export async function claimJob(
        LIMIT 1
      )
      RETURNING id, type, payload, attempts, max_attempts AS "maxAttempts",
-               institution_id AS "institutionId", created_by AS "createdBy"`,
+               institution_id AS "institutionId", created_by AS "createdBy",
+               locked_by AS "workerId"`,
     params
   );
   return rows[0] ?? null;
+}
+
+/**
+ * Append one row to the per-attempt history (Super Admin M). Best-effort and
+ * append-only: a recording failure is logged and swallowed so it can NEVER break
+ * job processing. `error` / `result_summary` are already masked + short by the
+ * caller (no stack, no secrets, no payload contents).
+ */
+async function recordAttempt(
+  job: Pick<ClaimedJob, "id" | "attempts" | "workerId">,
+  opts: {
+    status: "success" | "retry" | "failed" | "dead_letter";
+    startedMs: number;
+    error?: string | null;
+    retryReason?: string | null;
+    backoffMs?: number | null;
+    nextRetryAt?: Date | null;
+    resultSummary?: string | null;
+  }
+): Promise<void> {
+  try {
+    await query(
+      `INSERT INTO job_attempts
+         (job_id, attempt_number, status, worker_id, started_at, finished_at,
+          duration_ms, error, retry_reason, backoff_ms, next_retry_at, result_summary)
+       VALUES ($1,$2,$3,$4, to_timestamp($5 / 1000.0), now(), $6,$7,$8,$9,$10,$11)`,
+      [
+        job.id,
+        job.attempts,
+        opts.status,
+        job.workerId ?? null,
+        opts.startedMs,
+        Math.max(0, Date.now() - opts.startedMs),
+        opts.error ?? null,
+        opts.retryReason ?? null,
+        opts.backoffMs ?? null,
+        opts.nextRetryAt ?? null,
+        opts.resultSummary ?? null,
+      ]
+    );
+  } catch (err) {
+    // Attempt history is observability only — never let it break processing.
+    console.error("job attempt recording failed (continuing):", err);
+  }
+}
+
+/**
+ * Upsert this worker's heartbeat (Super Admin M). Keyed by worker_id; bumps the
+ * processed/failed counters, tracks the current job, and records only SAFE host
+ * facts (os.hostname + optional APP_VERSION — never private-network detail or a
+ * secret). Best-effort: a heartbeat failure never breaks processing.
+ */
+async function upsertHeartbeat(
+  workerId: string,
+  opts: { currentJobId?: string | null; incProcessed?: number; incFailed?: number } = {}
+): Promise<void> {
+  try {
+    await query(
+      `INSERT INTO worker_heartbeats
+         (worker_id, status, last_heartbeat_at, current_job_id, jobs_processed, jobs_failed, hostname, version)
+       VALUES ($1, 'online', now(), $2, $3, $4, $5, $6)
+       ON CONFLICT (worker_id) DO UPDATE SET
+         status = 'online',
+         last_heartbeat_at = now(),
+         current_job_id = EXCLUDED.current_job_id,
+         jobs_processed = worker_heartbeats.jobs_processed + $3,
+         jobs_failed = worker_heartbeats.jobs_failed + $4,
+         hostname = EXCLUDED.hostname,
+         version = EXCLUDED.version`,
+      [
+        workerId,
+        opts.currentJobId ?? null,
+        opts.incProcessed ?? 0,
+        opts.incFailed ?? 0,
+        os.hostname().slice(0, 200),
+        process.env.APP_VERSION ?? null,
+      ]
+    );
+  } catch (err) {
+    console.error("worker heartbeat failed (continuing):", err);
+  }
 }
 
 /** Runs a claimed job; on error retries with backoff until max_attempts, then
  *  marks a permanent failure. Only a short error message is stored (no stack,
  *  no secrets). */
 export async function runJob(job: ClaimedJob): Promise<"success" | "retry" | "failed"> {
+  const startedMs = Date.now();
   try {
     const handler = HANDLERS[job.type];
     if (!handler) throw new Error(`Unknown job type: ${job.type}`);
@@ -130,23 +218,38 @@ export async function runJob(job: ClaimedJob): Promise<"success" | "retry" | "fa
       job.id,
     ]);
     recordJob("success");
+    // Append-only attempt row. result_summary is a fixed SAFE token — never payload.
+    await recordAttempt(job, { status: "success", startedMs, resultSummary: "ok" });
     return "success";
   } catch (err) {
-    const safe = (err instanceof Error ? err.message : "Job failed").slice(0, 500);
+    // Short + MASKED error only (no stack, no secrets); the same string is stored
+    // on the job row and in the attempt history.
+    const safe = String(maskFreeText((err instanceof Error ? err.message : "Job failed").slice(0, 500)));
     if (job.attempts >= job.maxAttempts) {
       await query(
         "UPDATE jobs SET status='failed', completed_at=now(), error=$2 WHERE id=$1",
         [job.id, safe]
       );
       recordJob("failed");
+      await recordAttempt(job, { status: "failed", startedMs, error: safe, retryReason: "max_attempts_exhausted" });
       return "failed";
     }
+    const backoff = backoffMs(job.attempts);
+    const nextRetryAt = new Date(Date.now() + backoff);
     await query(
       `UPDATE jobs SET status='pending', run_at=$2, error=$3, locked_at=NULL, locked_by=NULL
        WHERE id=$1`,
-      [job.id, new Date(Date.now() + backoffMs(job.attempts)), safe]
+      [job.id, nextRetryAt, safe]
     );
     recordJob("retry");
+    await recordAttempt(job, {
+      status: "retry",
+      startedMs,
+      error: safe,
+      retryReason: "handler_error",
+      backoffMs: backoff,
+      nextRetryAt,
+    });
     return "retry";
   }
 }
@@ -166,13 +269,63 @@ export async function processDueJobs(
   for (let i = 0; i < limit; i += 1) {
     const job = await claimJob(workerId, scope);
     if (!job) break;
+    // Heartbeat: mark this worker busy on the claimed job.
+    await upsertHeartbeat(workerId, { currentJobId: job.id });
     const result = await runJob(job);
     processed += 1;
     if (result === "success") success += 1;
     else if (result === "failed") failed += 1;
     else retried += 1;
+    // Heartbeat: clear current job + bump this run's counters.
+    await upsertHeartbeat(workerId, {
+      currentJobId: null,
+      incProcessed: 1,
+      incFailed: result === "failed" ? 1 : 0,
+    });
   }
+  // A liveness heartbeat even on an empty drain, so the worker is visible as
+  // online in the console after any on-demand run.
+  if (processed === 0) await upsertHeartbeat(workerId, { currentJobId: null });
   return { processed, success, failed, retried };
+}
+
+/**
+ * Move a permanently `failed` job to the dead-letter queue (Super Admin M). State
+ * rule enforced in-DB (only `failed` → `dead_letter`); the reason is masked +
+ * short (no secrets). Append-only: writes a `dead_letter` attempt row. The audit
+ * entry is written by the service layer, not here.
+ */
+export async function moveToDeadLetter(id: string, reason: string, _actor?: unknown): Promise<void> {
+  const safeReason = String(maskFreeText((reason ?? "").slice(0, 500)));
+  const { rows } = await query<{ attempts: number; workerId: string | null }>(
+    `UPDATE jobs SET status='dead_letter', dead_lettered_at=now(),
+       dead_letter_reason=$2, updated_at=now()
+     WHERE id=$1 AND status='failed'
+     RETURNING attempts, locked_by AS "workerId"`,
+    [id, safeReason]
+  );
+  if (!rows[0]) throw ApiError.badRequest("Only failed jobs can be moved to the dead-letter queue");
+  await recordAttempt(
+    { id, attempts: rows[0].attempts, workerId: rows[0].workerId },
+    { status: "dead_letter", startedMs: Date.now(), error: safeReason, retryReason: "dead_letter" }
+  );
+}
+
+/**
+ * Requeue a `dead_letter` job for a fresh run (Super Admin M). Only a
+ * `dead_letter` job is eligible; resets attempts and clears the lock/error so the
+ * claim path picks it up. The audit entry is written by the service layer.
+ */
+export async function requeueFromDeadLetter(id: string, _actor?: unknown): Promise<void> {
+  const { rows } = await query<{ id: string }>(
+    `UPDATE jobs SET status='pending', attempts=0, run_at=now(), error=NULL,
+       locked_at=NULL, locked_by=NULL, started_at=NULL, completed_at=NULL,
+       dead_lettered_at=NULL, dead_letter_reason=NULL, updated_at=now()
+     WHERE id=$1 AND status='dead_letter'
+     RETURNING id`,
+    [id]
+  );
+  if (!rows[0]) throw ApiError.badRequest("Only dead-letter jobs can be requeued");
 }
 
 let timer: NodeJS.Timeout | null = null;
