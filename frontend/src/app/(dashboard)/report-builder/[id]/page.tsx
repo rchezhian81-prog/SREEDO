@@ -193,9 +193,9 @@ export default function ReportRunPage() {
 
           {result && result.rows.length > 0 ? (
             <>
-              <div className="overflow-x-auto rounded-xl border border-slate-200">
+              <div className="overflow-x-auto rounded-xl border border-line">
                 <table className="w-full text-left text-sm">
-                  <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+                  <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
                     <tr>
                       {result.columns.map((col) => (
                         <th
@@ -207,13 +207,13 @@ export default function ReportRunPage() {
                       ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-line">
                     {result.rows.map((row, rowIndex) => (
                       <tr key={rowIndex}>
                         {result.columns.map((col) => (
                           <td
                             key={col.key}
-                            className="whitespace-nowrap px-4 py-3 text-slate-600"
+                            className="whitespace-nowrap px-4 py-3 text-muted"
                           >
                             {renderCell(row[col.key])}
                           </td>
@@ -223,7 +223,7 @@ export default function ReportRunPage() {
                   </tbody>
                 </table>
               </div>
-              <p className="mt-3 text-sm text-slate-500">
+              <p className="mt-3 text-sm text-muted">
                 {result.rows.length}{" "}
                 {result.rows.length === 1 ? "row" : "rows"}
               </p>

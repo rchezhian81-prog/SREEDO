@@ -10,6 +10,7 @@ import {
   Badge,
   Button,
   Card,
+  ConfirmDialog,
   EmptyState,
   ErrorNote,
   PageHeader,
@@ -59,6 +60,7 @@ export default function ReportBuilderHubPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<CustomReport | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -68,7 +70,10 @@ export default function ReportBuilderHubPage() {
         api.get<CustomReport[]>("/custom-reports"),
         api
           .get<ReportSource[]>("/custom-reports/sources")
-          .catch(() => [] as ReportSource[]),
+          .catch((err) => {
+            console.error("Failed to load report sources", err);
+            return [] as ReportSource[];
+          }),
       ]);
       setReports(defs);
       setSources(sourceList);
@@ -107,12 +112,17 @@ export default function ReportBuilderHubPage() {
     }
   };
 
-  const onDelete = async (report: CustomReport) => {
-    if (!confirm(`Delete report "${report.name}"?`)) return;
+  const onDelete = (report: CustomReport) => {
+    setDeleting(report);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleting) return;
     setActionError(null);
-    setBusyId(report.id);
+    setBusyId(deleting.id);
     try {
-      await api.delete(`/custom-reports/${report.id}`);
+      await api.delete(`/custom-reports/${deleting.id}`);
+      setDeleting(null);
       await load();
     } catch (err) {
       setActionError(
@@ -182,9 +192,9 @@ export default function ReportBuilderHubPage() {
           {reports.length === 0 ? (
             <EmptyState message="No saved reports yet. Create one to get started." />
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+            <div className="overflow-x-auto rounded-xl border border-line bg-surface">
               <table className="w-full text-left text-sm">
-                <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+                <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
                   <tr>
                     <th className="px-4 py-3">Name</th>
                     <th className="px-4 py-3">Source</th>
@@ -192,13 +202,13 @@ export default function ReportBuilderHubPage() {
                     <th className="px-4 py-3" />
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-line">
                   {reports.map((report) => (
-                    <tr key={report.id} className="hover:bg-slate-50">
-                      <td className="px-4 py-3 font-medium text-slate-900">
+                    <tr key={report.id} className="hover:bg-hover">
+                      <td className="px-4 py-3 font-medium text-ink">
                         {report.name}
                       </td>
-                      <td className="px-4 py-3 text-slate-600">
+                      <td className="px-4 py-3 text-muted">
                         {sourceTitle(report.reportKey)}
                       </td>
                       <td className="px-4 py-3">
@@ -276,6 +286,18 @@ export default function ReportBuilderHubPage() {
           )}
         </div>
       )}
+
+      <ConfirmDialog
+        open={deleting !== null}
+        title="Delete report"
+        message={deleting ? `Delete report "${deleting.name}"?` : ""}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        tone="danger"
+        busy={deleting !== null && busyId === deleting.id}
+        onConfirm={confirmDelete}
+        onClose={() => setDeleting(null)}
+      />
     </>
   );
 }

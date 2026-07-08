@@ -9,7 +9,8 @@ import { useBrandingStore, type Branding } from "@/stores/branding-store";
 import { cx, Spinner, SkipLink } from "@/components/ui";
 import { Icon, type IconName } from "@/components/icons";
 import { useThemeStore } from "@/stores/theme-store";
-import { useModeStore } from "@/stores/mode-store";
+import { useModeStore, type CampusMode } from "@/stores/mode-store";
+import { useTerms, type TermSet } from "@/lib/terms";
 import { useI18n } from "@/i18n/I18nProvider";
 import { usePermissions } from "@/lib/use-permissions";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
@@ -29,89 +30,146 @@ type NavItem = {
   // show; owners/admins hold every permission so keep them all. Used by both the
   // super-admin nav and (PR-T2) the tenant nav for per-tenant role-aware hiding.
   perm?: string;
+  // Label that varies by School/College — resolved from useTerms() in the
+  // component (module-level data can't call the hook).
+  termLabel?: (t: TermSet) => string;
 };
 
-const SCHOOL_NAV: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: "grid" },
-  { href: "/get-started", label: "Get Started", icon: "rocket", adminOnly: true },
-  { href: "/analytics", label: "Analytics", icon: "trendUp" },
-  { href: "/students", label: "Students", icon: "cap", moduleKey: "students", perm: "students:read" },
-  { href: "/admissions", label: "Admissions", icon: "card", adminOnly: true, moduleKey: "admissions" },
-  { href: "/teachers", label: "Teachers", icon: "board", moduleKey: "staff" },
-  { href: "/classes", label: "Classes", icon: "school" },
-  { href: "/timetable", label: "Timetable", icon: "calendar", moduleKey: "timetable", perm: "timetable:read" },
-  { href: "/timetable/generate", label: "Auto Timetable", icon: "sparkles", adminOnly: true, moduleKey: "timetable" },
-  { href: "/calendar", label: "Calendar", icon: "calendar" },
-  { href: "/library", label: "Library", icon: "file", moduleKey: "library", perm: "library:read" },
-  { href: "/transport", label: "Transport", icon: "bus", moduleKey: "transport", perm: "transport:read" },
-  { href: "/hostel", label: "Hostel", icon: "building", moduleKey: "hostel", perm: "hostel:read" },
-  { href: "/inventory", label: "Inventory", icon: "package", moduleKey: "inventory", perm: "inventory:read" },
-  { href: "/staff", label: "Staff Attendance", icon: "briefcase", perm: "staff_attendance:read" },
-  { href: "/front-office", label: "Front Office", icon: "help", adminOnly: true },
-  { href: "/lost-found", label: "Lost & Found", icon: "tag", adminOnly: true },
-  { href: "/infirmary", label: "Infirmary", icon: "health", adminOnly: true },
-  { href: "/alumni", label: "Alumni", icon: "users", adminOnly: true },
-  { href: "/cafeteria", label: "Cafeteria", icon: "utensils", adminOnly: true },
-  { href: "/leave", label: "Leave", icon: "calcheck", perm: "leave:read" },
-  { href: "/payroll", label: "Payroll", icon: "wallet", moduleKey: "payroll" },
-  { href: "/attendance", label: "Attendance", icon: "calcheck", moduleKey: "attendance" },
-  { href: "/period-attendance", label: "Period Attendance", icon: "calcheck", moduleKey: "attendance" },
-  { href: "/exams", label: "Exams", icon: "file", moduleKey: "exams" },
-  { href: "/reports", label: "Reports", icon: "barChart", moduleKey: "reports", perm: "reports:read" },
-  { href: "/documents", label: "Documents", icon: "file", moduleKey: "documents", perm: "documents:read" },
-  { href: "/homework", label: "Homework", icon: "board", perm: "homework:read" },
-  { href: "/study-materials", label: "Study Materials", icon: "bookOpen" },
-  { href: "/live-classes", label: "Live Classes", icon: "video" },
-  { href: "/quizzes", label: "Quizzes", icon: "quiz" },
-  { href: "/biometric", label: "Biometric", icon: "fingerprint", adminOnly: true },
-  { href: "/polls", label: "Polls", icon: "barChart" },
-  { href: "/gallery", label: "Gallery", icon: "image", adminOnly: true },
-  { href: "/id-cards", label: "ID Cards", icon: "card", perm: "id_cards:read" },
-  { href: "/transfer-certificates", label: "Transfer Certificates", icon: "file" },
-  { href: "/reports-center", label: "Reports Center", icon: "barChart", perm: "reports:center:read" },
-  { href: "/report-builder", label: "Report Builder", icon: "barChart", perm: "custom_reports:read" },
-  { href: "/scheduled-reports", label: "Scheduled Reports", icon: "calendar", perm: "scheduled_reports:read" },
-  { href: "/disciplinary", label: "Disciplinary", icon: "shield" },
-  { href: "/fees", label: "Fees", icon: "card", moduleKey: "fees", perm: "fees:read" },
-  { href: "/fees/setup", label: "Fee Setup", icon: "gear" },
-  { href: "/fees/refunds", label: "Fee Refunds", icon: "receipt", adminOnly: true },
-  { href: "/online-payments", label: "Online Payments", icon: "wallet" },
-  { href: "/accounting", label: "Accounting", icon: "wallet", adminOnly: true },
-  { href: "/announcements", label: "Announcements", icon: "megaphone" },
-  { href: "/communication", label: "Communication", icon: "mail", moduleKey: "communication", perm: "communication:read" },
-  { href: "/messaging", label: "Messaging", icon: "message" },
-  { href: "/feedback", label: "Feedback", icon: "message", adminOnly: true },
-  { href: "/assistant", label: "AI Assistant", icon: "sparkles" },
-  { href: "/ai-insights", label: "AI Insights", icon: "trendUp", perm: "ai:read" },
-  { href: "/jobs", label: "Jobs", icon: "gear", adminOnly: true },
-  { href: "/integrations", label: "Integrations", icon: "link", adminOnly: true },
-  { href: "/branding", label: "Branding", icon: "palette", adminOnly: true },
-  { href: "/settings", label: "Settings", icon: "gear", adminOnly: true },
-  { href: "/settings/rbac", label: "Roles & Permissions", icon: "shield", perm: "tenant_rbac:read" },
-  { href: "/users", label: "Users", icon: "users", adminOnly: true },
-  { href: "/activity", label: "Activity Log", icon: "file", adminOnly: true },
-  { href: "/security", label: "Security", icon: "shield" },
-];
+type NavGroup = { title?: string; items: NavItem[] };
 
-// College edition — swap the school's class-centric academic block for the
-// higher-ed structure (departments → programs → semesters → results).
-// Everything else (operations, finance, comms, admin) is shared with school.
-const COLLEGE_ACADEMICS: NavItem[] = [
-  { href: "/college", label: "College Home", icon: "building", perm: "college:read" },
-  { href: "/college/departments", label: "Departments", icon: "network", perm: "departments:read" },
-  { href: "/college/programs", label: "Programs", icon: "layers", perm: "programs:read" },
-  { href: "/college/semesters", label: "Semesters", icon: "calendar", perm: "semesters:read" },
-  { href: "/college/subjects", label: "Subjects", icon: "bookOpen" },
-  { href: "/college/enrollments", label: "Enrollments", icon: "userPlus" },
-  { href: "/college/results", label: "Results", icon: "clipboard" },
-];
-
-const COLLEGE_NAV: NavItem[] = SCHOOL_NAV.flatMap((item) =>
-  item.href === "/classes" ? COLLEGE_ACADEMICS : [item]
-).map((item) =>
-  // College speaks of "Faculty", not "Teachers".
-  item.href === "/teachers" ? { ...item, label: "Faculty" } : item
-);
+// Tenant sidebar organised into a stable information architecture (PR-T4) — the
+// flat ~60-item list is grouped into eleven sections. Original per-item RBAC
+// gates are preserved; admin-sensitive items that previously showed to any staff
+// role now carry `adminOnly`. Reports (run / build / schedule) collapse into one
+// hub entry; the exam "report cards" page moves under Exams & Results.
+function tenantGroups(mode: CampusMode): NavGroup[] {
+  const isCollege = mode === "college";
+  const academic: NavItem[] = isCollege
+    ? [
+        { href: "/college", label: "College Home", icon: "building", perm: "college:read" },
+        { href: "/college/departments", label: "Departments", icon: "network", perm: "departments:read" },
+        { href: "/college/programs", label: "Programs", icon: "layers", perm: "programs:read" },
+        { href: "/college/semesters", label: "Semesters", icon: "calendar", perm: "semesters:read" },
+        { href: "/college/subjects", label: "Subjects", termLabel: (t) => t.subjectPlural, icon: "bookOpen" },
+        { href: "/college/enrollments", label: "Enrollments", icon: "userPlus" },
+        { href: "/timetable", label: "Timetable", icon: "calendar", moduleKey: "timetable", perm: "timetable:read" },
+        { href: "/timetable/generate", label: "Auto Timetable", icon: "sparkles", adminOnly: true, moduleKey: "timetable" },
+        { href: "/calendar", label: "Calendar", icon: "calendar" },
+      ]
+    : [
+        { href: "/classes", label: "Classes", icon: "school" },
+        { href: "/timetable", label: "Timetable", icon: "calendar", moduleKey: "timetable", perm: "timetable:read" },
+        { href: "/timetable/generate", label: "Auto Timetable", icon: "sparkles", adminOnly: true, moduleKey: "timetable" },
+        { href: "/calendar", label: "Calendar", icon: "calendar" },
+      ];
+  const examsResults: NavItem[] = [
+    { href: "/exams", label: "Exams", icon: "file", moduleKey: "exams" },
+    ...(isCollege
+      ? [{ href: "/college/results", label: "Results", icon: "clipboard" } as NavItem]
+      : []),
+    // Formerly the mislabelled "/reports" nav item — it is the report-card/grade
+    // page, so it lives under results with a terminology-aware label.
+    { href: "/reports", label: "Report Cards", termLabel: (t) => `${t.reportCard}s`, icon: "clipboard", moduleKey: "reports", perm: "reports:read" },
+  ];
+  return [
+    {
+      title: "Overview",
+      items: [
+        { href: "/dashboard", label: "Dashboard", icon: "grid" },
+        { href: "/get-started", label: "Get Started", icon: "rocket", adminOnly: true },
+        { href: "/analytics", label: "Analytics", icon: "trendUp", adminOnly: true },
+        { href: "/ai-insights", label: "AI Insights", icon: "sparkles", perm: "ai:read" },
+      ],
+    },
+    { title: "Academic Setup", items: academic },
+    {
+      title: "Students & Admissions",
+      items: [
+        { href: "/students", label: "Students", icon: "cap", moduleKey: "students", perm: "students:read" },
+        { href: "/admissions", label: "Admissions", icon: "userPlus", adminOnly: true, moduleKey: "admissions" },
+        { href: "/id-cards", label: "ID Cards", icon: "card", perm: "id_cards:read" },
+        { href: "/transfer-certificates", label: "Transfer Certificates", icon: "file", adminOnly: true },
+        { href: "/documents", label: "Documents", icon: "file", moduleKey: "documents", perm: "documents:read" },
+        { href: "/alumni", label: "Alumni", icon: "users", adminOnly: true },
+      ],
+    },
+    {
+      title: "Attendance & Daily Work",
+      items: [
+        { href: "/attendance", label: "Attendance", icon: "calcheck", moduleKey: "attendance" },
+        { href: "/period-attendance", label: "Period Attendance", icon: "calcheck", moduleKey: "attendance" },
+        { href: "/homework", label: "Homework", icon: "board", perm: "homework:read" },
+        { href: "/leave", label: "Leave", icon: "calcheck", perm: "leave:read" },
+        { href: "/disciplinary", label: "Disciplinary", icon: "shield", adminOnly: true },
+        { href: "/study-materials", label: "Study Materials", icon: "bookOpen" },
+        { href: "/live-classes", label: "Live Classes", icon: "video" },
+        { href: "/quizzes", label: "Quizzes", icon: "quiz" },
+        { href: "/biometric", label: "Biometric", icon: "fingerprint", adminOnly: true },
+      ],
+    },
+    {
+      title: "Fees & Accounts",
+      items: [
+        { href: "/fees", label: "Fees", icon: "card", moduleKey: "fees", perm: "fees:read" },
+        { href: "/fees/setup", label: "Fee Setup", icon: "gear", adminOnly: true },
+        { href: "/fees/refunds", label: "Fee Refunds", icon: "receipt", adminOnly: true },
+        { href: "/online-payments", label: "Online Payments", icon: "wallet", adminOnly: true },
+        { href: "/accounting", label: "Accounting", icon: "wallet", adminOnly: true },
+      ],
+    },
+    { title: "Exams & Results", items: examsResults },
+    {
+      title: "Staff & HR",
+      items: [
+        { href: "/teachers", label: "Teachers", termLabel: (t) => t.teachers, icon: "board", moduleKey: "staff" },
+        { href: "/staff", label: "Staff Attendance", icon: "briefcase", perm: "staff_attendance:read" },
+        { href: "/payroll", label: "Payroll", icon: "wallet", adminOnly: true, moduleKey: "payroll" },
+      ],
+    },
+    {
+      title: "Operations",
+      items: [
+        { href: "/library", label: "Library", icon: "bookOpen", moduleKey: "library", perm: "library:read" },
+        { href: "/transport", label: "Transport", icon: "bus", moduleKey: "transport", perm: "transport:read" },
+        { href: "/hostel", label: "Hostel", icon: "building", moduleKey: "hostel", perm: "hostel:read" },
+        { href: "/inventory", label: "Inventory", icon: "package", moduleKey: "inventory", perm: "inventory:read" },
+        { href: "/front-office", label: "Front Office", icon: "help", adminOnly: true },
+        { href: "/lost-found", label: "Lost & Found", icon: "tag", adminOnly: true },
+        { href: "/infirmary", label: "Infirmary", icon: "health", adminOnly: true },
+        { href: "/cafeteria", label: "Cafeteria", icon: "utensils", adminOnly: true },
+        { href: "/gallery", label: "Gallery", icon: "image", adminOnly: true },
+      ],
+    },
+    {
+      title: "Communication",
+      items: [
+        { href: "/announcements", label: "Announcements", icon: "megaphone" },
+        { href: "/communication", label: "Communication", icon: "mail", moduleKey: "communication", perm: "communication:read" },
+        { href: "/messaging", label: "Messaging", icon: "message" },
+        { href: "/feedback", label: "Feedback", icon: "message", adminOnly: true },
+        { href: "/polls", label: "Polls", icon: "barChart" },
+      ],
+    },
+    {
+      title: "Reports",
+      items: [{ href: "/reports-hub", label: "Reports", icon: "barChart", perm: "reports:read" }],
+    },
+    {
+      title: "Administration",
+      items: [
+        { href: "/settings", label: "Settings", icon: "gear", adminOnly: true },
+        { href: "/settings/rbac", label: "Roles & Permissions", icon: "shield", perm: "tenant_rbac:read" },
+        { href: "/users", label: "Users", icon: "users", adminOnly: true },
+        { href: "/branding", label: "Branding", icon: "palette", adminOnly: true },
+        { href: "/integrations", label: "Integrations", icon: "link", adminOnly: true },
+        { href: "/jobs", label: "Jobs", icon: "gear", adminOnly: true },
+        { href: "/activity", label: "Activity Log", icon: "file", adminOnly: true },
+        { href: "/assistant", label: "AI Assistant", icon: "sparkles" },
+        { href: "/security", label: "Security", icon: "shield" },
+      ],
+    },
+  ];
+}
 
 const SUPER_ADMIN_NAV: NavItem[] = [
   { href: "/super-admin/platform", label: "Platform Overview", icon: "grid", perm: "platform:read" },
@@ -176,15 +234,18 @@ function hrefToSupportModule(href: string): string | null {
 }
 
 function SidebarContent({
-  navItems,
+  navGroups,
   pathname,
   subtitle,
+  currentYearLabel,
   onNavigate,
   readOnly = false,
 }: {
-  navItems: NavItem[];
+  navGroups: NavGroup[];
   pathname: string;
   subtitle: string;
+  // The tenant's current academic year name, or null when none is configured.
+  currentYearLabel: string | null;
   onNavigate?: () => void;
   // Support-mode only: a read-only session shows a pill and keeps the full nav.
   readOnly?: boolean;
@@ -231,26 +292,35 @@ function SidebarContent({
         </div>
       )}
 
-      <nav className="flex-1 space-y-0.5 overflow-y-auto py-1">
-        {navItems.map((item) => {
-          const active = isActive(item.href, pathname);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={onNavigate}
-              className={cx(
-                "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition",
-                active
-                  ? "bg-gradient-to-r from-[#3070f7] to-[#2563eb] text-white shadow-[0_8px_18px_rgb(37_99_235_/_0.4)]"
-                  : "text-[#a8b6dc] hover:bg-white/10 hover:text-white"
-              )}
-            >
-              <Icon name={item.icon} className="h-[19px] w-[19px] shrink-0" />
-              {item.label}
-            </Link>
-          );
-        })}
+      <nav className="flex-1 space-y-3 overflow-y-auto py-1">
+        {navGroups.map((group) => (
+          <div key={group.title ?? "_"} className="space-y-0.5">
+            {group.title && (
+              <div className="px-3 pb-0.5 pt-1 text-[10px] font-bold uppercase tracking-wider text-[#6e7fb0]">
+                {group.title}
+              </div>
+            )}
+            {group.items.map((item) => {
+              const active = isActive(item.href, pathname);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={onNavigate}
+                  className={cx(
+                    "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition",
+                    active
+                      ? "bg-gradient-to-r from-[#3070f7] to-[#2563eb] text-white shadow-[0_8px_18px_rgb(37_99_235_/_0.4)]"
+                      : "text-[#a8b6dc] hover:bg-white/10 hover:text-white"
+                  )}
+                >
+                  <Icon name={item.icon} className="h-[19px] w-[19px] shrink-0" />
+                  {item.label}
+                </Link>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
       <div className="mt-2 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-3">
@@ -261,7 +331,9 @@ function SidebarContent({
           <div className="text-[10px] font-bold tracking-wide text-[#6e7fb0]">
             CURRENT SESSION
           </div>
-          <div className="text-[13.5px] font-bold text-white">2026 – 2027</div>
+          <div className="truncate text-[13.5px] font-bold text-white">
+            {currentYearLabel ?? "Not configured"}
+          </div>
         </div>
       </div>
     </div>
@@ -282,14 +354,140 @@ function ThemeToggle() {
   );
 }
 
+type SearchHit = { type: string; id: string; label: string; sub: string | null; href: string };
+
+const SEARCH_ICON: Record<string, IconName> = {
+  student: "cap",
+  staff: "board",
+  class: "school",
+  program: "layers",
+};
+const SEARCH_TYPE_LABEL: Record<string, string> = {
+  student: "Student",
+  staff: "Staff",
+  class: "Class",
+  program: "Program",
+};
+
+/**
+ * Real, tenant-scoped global search (PR-T4). Debounced calls hit the backend
+ * `/search` (staff-only, RBAC-gated, isolation-safe); each result routes to its
+ * module page. Honest states — searching / no-results / empty — never a fake
+ * live input.
+ */
+function GlobalSearch() {
+  const router = useRouter();
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const [results, setResults] = useState<SearchHit[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [searched, setSearched] = useState(false);
+
+  useEffect(() => {
+    const query = q.trim();
+    if (query.length < 2) {
+      setResults([]);
+      setSearched(false);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    const handle = setTimeout(() => {
+      api
+        .get<{ results: SearchHit[] }>(`/search?q=${encodeURIComponent(query)}`)
+        .then((r) => setResults(r.results))
+        .catch((err) => {
+          console.error("search failed:", err);
+          setResults([]);
+        })
+        .finally(() => {
+          setSearched(true);
+          setLoading(false);
+        });
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [q]);
+
+  const go = (href: string) => {
+    setOpen(false);
+    setQ("");
+    router.push(href);
+  };
+
+  const show = open && q.trim().length >= 2;
+  return (
+    <div className="relative max-w-[460px] flex-1">
+      <div className="flex h-11 items-center gap-2.5 rounded-xl border border-line bg-surface-2 px-4 text-muted">
+        <Icon name="search" className="h-[17px] w-[17px] shrink-0" />
+        <input
+          value={q}
+          onChange={(e) => {
+            setQ(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setOpen(false);
+            if (e.key === "Enter" && results[0]) go(results[0].href);
+          }}
+          className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-faint"
+          placeholder="Search students, staff, classes…"
+          aria-label="Search"
+        />
+      </div>
+      {show && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 top-[calc(100%+6px)] z-50 max-h-[360px] w-full overflow-auto rounded-2xl border border-line bg-surface py-1 shadow-pop">
+            {loading ? (
+              <div className="px-4 py-3 text-sm text-muted">Searching…</div>
+            ) : results.length === 0 ? (
+              <div className="px-4 py-3 text-sm text-muted">
+                {searched ? "No results found" : "Type to search"}
+              </div>
+            ) : (
+              results.map((r) => (
+                <button
+                  key={`${r.type}-${r.id}`}
+                  onClick={() => go(r.href)}
+                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-hover"
+                >
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-500/12 text-brand-600 dark:text-brand-300">
+                    <Icon name={SEARCH_ICON[r.type] ?? "search"} className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold text-ink">
+                      {r.label}
+                    </span>
+                    <span className="block truncate text-xs text-muted">
+                      {SEARCH_TYPE_LABEL[r.type] ?? r.type}
+                      {r.sub ? ` · ${r.sub}` : ""}
+                    </span>
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function Topbar({
   user,
   onMenu,
   onLogout,
+  currentYearLabel,
+  unreadCount,
+  alertCount,
 }: {
   user: { fullName?: string; email?: string; role?: string } | null;
   onMenu: () => void;
   onLogout: () => void;
+  currentYearLabel: string | null;
+  unreadCount: number;
+  alertCount: number;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const initial = (user?.fullName?.[0] ?? "U").toUpperCase();
@@ -305,38 +503,45 @@ function Topbar({
         <Icon name="menu" className="h-[21px] w-[21px]" />
       </button>
 
-      <div className="flex h-11 max-w-[460px] flex-1 items-center gap-2.5 rounded-xl border border-line bg-surface-2 px-4 text-muted">
-        <Icon name="search" className="h-[17px] w-[17px] shrink-0" />
-        <input
-          className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-faint"
-          placeholder="Search student, admission no., mobile no…"
-        />
-      </div>
+      <GlobalSearch />
 
-      <button className="ml-auto hidden h-11 shrink-0 items-center gap-2 rounded-xl border border-line bg-surface px-3.5 text-sm font-bold text-ink transition hover:bg-hover sm:flex">
+      {/* Current academic session — real value from Tenant Settings, links there. */}
+      <Link
+        href="/settings"
+        className="ml-auto hidden h-11 shrink-0 items-center gap-2 rounded-xl border border-line bg-surface px-3.5 text-sm font-bold text-ink transition hover:bg-hover sm:flex"
+        title="Academic year — manage in Settings"
+      >
         <Icon name="calendar" className="h-[17px] w-[17px] text-brand-600" />
-        2026 – 2027
+        {currentYearLabel ?? "No academic year"}
         <Icon name="chevronDown" className="h-3.5 w-3.5 text-muted" />
-      </button>
+      </Link>
 
-      <button
-        aria-label="Notifications"
+      {/* Alerts badge — real "needs attention" count; hidden when there are none. */}
+      <Link
+        href="/dashboard"
+        aria-label={`Alerts${alertCount > 0 ? ` (${alertCount})` : ""}`}
         className="relative grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-line bg-surface text-muted transition hover:bg-hover hover:text-ink"
       >
         <Icon name="bell" className="h-5 w-5" />
-        <span className="absolute -right-1.5 -top-1.5 grid h-[19px] min-w-[19px] place-items-center rounded-full border-2 border-surface bg-red-500 px-1 text-[10.5px] font-extrabold text-white">
-          5
-        </span>
-      </button>
-      <button
-        aria-label="Messages"
+        {alertCount > 0 && (
+          <span className="absolute -right-1.5 -top-1.5 grid h-[19px] min-w-[19px] place-items-center rounded-full border-2 border-surface bg-red-500 px-1 text-[10.5px] font-extrabold text-white">
+            {alertCount > 9 ? "9+" : alertCount}
+          </span>
+        )}
+      </Link>
+      {/* Messages badge — real unread in-app message count; hidden when zero. */}
+      <Link
+        href="/communication"
+        aria-label={`Messages${unreadCount > 0 ? ` (${unreadCount} unread)` : ""}`}
         className="relative grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-line bg-surface text-muted transition hover:bg-hover hover:text-ink"
       >
         <Icon name="message" className="h-5 w-5" />
-        <span className="absolute -right-1.5 -top-1.5 grid h-[19px] min-w-[19px] place-items-center rounded-full border-2 border-surface bg-red-500 px-1 text-[10.5px] font-extrabold text-white">
-          3
-        </span>
-      </button>
+        {unreadCount > 0 && (
+          <span className="absolute -right-1.5 -top-1.5 grid h-[19px] min-w-[19px] place-items-center rounded-full border-2 border-surface bg-red-500 px-1 text-[10.5px] font-extrabold text-white">
+            {unreadCount > 9 ? "9+" : unreadCount}
+          </span>
+        )}
+      </Link>
 
       <LanguageSwitcher />
       <ThemeToggle />
@@ -411,8 +616,14 @@ export default function DashboardLayout({
   // Effective-permission gate for the super-admin nav (owners hold every key, so
   // they keep every item; non-owner platform sub-roles are correctly limited).
   const { can: canNav } = usePermissions();
+  const term = useTerms();
   const [hydrated, setHydrated] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Real shell chrome data (PR-T4): current academic year for the session pill,
+  // unread in-app messages + needs-attention count for the honest badges.
+  const [currentYearLabel, setCurrentYearLabel] = useState<string | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [alertCount, setAlertCount] = useState(0);
 
   useEffect(() => setHydrated(true), []);
   useEffect(() => {
@@ -449,7 +660,10 @@ export default function DashboardLayout({
   const setBranding = useBrandingStore((s) => s.setBranding);
   useEffect(() => {
     if (!hydrated || !accessToken || user?.role === "super_admin") return;
-    api.get<Branding>("/branding").then(setBranding).catch(() => undefined);
+    api
+      .get<Branding>("/branding")
+      .then(setBranding)
+      .catch((err) => console.error("branding load failed:", err));
   }, [hydrated, accessToken, user, setBranding]);
 
   // The institution's type on the backend is the source of truth for School vs
@@ -464,8 +678,27 @@ export default function DashboardLayout({
         if (me.institutionType) setMode(me.institutionType);
         setEnabledModules(me.enabledModules ?? null);
       })
-      .catch(() => undefined);
+      .catch((err) => console.error("profile/mode load failed:", err));
   }, [hydrated, accessToken, user, setMode]);
+
+  // Shell chrome: real current academic year + unread messages + alert count.
+  // Each degrades gracefully (a failure or missing permission leaves the pill
+  // "not configured" and hides the badge) but is never faked.
+  useEffect(() => {
+    if (!hydrated || !accessToken || user?.role === "super_admin") return;
+    api
+      .get<{ id: string; name: string; isCurrent: boolean }[]>("/academic-years")
+      .then((years) => setCurrentYearLabel(years.find((y) => y.isCurrent)?.name ?? null))
+      .catch((err) => console.error("academic year load failed:", err));
+    api
+      .get<{ count: number }>("/communication/inbox/unread-count")
+      .then((r) => setUnreadCount(r.count))
+      .catch(() => setUnreadCount(0)); // no communication access → no badge
+    api
+      .get<{ needsAttention: unknown[] }>("/dashboard/summary")
+      .then((s) => setAlertCount(s.needsAttention?.length ?? 0))
+      .catch(() => setAlertCount(0));
+  }, [hydrated, accessToken, user]);
 
   const isSuper = user?.role === "super_admin";
   const inSuperArea = pathname.startsWith("/super-admin");
@@ -474,15 +707,17 @@ export default function DashboardLayout({
   // is byte-for-byte unchanged when not in a support session.
   const supportScope = support?.session.scope ?? null;
   const supportReadOnly = support !== null && supportScope === "read_only";
-  let navItems = isSuper
-    ? // Filter the super-admin nav by the caller's effective permissions. Items
-      // without a `perm` always show; owners hold every key so keep everything.
-      SUPER_ADMIN_NAV.filter((item) => canNav(item.perm))
-    : (mode === "college" ? COLLEGE_NAV : SCHOOL_NAV)
-        .filter((item) => !item.adminOnly || user?.role === "admin")
-        // Hide modules the tenant explicitly disabled. Untagged items and the
-        // "all enabled" default (null/empty list) are always shown — so core
-        // navigation can never disappear.
+  // Grouped nav (PR-T4): super admins keep their (untitled) single group; tenant
+  // users get the eleven-section IA. Within each group, items are filtered by
+  // adminOnly, the tenant's enabled-modules toggle, and the caller's effective
+  // permissions; empty groups are dropped so headers never sit alone. Labels are
+  // resolved from useTerms() so School↔College nouns flip.
+  const rawGroups: NavGroup[] = isSuper ? [{ items: SUPER_ADMIN_NAV }] : tenantGroups(mode);
+  let navGroups: NavGroup[] = rawGroups
+    .map((group) => ({
+      title: group.title,
+      items: group.items
+        .filter((item) => isSuper || !item.adminOnly || user?.role === "admin")
         .filter(
           (item) =>
             !item.moduleKey ||
@@ -490,20 +725,24 @@ export default function DashboardLayout({
             enabledModules.length === 0 ||
             enabledModules.includes(item.moduleKey)
         )
-        // Per-tenant role-aware hiding (PR-T2): drop items whose effective
-        // permission the caller lacks. Items without a `perm` always show;
-        // can(undefined) is true and can() is permissive while permissions load,
-        // so a permitted user's nav never flickers or disappears.
-        .filter((item) => canNav(item.perm));
+        .filter((item) => canNav(item.perm))
+        .map((item) => ({ ...item, label: item.termLabel ? item.termLabel(term) : item.label })),
+    }))
+    .filter((group) => group.items.length > 0);
   // In a module-limited support session, keep only /dashboard plus items whose
   // mapped module is in the session's allowed set.
   if (support && supportScope === "module_limited") {
     const allowed = support.session.allowedModules;
-    navItems = navItems.filter((item) => {
-      if (item.href === "/dashboard") return true;
-      const mod = hrefToSupportModule(item.href);
-      return mod !== null && allowed.includes(mod);
-    });
+    navGroups = navGroups
+      .map((group) => ({
+        title: group.title,
+        items: group.items.filter((item) => {
+          if (item.href === "/dashboard") return true;
+          const mod = hrefToSupportModule(item.href);
+          return mod !== null && allowed.includes(mod);
+        }),
+      }))
+      .filter((group) => group.items.length > 0);
   }
 
   // While unauthenticated or mid-redirect to the correct area, show a spinner.
@@ -514,7 +753,10 @@ export default function DashboardLayout({
 
   const handleLogout = async () => {
     if (refreshToken) {
-      await api.post("/auth/logout", { refreshToken }).catch(() => undefined);
+      // Best-effort server-side revoke; local logout proceeds regardless.
+      await api
+        .post("/auth/logout", { refreshToken })
+        .catch((err) => console.error("logout revoke failed:", err));
     }
     logout();
     router.replace("/login");
@@ -533,9 +775,10 @@ export default function DashboardLayout({
       <aside className="hidden w-[258px] shrink-0 md:block">
         <div className="sticky top-0 h-screen">
           <SidebarContent
-            navItems={navItems}
+            navGroups={navGroups}
             pathname={pathname}
             subtitle={subtitle}
+            currentYearLabel={isSuper ? null : currentYearLabel}
             readOnly={supportReadOnly}
           />
         </div>
@@ -550,9 +793,10 @@ export default function DashboardLayout({
           />
           <div className="absolute left-0 top-0 h-full w-[258px] shadow-pop">
             <SidebarContent
-              navItems={navItems}
+              navGroups={navGroups}
               pathname={pathname}
               subtitle={subtitle}
+              currentYearLabel={isSuper ? null : currentYearLabel}
               onNavigate={() => setSidebarOpen(false)}
               readOnly={supportReadOnly}
             />
@@ -565,6 +809,9 @@ export default function DashboardLayout({
           user={user}
           onMenu={() => setSidebarOpen(true)}
           onLogout={handleLogout}
+          currentYearLabel={isSuper ? null : currentYearLabel}
+          unreadCount={isSuper ? 0 : unreadCount}
+          alertCount={isSuper ? 0 : alertCount}
         />
         <SupportModeBanner />
         <RuntimeBanner />

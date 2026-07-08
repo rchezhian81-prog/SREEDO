@@ -523,6 +523,53 @@ export interface DashboardStats {
   };
 }
 
+// Rich tenant-admin overview (PR-T4). Finance/pendingAdmissions are null when the
+// caller lacks the relevant permission; the frontend hides those sections.
+export interface DashboardSummary {
+  institution: {
+    name: string;
+    type: "school" | "college";
+    code: string;
+    isActive: boolean;
+    currentAcademicYear: { id: string; name: string } | null;
+  };
+  academic: {
+    classes: number;
+    sections: number;
+    subjects: number;
+    departments: number;
+    programs: number;
+    semesters: number;
+    batches: number;
+    activeStudents: number;
+    activeStaff: number;
+  };
+  operations: {
+    attendanceToday: { marked: number; present: number; rate: number | null };
+    pendingAdmissions: number | null;
+    upcomingExams: number;
+    homeworkDue: number;
+    upcomingEvents: number;
+  };
+  finance: {
+    pendingInvoices: number;
+    totalInvoiced: number;
+    totalCollected: number;
+    outstanding: number;
+    overdueInvoices: number;
+    collectedToday: number;
+  } | null;
+  communication: {
+    recentAnnouncements: { id: string; title: string; publishedAt: string; isPinned: boolean }[];
+    failedComms: number | null;
+  };
+  needsAttention: {
+    key: string;
+    severity: "info" | "warning" | "danger";
+    count?: number;
+  }[];
+}
+
 // --- College Mode ---
 
 export interface CollegeOverview {

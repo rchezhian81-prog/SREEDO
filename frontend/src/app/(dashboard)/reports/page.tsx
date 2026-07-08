@@ -9,6 +9,7 @@ import { useAuthStore } from "@/stores/auth-store";
 import {
   Button,
   Card,
+  ConfirmDialog,
   EmptyState,
   ErrorNote,
   Field,
@@ -18,6 +19,7 @@ import {
   Select,
   Spinner,
 } from "@/components/ui";
+import { toast } from "@/components/toast";
 import type {
   Exam,
   GradeBand,
@@ -78,10 +80,13 @@ export default function ReportsPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [sections, setSections] = useState<SectionOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<GradeBand | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [deletingBand, setDeletingBand] = useState<GradeBand | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   // Report card download state.
   const [rcExamId, setRcExamId] = useState("");
@@ -99,27 +104,39 @@ export default function ReportsPage() {
     setBands(await api.get<GradeBand[]>("/reports/grade-bands"));
   }, []);
 
-  useEffect(() => {
+  const loadAll = useCallback(async () => {
     setLoading(true);
-    Promise.all([
-      api.get<GradeBand[]>("/reports/grade-bands").then(setBands),
-      api.get<Exam[]>("/exams").then(setExams),
-      api
-        .get<Paginated<Student>>("/students?limit=100")
-        .then((res) => setStudents(res.data)),
-      api.get<SchoolClass[]>("/classes").then((classes) => {
-        const options = classes.flatMap((schoolClass) =>
+    setLoadError(null);
+    try {
+      const [bandList, examList, studentRes, classes] = await Promise.all([
+        api.get<GradeBand[]>("/reports/grade-bands"),
+        api.get<Exam[]>("/exams"),
+        api.get<Paginated<Student>>("/students?limit=100"),
+        api.get<SchoolClass[]>("/classes"),
+      ]);
+      setBands(bandList);
+      setExams(examList);
+      setStudents(studentRes.data);
+      setSections(
+        classes.flatMap((schoolClass) =>
           schoolClass.sections.map((section) => ({
             id: section.id,
             label: `${schoolClass.name} - ${section.name}`,
           }))
-        );
-        setSections(options);
-      }),
-    ])
-      .catch(() => undefined)
-      .finally(() => setLoading(false));
+        )
+      );
+    } catch (err) {
+      setLoadError(
+        err instanceof ApiError ? err.message : "Failed to load reports"
+      );
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadAll();
+  }, [loadAll]);
 
   const {
     register,
@@ -179,13 +196,23 @@ export default function ReportsPage() {
     }
   };
 
-  const removeBand = async (band: GradeBand) => {
-    if (!confirm(`Delete grade band "${band.grade}"?`)) return;
+  const removeBand = (band: GradeBand) => {
+    setDeletingBand(band);
+  };
+
+  const confirmRemoveBand = async () => {
+    if (!deletingBand) return;
+    setDeleteBusy(true);
     try {
-      await api.delete(`/reports/grade-bands/${band.id}`);
+      await api.delete(`/reports/grade-bands/${deletingBand.id}`);
+      setDeletingBand(null);
       await loadBands();
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Failed to delete band");
+      toast.error(
+        err instanceof ApiError ? err.message : "Failed to delete band"
+      );
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -245,11 +272,18 @@ export default function ReportsPage() {
 
       {loading ? (
         <Spinner />
+      ) : loadError ? (
+        <div className="space-y-4">
+          <ErrorNote message={loadError} />
+          <Button variant="secondary" onClick={loadAll}>
+            Retry
+          </Button>
+        </div>
       ) : (
         <div className="space-y-6">
           <Card>
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-lg font-semibold text-slate-900">
+              <h2 className="text-lg font-semibold text-ink">
                 Grade scale
               </h2>
               {canManage && (
@@ -259,9 +293,9 @@ export default function ReportsPage() {
             {sortedBands.length === 0 ? (
               <EmptyState message="No grade bands yet" />
             ) : (
-              <div className="overflow-x-auto rounded-xl border border-slate-200">
+              <div className="overflow-x-auto rounded-xl border border-line">
                 <table className="w-full text-left text-sm">
-                  <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+                  <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
                     <tr>
                       <th className="px-4 py-3">Grade</th>
                       <th className="px-4 py-3">Range</th>
@@ -269,16 +303,16 @@ export default function ReportsPage() {
                       {canManage && <th className="px-4 py-3" />}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-line">
                     {sortedBands.map((band) => (
                       <tr key={band.id}>
-                        <td className="px-4 py-3 font-medium text-slate-900">
+                        <td className="px-4 py-3 font-medium text-ink">
                           {band.grade}
                         </td>
-                        <td className="px-4 py-3 text-slate-600">
+                        <td className="px-4 py-3 text-muted">
                           {band.minPercent}–{band.maxPercent}%
                         </td>
-                        <td className="px-4 py-3 text-slate-500">
+                        <td className="px-4 py-3 text-muted">
                           {band.remark ?? "—"}
                         </td>
                         {canManage && (
@@ -308,12 +342,12 @@ export default function ReportsPage() {
           </Card>
 
           <Card>
-            <h2 className="mb-4 text-lg font-semibold text-slate-900">
+            <h2 className="mb-4 text-lg font-semibold text-ink">
               Report card
             </h2>
             <div className="flex flex-wrap items-end gap-3">
               <div className="w-56">
-                <span className="mb-1 block text-sm font-medium text-slate-700">
+                <span className="mb-1 block text-sm font-medium text-muted">
                   Exam
                 </span>
                 <Select
@@ -329,7 +363,7 @@ export default function ReportsPage() {
                 </Select>
               </div>
               <div className="w-72">
-                <span className="mb-1 block text-sm font-medium text-slate-700">
+                <span className="mb-1 block text-sm font-medium text-muted">
                   Student
                 </span>
                 <Select
@@ -355,12 +389,12 @@ export default function ReportsPage() {
           </Card>
 
           <Card>
-            <h2 className="mb-4 text-lg font-semibold text-slate-900">
+            <h2 className="mb-4 text-lg font-semibold text-ink">
               Mark sheet
             </h2>
             <div className="flex flex-wrap items-end gap-3">
               <div className="w-56">
-                <span className="mb-1 block text-sm font-medium text-slate-700">
+                <span className="mb-1 block text-sm font-medium text-muted">
                   Exam
                 </span>
                 <Select
@@ -376,7 +410,7 @@ export default function ReportsPage() {
                 </Select>
               </div>
               <div className="w-56">
-                <span className="mb-1 block text-sm font-medium text-slate-700">
+                <span className="mb-1 block text-sm font-medium text-muted">
                   {term.section}
                 </span>
                 <Select
@@ -452,6 +486,20 @@ export default function ReportsPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={deletingBand !== null}
+        title="Delete grade"
+        message={
+          deletingBand ? `Delete grade band "${deletingBand.grade}"?` : ""
+        }
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        tone="danger"
+        busy={deleteBusy}
+        onConfirm={confirmRemoveBand}
+        onClose={() => setDeletingBand(null)}
+      />
     </>
   );
 }
