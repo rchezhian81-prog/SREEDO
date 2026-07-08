@@ -208,9 +208,14 @@ export interface ClassSubject {
 
 export interface Homework {
   id: string;
-  sectionId: string;
+  // A homework row targets exactly one cohort: a section (school) or a
+  // semester (college). The unused set of fields is null.
+  sectionId: string | null;
   sectionName: string | null;
   className: string | null;
+  semesterId: string | null;
+  semesterName: string | null;
+  programName: string | null;
   subjectId: string;
   subjectName: string | null;
   title: string;

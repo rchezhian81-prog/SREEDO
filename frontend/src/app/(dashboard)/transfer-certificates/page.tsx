@@ -255,7 +255,7 @@ export default function TransferCertificatesPage() {
                 <th className="px-4 py-3">TC No</th>
                 <th className="px-4 py-3">Student</th>
                 <th className="px-4 py-3">{term.admissionNo}</th>
-                <th className="px-4 py-3">Class/Section</th>
+                <th className="px-4 py-3">{`${term.klass}/${term.section}`}</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Issue Date</th>
               </tr>

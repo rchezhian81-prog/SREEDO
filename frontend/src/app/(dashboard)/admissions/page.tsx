@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { api, ApiError } from "@/lib/api";
+import { useTerms } from "@/lib/terms";
 import {
   Badge,
   Button,
@@ -82,6 +83,7 @@ interface SectionOption {
 }
 
 export default function AdmissionsPage() {
+  const term = useTerms();
   const [apps, setApps] = useState<AdmissionApplication[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -398,7 +400,7 @@ export default function AdmissionsPage() {
             </span>{" "}
             (admission number auto-generated) and marks the application enrolled.
           </p>
-          <Field label="Assign to section (optional)">
+          <Field label={`Assign to ${term.section.toLowerCase()} (optional)`}>
             <Select value={convertSection} onChange={(e) => setConvertSection(e.target.value)}>
               <option value="">Unassigned</option>
               {sections.map((section) => (

@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
+import { useTerms } from "@/lib/terms";
 import { useAuthStore } from "@/stores/auth-store";
 import {
   Badge,
@@ -60,6 +61,7 @@ type EditForm = z.infer<typeof editSchema>;
 export default function CollegeEnrollmentsPage() {
   const role = useAuthStore((state) => state.user?.role);
   const isAdmin = role === "admin";
+  const term = useTerms();
 
   const [programs, setPrograms] = useState<CollegeProgram[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
@@ -334,7 +336,7 @@ export default function CollegeEnrollmentsPage() {
           <table className="w-full text-left text-sm">
             <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
               <tr>
-                <th className="px-4 py-3">Admission No</th>
+                <th className="px-4 py-3">{term.admissionNo}</th>
                 <th className="px-4 py-3">Student</th>
                 <th className="px-4 py-3">Semester</th>
                 <th className="px-4 py-3">Status</th>

@@ -21,32 +21,63 @@ interface UploadFile {
   buffer: Buffer;
 }
 
+// A homework row targets a section (school) or a semester (college); the joins
+// are LEFT so a row shows up regardless of which cohort it belongs to.
 const HOMEWORK_SELECT = `
   h.id, h.section_id AS "sectionId", sec.name AS "sectionName", c.name AS "className",
+  h.semester_id AS "semesterId", sem.name AS "semesterName", prog.name AS "programName",
   h.subject_id AS "subjectId", subj.name AS "subjectName",
   h.title, h.description, h.instructions, h.due_date AS "dueDate",
   h.max_marks AS "maxMarks", h.created_by AS "createdBy", h.created_at AS "createdAt",
   (SELECT count(*)::int FROM documents d WHERE d.owner_type = 'homework' AND d.owner_id = h.id) AS "attachmentCount",
   (SELECT count(*)::int FROM homework_submissions s WHERE s.homework_id = h.id) AS "submissionCount"
 FROM homework h
-JOIN sections sec ON sec.id = h.section_id
-JOIN classes c ON c.id = sec.class_id
+LEFT JOIN sections sec ON sec.id = h.section_id
+LEFT JOIN classes c ON c.id = sec.class_id
+LEFT JOIN semesters sem ON sem.id = h.semester_id
+LEFT JOIN programs prog ON prog.id = sem.program_id
 JOIN subjects subj ON subj.id = h.subject_id`;
 
-/** Section ids the caller may see homework for; null = staff (unrestricted). */
-async function accessibleSectionIds(
+/**
+ * The cohorts a student/parent may see homework for, or `null` for staff
+ * (unrestricted). School homework matches by `section_id`, college homework by
+ * an active enrollment's `semester_id`; a caller can legitimately have both.
+ */
+type HomeworkScope = { sections: string[]; semesters: string[] };
+
+async function accessibleHomeworkScope(
   req: Request,
   institutionId: string
-): Promise<string[] | null> {
+): Promise<HomeworkScope | null> {
   const studentIds = await accessibleStudentIds(req);
   if (studentIds === null) return null; // staff
-  if (studentIds.length === 0) return [];
-  const { rows } = await query<{ section_id: string }>(
+  if (studentIds.length === 0) return { sections: [], semesters: [] };
+  const { rows: secRows } = await query<{ section_id: string }>(
     `SELECT DISTINCT section_id FROM students
      WHERE institution_id = $1 AND id = ANY($2::uuid[]) AND section_id IS NOT NULL`,
     [institutionId, studentIds]
   );
-  return rows.map((r) => r.section_id);
+  const { rows: semRows } = await query<{ semester_id: string }>(
+    `SELECT DISTINCT semester_id FROM enrollments
+     WHERE institution_id = $1 AND student_id = ANY($2::uuid[])
+       AND semester_id IS NOT NULL AND status = 'active'`,
+    [institutionId, studentIds]
+  );
+  return {
+    sections: secRows.map((r) => r.section_id),
+    semesters: semRows.map((r) => r.semester_id),
+  };
+}
+
+/** True when a homework row's cohort is within the caller's accessible scope. */
+function scopeAllows(
+  scope: HomeworkScope,
+  row: { sectionId?: string | null; semesterId?: string | null }
+): boolean {
+  return (
+    (!!row.sectionId && scope.sections.includes(row.sectionId)) ||
+    (!!row.semesterId && scope.semesters.includes(row.semesterId))
+  );
 }
 
 async function attachmentsFor(
@@ -105,7 +136,7 @@ async function storeAttachment(
 }
 
 async function assertRef(
-  table: "sections" | "subjects",
+  table: "sections" | "subjects" | "semesters",
   id: string,
   institutionId: string,
   label: string
@@ -126,13 +157,26 @@ export async function listHomework(
 ) {
   const params: unknown[] = [institutionId];
   const conditions = ["h.institution_id = $1"];
-  const sections = await accessibleSectionIds(req, institutionId);
-  if (sections !== null) {
-    params.push(sections);
-    conditions.push(`h.section_id = ANY($${params.length}::uuid[])`);
-  } else if (filters.sectionId) {
-    params.push(filters.sectionId);
-    conditions.push(`h.section_id = $${params.length}`);
+  const scope = await accessibleHomeworkScope(req, institutionId);
+  if (scope !== null) {
+    // Student/parent: constrain to their section(s) OR semester(s).
+    params.push(scope.sections);
+    const secIdx = params.length;
+    params.push(scope.semesters);
+    const semIdx = params.length;
+    conditions.push(
+      `(h.section_id = ANY($${secIdx}::uuid[]) OR h.semester_id = ANY($${semIdx}::uuid[]))`
+    );
+  } else {
+    // Staff: optional explicit cohort filters.
+    if (filters.sectionId) {
+      params.push(filters.sectionId);
+      conditions.push(`h.section_id = $${params.length}`);
+    }
+    if (filters.semesterId) {
+      params.push(filters.semesterId);
+      conditions.push(`h.semester_id = $${params.length}`);
+    }
   }
   if (filters.subjectId) {
     params.push(filters.subjectId);
@@ -151,15 +195,22 @@ export async function createHomework(
   createdBy: string,
   institutionId: string
 ) {
-  await assertRef("sections", input.sectionId, institutionId, "section");
   await assertRef("subjects", input.subjectId, institutionId, "subject");
+  // Exactly one cohort target is guaranteed by the schema's one-of refinement:
+  // a section (school) or a semester (college).
+  if (input.sectionId) {
+    await assertRef("sections", input.sectionId, institutionId, "section");
+  } else {
+    await assertRef("semesters", input.semesterId!, institutionId, "semester");
+  }
   const { rows } = await query<{ id: string }>(
     `INSERT INTO homework
-       (institution_id, section_id, subject_id, title, description, instructions, due_date, max_marks, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+       (institution_id, section_id, semester_id, subject_id, title, description, instructions, due_date, max_marks, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
     [
       institutionId,
-      input.sectionId,
+      input.sectionId ?? null,
+      input.semesterId ?? null,
       input.subjectId,
       input.title,
       input.description ?? "",
@@ -170,9 +221,13 @@ export async function createHomework(
     ]
   );
   const homework = await getHomeworkRow(rows[0].id, institutionId);
-  // Notify the section (students + guardians). The in-app fan-out is awaited so
+  // Notify the cohort (students + guardians): the section for school homework,
+  // the semester for college homework. The in-app fan-out is awaited so
   // recipients exist immediately; external channels stay fire-and-forget inside
   // sendMessage. A notify failure must never fail homework creation.
+  const audience = input.sectionId
+    ? { audienceType: "section" as const, audienceRef: input.sectionId }
+    : { audienceType: "semester" as const, audienceRef: input.semesterId! };
   await sendMessage(
     createdBy,
     {
@@ -181,8 +236,7 @@ export async function createHomework(
         `${homework.subjectName} — ${homework.title}` +
         (homework.dueDate ? ` (due ${homework.dueDate})` : ""),
       category: "announcement",
-      audienceType: "section",
-      audienceRef: input.sectionId,
+      ...audience,
     },
     institutionId
   ).catch((err) => console.error("homework notify failed:", err));
@@ -199,7 +253,8 @@ async function getHomeworkRow(id: string, institutionId: string) {
     title: string;
     subjectName: string;
     dueDate: string | null;
-    sectionId: string;
+    sectionId: string | null;
+    semesterId: string | null;
     createdBy: string | null;
   };
 }
@@ -210,8 +265,8 @@ export async function getHomework(
   institutionId: string
 ) {
   const homework = await getHomeworkRow(id, institutionId);
-  const sections = await accessibleSectionIds(req, institutionId);
-  if (sections !== null && !sections.includes(homework.sectionId)) {
+  const scope = await accessibleHomeworkScope(req, institutionId);
+  if (scope !== null && !scopeAllows(scope, homework)) {
     throw ApiError.forbidden("You cannot access this homework");
   }
   const attachments = await attachmentsFor("homework", id, institutionId);
@@ -299,14 +354,24 @@ export async function submitHomework(
 ) {
   const homework = await getHomeworkRow(homeworkId, institutionId);
 
-  // The caller must be a student in this homework's section.
+  // The caller must be a student in this homework's cohort.
   const { rows: studentRows } = await query<{ id: string; section_id: string | null }>(
     "SELECT id, section_id FROM students WHERE user_id = $1 AND institution_id = $2",
     [req.user!.id, institutionId]
   );
   const student = studentRows[0];
   if (!student) throw ApiError.forbidden("No student record for this account");
-  if (student.section_id !== homework.sectionId) {
+  if (homework.semesterId) {
+    // College homework: the student needs an active enrollment in that semester.
+    const { rows: enr } = await query(
+      `SELECT 1 FROM enrollments
+       WHERE institution_id = $1 AND student_id = $2 AND semester_id = $3 AND status = 'active'`,
+      [institutionId, student.id, homework.semesterId]
+    );
+    if (!enr[0]) {
+      throw ApiError.forbidden("This homework is not assigned to your semester");
+    }
+  } else if (student.section_id !== homework.sectionId) {
     throw ApiError.forbidden("This homework is not assigned to your section");
   }
 
@@ -425,12 +490,24 @@ export async function downloadAttachment(
   const studentIds = await accessibleStudentIds(req);
   if (studentIds !== null) {
     if (doc.owner_type === "homework") {
-      const sections = (await accessibleSectionIds(req, institutionId)) ?? [];
-      const { rows: hw } = await query<{ section_id: string }>(
-        "SELECT section_id FROM homework WHERE id = $1 AND institution_id = $2",
+      const scope = (await accessibleHomeworkScope(req, institutionId)) ?? {
+        sections: [],
+        semesters: [],
+      };
+      const { rows: hw } = await query<{
+        section_id: string | null;
+        semester_id: string | null;
+      }>(
+        "SELECT section_id, semester_id FROM homework WHERE id = $1 AND institution_id = $2",
         [doc.owner_id, institutionId]
       );
-      if (!hw[0] || !sections.includes(hw[0].section_id)) {
+      if (
+        !hw[0] ||
+        !scopeAllows(scope, {
+          sectionId: hw[0].section_id,
+          semesterId: hw[0].semester_id,
+        })
+      ) {
         throw ApiError.forbidden("You cannot access this attachment");
       }
     } else {

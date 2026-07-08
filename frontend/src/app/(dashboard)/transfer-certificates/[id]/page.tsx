@@ -367,7 +367,7 @@ export default function TransferCertificateDetailPage() {
             <DetailRow label="Student" value={tc.studentName} />
             <DetailRow label={term.admissionNo} value={tc.admissionNo} />
             <DetailRow
-              label="Class / Section"
+              label={`${term.klass} / ${term.section}`}
               value={
                 tc.className
                   ? `${tc.className}${
