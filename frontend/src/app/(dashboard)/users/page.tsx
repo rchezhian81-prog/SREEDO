@@ -18,6 +18,11 @@ import {
   Select,
   Spinner,
 } from "@/components/ui";
+import { toast } from "@/components/toast";
+import type {
+  JobRoleListItem,
+  JobRolesListResponse,
+} from "@/app/(dashboard)/settings/rbac/_rbac";
 import type { AccountUser, Paginated, UserRole } from "@/types";
 
 const ROLES: UserRole[] = [
@@ -65,6 +70,11 @@ export default function UsersPage() {
   const [editing, setEditing] = useState<AccountUser | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
 
+  const [jobRoles, setJobRoles] = useState<JobRoleListItem[]>([]);
+  const [assigning, setAssigning] = useState<AccountUser | null>(null);
+  const [assignKey, setAssignKey] = useState("");
+  const [assignSaving, setAssignSaving] = useState(false);
+
   const limit = 10;
 
   const load = useCallback(async () => {
@@ -93,6 +103,16 @@ export default function UsersPage() {
   useEffect(() => {
     load().catch(() => setLoading(false));
   }, [load]);
+
+  // The finer job-roles, fetched once — used to label the current assignment and
+  // populate the assignment picker. Silent on failure (the column just shows "—").
+  useEffect(() => {
+    if (!isAdmin) return;
+    api
+      .get<JobRolesListResponse>("/tenant-rbac/job-roles")
+      .then((res) => setJobRoles(res.roles))
+      .catch(() => undefined);
+  }, [isAdmin]);
 
   const addForm = useForm<CreateForm>({ resolver: zodResolver(createSchema) });
   const editForm = useForm<EditForm>({ resolver: zodResolver(editSchema) });
@@ -172,6 +192,41 @@ export default function UsersPage() {
     await load();
   };
 
+  // Job roles never apply to portal accounts; the backend rejects them anyway.
+  const canAssignJobRole = (user: AccountUser) =>
+    user.role !== "student" && user.role !== "parent";
+
+  const jobRoleLabel = (key?: string | null) => {
+    if (!key) return "—";
+    return jobRoles.find((r) => r.key === key)?.name ?? key;
+  };
+
+  const openAssign = (user: AccountUser) => {
+    setAssigning(user);
+    setAssignKey(user.jobRoleKey ?? "");
+  };
+
+  const onAssign = async () => {
+    if (!assigning) return;
+    setAssignSaving(true);
+    try {
+      await api.post(`/tenant-rbac/users/${assigning.id}/job-role`, {
+        jobRoleKey: assignKey || null,
+      });
+      toast.success("Job role updated");
+      setAssigning(null);
+      await load();
+    } catch (err) {
+      // Surfaces the backend safety rails (portal-account, self-lockout,
+      // last-manager) verbatim.
+      toast.error(
+        err instanceof ApiError ? err.message : "Failed to update job role"
+      );
+    } finally {
+      setAssignSaving(false);
+    }
+  };
+
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
   if (!isAdmin) {
@@ -232,6 +287,7 @@ export default function UsersPage() {
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Email</th>
                 <th className="px-4 py-3">Role</th>
+                <th className="px-4 py-3">Job role</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3" />
               </tr>
@@ -249,6 +305,9 @@ export default function UsersPage() {
                   </td>
                   <td className="px-4 py-3">{user.email}</td>
                   <td className="px-4 py-3 capitalize">{user.role}</td>
+                  <td className="px-4 py-3 text-muted">
+                    {jobRoleLabel(user.jobRoleKey)}
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <Badge tone={user.isActive ? "green" : "slate"}>
@@ -273,6 +332,14 @@ export default function UsersPage() {
                       >
                         Edit
                       </button>
+                      {canAssignJobRole(user) && (
+                        <button
+                          onClick={() => openAssign(user)}
+                          className="text-xs font-medium text-muted hover:text-ink"
+                        >
+                          Job role
+                        </button>
+                      )}
                       {user.isLocked && (
                         <button
                           onClick={() => unlockAccount(user)}
@@ -417,6 +484,41 @@ export default function UsersPage() {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        title="Assign job role"
+        open={assigning !== null}
+        onClose={() => setAssigning(null)}
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-muted">{assigning?.fullName}</p>
+          <Field label="Job role">
+            <Select
+              value={assignKey}
+              onChange={(event) => setAssignKey(event.target.value)}
+            >
+              <option value="">None (clear)</option>
+              {jobRoles.map((r) => (
+                <option key={r.key} value={r.key}>
+                  {r.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setAssigning(null)}
+            >
+              Cancel
+            </Button>
+            <Button type="button" onClick={onAssign} disabled={assignSaving}>
+              {assignSaving ? "Saving…" : "Save"}
+            </Button>
+          </div>
+        </div>
       </Modal>
     </>
   );

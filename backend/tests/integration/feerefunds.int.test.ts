@@ -76,7 +76,7 @@ describe("fee refunds (/fee-refunds)", () => {
     const over = await request(app)
       .post("/api/v1/fee-refunds")
       .set(auth(tok.admin))
-      .send({ paymentId, amount: 800 });
+      .send({ paymentId, amount: 800, reason: "over-refund test" });
     expect(over.status).toBe(400);
 
     // Refundable balance reflects the partial refund.
@@ -97,7 +97,7 @@ describe("fee refunds (/fee-refunds)", () => {
     const res = await request(app)
       .post("/api/v1/fee-refunds")
       .set(auth(tok.adminB))
-      .send({ paymentId, amount: 100 });
+      .send({ paymentId, amount: 100, reason: "cross-tenant test" });
     expect(res.status).toBe(404);
 
     // And admin B sees no refunds / payments from tenant A.

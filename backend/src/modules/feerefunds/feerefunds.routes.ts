@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { uuidParam } from "../../utils/params";
-import { authenticate, authorize } from "../../middleware/auth";
+import { authenticate } from "../../middleware/auth";
+import { requirePermission } from "../../middleware/permissions";
 import { requireTenant, tenantId } from "../../middleware/tenant";
 import { parsePagination } from "../../utils/pagination";
 import {
@@ -10,9 +11,10 @@ import {
 } from "./feerefunds.schema";
 import * as service from "./feerefunds.service";
 
-// Fee refunds — institution-admin only, tenant-scoped.
+// Fee refunds — tenant-scoped. Reads need fees:manage; the money-reversal writes
+// need the high-risk fees:reverse permission (reason-required at the schema).
 export const feeRefundsRouter = Router();
-feeRefundsRouter.use(authenticate, requireTenant, authorize("admin"));
+feeRefundsRouter.use(authenticate, requireTenant);
 
 /**
  * @openapi
@@ -26,7 +28,7 @@ feeRefundsRouter.use(authenticate, requireTenant, authorize("admin"));
  *     responses:
  *       200: { description: Payments with refundable amount }
  */
-feeRefundsRouter.get("/payments", async (req, res) => {
+feeRefundsRouter.get("/payments", requirePermission("fees:manage"), async (req, res) => {
   const { search } = listPaymentsQuerySchema.parse(req.query);
   res.json(await service.listRefundablePayments(tenantId(req), search));
 });
@@ -65,12 +67,12 @@ feeRefundsRouter.get("/payments", async (req, res) => {
  *       400: { description: Refund exceeds refundable balance }
  *       404: { description: Payment not found }
  */
-feeRefundsRouter.get("/", async (req, res) => {
+feeRefundsRouter.get("/", requirePermission("fees:manage"), async (req, res) => {
   const params = listRefundsQuerySchema.parse(req.query);
   res.json(await service.listRefunds(parsePagination(params), params, tenantId(req)));
 });
 
-feeRefundsRouter.post("/", async (req, res) => {
+feeRefundsRouter.post("/", requirePermission("fees:reverse"), async (req, res) => {
   const input = createRefundSchema.parse(req.body);
   res.status(201).json(await service.createRefund(input, tenantId(req), req.user!.id));
 });
@@ -87,7 +89,7 @@ feeRefundsRouter.post("/", async (req, res) => {
  *     responses:
  *       204: { description: Deleted }
  */
-feeRefundsRouter.delete("/:id", async (req, res) => {
+feeRefundsRouter.delete("/:id", requirePermission("fees:reverse"), async (req, res) => {
   await service.deleteRefund(uuidParam(req), tenantId(req));
   res.status(204).end();
 });

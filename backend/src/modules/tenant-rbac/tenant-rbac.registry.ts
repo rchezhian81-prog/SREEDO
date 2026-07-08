@@ -193,6 +193,9 @@ export const TENANT_PERMISSION_GROUPS: TenantPermissionGroup[] = [
     title: "Fees & Accounts",
     appliesTo: "both",
     permissions: [
+      { key: "fees:manage", label: "Create / edit invoices & fee structures" },
+      { key: "fees:payment", label: "Record fee payments" },
+      { key: "fees:reverse", label: "Reverse / cancel / void a payment", highRisk: true },
       { key: "fee_categories:read", label: "View fee categories" },
       { key: "fee_categories:create", label: "Create fee categories" },
       { key: "fee_categories:update", label: "Edit fee categories" },
@@ -362,6 +365,47 @@ export const TENANT_PERMISSION_GROUPS: TenantPermissionGroup[] = [
       { key: "ai:document_search", label: "AI document search" },
       { key: "ai:risk_alerts", label: "AI risk alerts" },
       { key: "ai:workflow_suggestions", label: "AI workflow suggestions" },
+    ],
+  },
+  {
+    key: "academic_setup",
+    title: "Academic Setup (School)",
+    appliesTo: "both",
+    permissions: [
+      { key: "academic_years:manage", label: "Manage academic years" },
+      { key: "classes:manage", label: "Manage classes", appliesTo: "school" },
+      { key: "sections:manage", label: "Manage sections", appliesTo: "school" },
+      { key: "subjects:manage", label: "Manage subjects" },
+    ],
+  },
+  {
+    key: "admissions",
+    title: "Admissions & Enquiries",
+    appliesTo: "both",
+    permissions: [
+      { key: "admissions:read", label: "View admissions & enquiries" },
+      { key: "admissions:create", label: "Create admission / enquiry" },
+      { key: "admissions:update", label: "Edit admission" },
+      { key: "admissions:convert", label: "Convert enquiry to student" },
+      { key: "admissions:delete", label: "Delete admission" },
+    ],
+  },
+  {
+    key: "front_office",
+    title: "Front Office",
+    appliesTo: "both",
+    permissions: [
+      { key: "front_office:read", label: "View visitors / front office" },
+      { key: "front_office:manage", label: "Manage visitors / front office" },
+    ],
+  },
+  {
+    key: "calendar",
+    title: "Calendar & Events",
+    appliesTo: "both",
+    permissions: [
+      { key: "calendar:manage", label: "Create / edit / delete events" },
+      { key: "announcements:manage", label: "Publish announcements" },
     ],
   },
   {

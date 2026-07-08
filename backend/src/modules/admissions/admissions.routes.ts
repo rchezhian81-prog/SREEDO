@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { uuidParam } from "../../utils/params";
-import { authenticate, authorize } from "../../middleware/auth";
+import { authenticate } from "../../middleware/auth";
 import { requireTenant, tenantId } from "../../middleware/tenant";
+import { requirePermission } from "../../middleware/permissions";
 import { parsePagination } from "../../utils/pagination";
 import {
   createAdmissionSchema,
@@ -49,7 +50,7 @@ admissionsRouter.post("/enquiry", async (req, res) => {
 });
 
 // Everything below is institution-admin only, scoped to the caller's tenant.
-admissionsRouter.use(authenticate, requireTenant, authorize("admin"));
+admissionsRouter.use(authenticate, requireTenant);
 
 /**
  * @openapi
@@ -92,14 +93,14 @@ admissionsRouter.use(authenticate, requireTenant, authorize("admin"));
  *     responses:
  *       201: { description: Created application }
  */
-admissionsRouter.get("/", async (req, res) => {
+admissionsRouter.get("/", requirePermission("admissions:read"), async (req, res) => {
   const params = listAdmissionsQuerySchema.parse(req.query);
   res.json(
     await service.listAdmissions(parsePagination(params), params, tenantId(req))
   );
 });
 
-admissionsRouter.post("/", async (req, res) => {
+admissionsRouter.post("/", requirePermission("admissions:create"), async (req, res) => {
   const input = createAdmissionSchema.parse(req.body);
   res.status(201).json(await service.createAdmission(input, tenantId(req)));
 });
@@ -133,16 +134,16 @@ admissionsRouter.post("/", async (req, res) => {
  *     responses:
  *       204: { description: Deleted }
  */
-admissionsRouter.get("/:id", async (req, res) => {
+admissionsRouter.get("/:id", requirePermission("admissions:read"), async (req, res) => {
   res.json(await service.getAdmission(uuidParam(req), tenantId(req)));
 });
 
-admissionsRouter.patch("/:id", async (req, res) => {
+admissionsRouter.patch("/:id", requirePermission("admissions:update"), async (req, res) => {
   const input = updateAdmissionSchema.parse(req.body);
   res.json(await service.updateAdmission(uuidParam(req), input, tenantId(req)));
 });
 
-admissionsRouter.delete("/:id", async (req, res) => {
+admissionsRouter.delete("/:id", requirePermission("admissions:delete"), async (req, res) => {
   await service.deleteAdmission(uuidParam(req), tenantId(req));
   res.status(204).end();
 });
@@ -168,7 +169,7 @@ admissionsRouter.delete("/:id", async (req, res) => {
  *       200: { description: "{ student, application }" }
  *       400: { description: Already enrolled }
  */
-admissionsRouter.post("/:id/convert", async (req, res) => {
+admissionsRouter.post("/:id/convert", requirePermission("admissions:convert"), async (req, res) => {
   const input = convertAdmissionSchema.parse(req.body);
   res.json(await service.convertToStudent(uuidParam(req), input, tenantId(req)));
 });

@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { uuidParam } from "../../utils/params";
-import { authenticate, authorize } from "../../middleware/auth";
+import { authenticate } from "../../middleware/auth";
 import { requireTenant, tenantId } from "../../middleware/tenant";
 import { requireInstitutionType } from "../../middleware/institution-type";
+import { requirePermission } from "../../middleware/permissions";
 import {
   assignSectionSubjectSchema,
   createAcademicYearSchema,
@@ -56,7 +57,7 @@ academicsRouter.get("/academic-years", ...guard, async (req, res) => {
 academicsRouter.post(
   "/academic-years",
   ...guard,
-  authorize("admin"),
+  requirePermission("academic_years:manage"),
   async (req, res) => {
     const input = createAcademicYearSchema.parse(req.body);
     res
@@ -80,7 +81,7 @@ academicsRouter.post(
 academicsRouter.patch(
   "/academic-years/:id",
   ...guard,
-  authorize("admin"),
+  requirePermission("academic_years:manage"),
   async (req, res) => {
     const input = updateAcademicYearSchema.parse(req.body);
     res.json(
@@ -104,7 +105,7 @@ academicsRouter.patch(
 academicsRouter.post(
   "/academic-years/:id/current",
   ...guard,
-  authorize("admin"),
+  requirePermission("academic_years:manage"),
   async (req, res) => {
     res.json(
       await academicsService.setCurrentAcademicYear(uuidParam(req), tenantId(req))
@@ -145,7 +146,7 @@ academicsRouter.get("/classes", ...guard, async (req, res) => {
 academicsRouter.post(
   "/classes",
   ...guard,
-  authorize("admin"),
+  requirePermission("classes:manage"),
   requireInstitutionType("school"),
   async (req, res) => {
     const input = createClassSchema.parse(req.body);
@@ -167,7 +168,7 @@ academicsRouter.post(
  *     responses:
  *       204: { description: Deleted }
  */
-academicsRouter.delete("/classes/:id", ...guard, authorize("admin"), async (req, res) => {
+academicsRouter.delete("/classes/:id", ...guard, requirePermission("classes:manage"), async (req, res) => {
   await academicsService.removeClass(uuidParam(req), tenantId(req));
   res.status(204).end();
 });
@@ -198,7 +199,7 @@ academicsRouter.delete("/classes/:id", ...guard, authorize("admin"), async (req,
 academicsRouter.post(
   "/classes/:classId/sections",
   ...guard,
-  authorize("admin"),
+  requirePermission("sections:manage"),
   requireInstitutionType("school"),
   async (req, res) => {
     const input = createSectionSchema.parse(req.body);
@@ -229,7 +230,7 @@ academicsRouter.post(
 academicsRouter.delete(
   "/sections/:id",
   ...guard,
-  authorize("admin"),
+  requirePermission("sections:manage"),
   async (req, res) => {
     await academicsService.removeSection(uuidParam(req), tenantId(req));
     res.status(204).end();
@@ -266,7 +267,7 @@ academicsRouter.get("/subjects", ...guard, async (req, res) => {
   res.json(await academicsService.listSubjects(tenantId(req)));
 });
 
-academicsRouter.post("/subjects", ...guard, authorize("admin"), async (req, res) => {
+academicsRouter.post("/subjects", ...guard, requirePermission("subjects:manage"), async (req, res) => {
   const input = createSubjectSchema.parse(req.body);
   res
     .status(201)
@@ -285,7 +286,7 @@ academicsRouter.post("/subjects", ...guard, authorize("admin"), async (req, res)
  *     responses:
  *       204: { description: Deleted }
  */
-academicsRouter.delete("/subjects/:id", ...guard, authorize("admin"), async (req, res) => {
+academicsRouter.delete("/subjects/:id", ...guard, requirePermission("subjects:manage"), async (req, res) => {
   await academicsService.removeSubject(uuidParam(req), tenantId(req));
   res.status(204).end();
 });
@@ -339,7 +340,7 @@ academicsRouter.get(
 academicsRouter.post(
   "/sections/:sectionId/subjects",
   ...guard,
-  authorize("admin"),
+  requirePermission("subjects:manage"),
   async (req, res) => {
     const input = assignSectionSubjectSchema.parse(req.body);
     res
@@ -388,7 +389,7 @@ academicsRouter.post(
 academicsRouter.patch(
   "/class-subjects/:id",
   ...guard,
-  authorize("admin"),
+  requirePermission("subjects:manage"),
   async (req, res) => {
     const input = updateClassSubjectSchema.parse(req.body);
     res.json(
@@ -404,7 +405,7 @@ academicsRouter.patch(
 academicsRouter.delete(
   "/class-subjects/:id",
   ...guard,
-  authorize("admin"),
+  requirePermission("subjects:manage"),
   async (req, res) => {
     await academicsService.removeClassSubject(uuidParam(req), tenantId(req));
     res.status(204).end();

@@ -7,7 +7,7 @@ import type { z } from "zod";
 import type { createUserSchema, updateUserSchema } from "./users.schema";
 
 const USER_COLUMNS =
-  "id, email, full_name AS \"fullName\", role, phone, is_active AS \"isActive\", totp_enabled AS \"twoFactorEnabled\", (locked_until IS NOT NULL AND locked_until > now()) AS \"isLocked\", locked_until AS \"lockedUntil\", created_at AS \"createdAt\"";
+  "id, email, full_name AS \"fullName\", role, job_role_key AS \"jobRoleKey\", phone, is_active AS \"isActive\", totp_enabled AS \"twoFactorEnabled\", (locked_until IS NOT NULL AND locked_until > now()) AS \"isLocked\", locked_until AS \"lockedUntil\", created_at AS \"createdAt\"";
 
 export async function listUsers(
   pagination: Pagination,

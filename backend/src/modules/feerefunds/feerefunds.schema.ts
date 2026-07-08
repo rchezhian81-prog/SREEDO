@@ -5,7 +5,8 @@ export const REFUND_METHODS = ["cash", "card", "bank_transfer", "upi", "cheque",
 export const createRefundSchema = z.object({
   paymentId: z.string().uuid(),
   amount: z.coerce.number().positive().max(99999999),
-  reason: z.string().max(500).optional(),
+  // A fee reversal is high-risk — a reason is mandatory (T2.1).
+  reason: z.string().trim().min(1, "A reason is required to reverse a payment").max(500),
   method: z.enum(REFUND_METHODS).optional(),
 });
 

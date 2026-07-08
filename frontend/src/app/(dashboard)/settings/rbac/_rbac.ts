@@ -30,6 +30,28 @@ export interface RolesListResponse {
   roles: RoleListItem[];
 }
 
+/**
+ * A finer job-role from GET /tenant-rbac/job-roles. Job-roles layer on top of a
+ * coarse base role (admin/teacher/accountant) and are viewed/edited through the
+ * SAME role-detail endpoints as coarse roles, keyed by their `key`
+ * (e.g. `jr_fees_officer`).
+ */
+export interface JobRoleListItem {
+  key: string;
+  name: string;
+  description: string;
+  appliesTo: AppliesTo;
+  baseRole: "admin" | "teacher" | "accountant";
+  builtIn: true;
+  effectiveCount: number;
+  overriddenCount: number;
+}
+
+/** GET /tenant-rbac/job-roles */
+export interface JobRolesListResponse {
+  roles: JobRoleListItem[];
+}
+
 /** A permission as it appears in the registry / matrix groups. */
 export interface RegistryPermission {
   key: string;

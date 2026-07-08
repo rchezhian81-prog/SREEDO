@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { uuidParam } from "../../utils/params";
-import { authenticate, authorize } from "../../middleware/auth";
+import { authenticate } from "../../middleware/auth";
 import { requireTenant, tenantId } from "../../middleware/tenant";
+import { requirePermission } from "../../middleware/permissions";
 import { parsePagination } from "../../utils/pagination";
 import {
   createVisitorSchema,
@@ -12,7 +13,7 @@ import * as service from "./visitors.service";
 
 // Front-office visitor log — institution-admin only, scoped to the tenant.
 export const visitorsRouter = Router();
-visitorsRouter.use(authenticate, requireTenant, authorize("admin"));
+visitorsRouter.use(authenticate, requireTenant);
 
 /**
  * @openapi
@@ -50,12 +51,12 @@ visitorsRouter.use(authenticate, requireTenant, authorize("admin"));
  *     responses:
  *       201: { description: Checked-in visitor entry }
  */
-visitorsRouter.get("/", async (req, res) => {
+visitorsRouter.get("/", requirePermission("front_office:read"), async (req, res) => {
   const params = listVisitorsQuerySchema.parse(req.query);
   res.json(await service.listVisitors(parsePagination(params), params, tenantId(req)));
 });
 
-visitorsRouter.post("/", async (req, res) => {
+visitorsRouter.post("/", requirePermission("front_office:manage"), async (req, res) => {
   const input = createVisitorSchema.parse(req.body);
   res.status(201).json(await service.createVisitor(input, tenantId(req), req.user!.id));
 });
@@ -73,7 +74,7 @@ visitorsRouter.post("/", async (req, res) => {
  *       200: { description: Updated entry }
  *       400: { description: Already checked out }
  */
-visitorsRouter.post("/:id/checkout", async (req, res) => {
+visitorsRouter.post("/:id/checkout", requirePermission("front_office:manage"), async (req, res) => {
   res.json(await service.checkoutVisitor(uuidParam(req), tenantId(req)));
 });
 
@@ -106,16 +107,16 @@ visitorsRouter.post("/:id/checkout", async (req, res) => {
  *     responses:
  *       204: { description: Deleted }
  */
-visitorsRouter.get("/:id", async (req, res) => {
+visitorsRouter.get("/:id", requirePermission("front_office:read"), async (req, res) => {
   res.json(await service.getVisitor(uuidParam(req), tenantId(req)));
 });
 
-visitorsRouter.patch("/:id", async (req, res) => {
+visitorsRouter.patch("/:id", requirePermission("front_office:manage"), async (req, res) => {
   const input = updateVisitorSchema.parse(req.body);
   res.json(await service.updateVisitor(uuidParam(req), input, tenantId(req)));
 });
 
-visitorsRouter.delete("/:id", async (req, res) => {
+visitorsRouter.delete("/:id", requirePermission("front_office:manage"), async (req, res) => {
   await service.deleteVisitor(uuidParam(req), tenantId(req));
   res.status(204).end();
 });

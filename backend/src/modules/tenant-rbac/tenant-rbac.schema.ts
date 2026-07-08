@@ -14,3 +14,8 @@ export const auditQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
 });
+
+// Assign a finer job-role to a user (T2.1). null clears it (back to coarse role).
+export const assignJobRoleSchema = z.object({
+  jobRoleKey: z.string().min(1).max(120).nullable(),
+});

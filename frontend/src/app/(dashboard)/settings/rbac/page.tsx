@@ -26,6 +26,8 @@ import {
   flattenGranted,
   highRiskBadge,
   type AppliesTo,
+  type JobRoleListItem,
+  type JobRolesListResponse,
   type RbacRegistry,
   type RoleDetail,
   type RoleListItem,
@@ -58,6 +60,65 @@ function TypeBadge({ appliesTo }: { appliesTo: AppliesTo }) {
     <Badge tone={appliesTo === "school" ? "blue" : "slate"}>
       {appliesToLabel(appliesTo)}
     </Badge>
+  );
+}
+
+/**
+ * A single card in the left-hand role picker. Shared verbatim by the coarse
+ * roles and the finer job-roles so both render identically. Coarse roles pass
+ * `restricted`; job-roles pass `baseRole` to show the small "Base: <role>" hint.
+ */
+function RoleCard({
+  name,
+  description,
+  appliesTo,
+  effectiveCount,
+  overriddenCount,
+  active,
+  onSelect,
+  restricted,
+  baseRole,
+}: {
+  name: string;
+  description: string;
+  appliesTo: AppliesTo;
+  effectiveCount: number;
+  overriddenCount: number;
+  active: boolean;
+  onSelect: () => void;
+  restricted?: boolean;
+  baseRole?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={cx(
+        "w-full rounded-2xl border p-4 text-left transition",
+        active
+          ? "border-brand-500 bg-brand-500/5 ring-1 ring-brand-500/40"
+          : "border-line bg-surface hover:bg-surface-2"
+      )}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <span className="font-semibold text-ink">{name}</span>
+        <TypeBadge appliesTo={appliesTo} />
+      </div>
+      <p className="mt-1 line-clamp-2 text-xs text-muted">{description}</p>
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
+        <span>
+          {effectiveCount} permission
+          {effectiveCount === 1 ? "" : "s"}
+        </span>
+        {overriddenCount > 0 && (
+          <Badge tone="amber">{overriddenCount} overridden</Badge>
+        )}
+        {restricted && <Badge tone="red">Restricted</Badge>}
+        {baseRole && (
+          <span className="capitalize text-faint">Base: {baseRole}</span>
+        )}
+      </div>
+    </button>
   );
 }
 
@@ -170,6 +231,7 @@ export default function TenantRbacPage() {
 
   const [registry, setRegistry] = useState<RbacRegistry | null>(null);
   const [roles, setRoles] = useState<RoleListItem[]>([]);
+  const [jobRoles, setJobRoles] = useState<JobRoleListItem[]>([]);
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
 
@@ -194,8 +256,12 @@ export default function TenantRbacPage() {
   // Re-fetch just the role list (to refresh effective/override counts after a
   // save or reset). Registry is static, so it is loaded once up front.
   const refreshRoles = useCallback(async () => {
-    const res = await api.get<RolesListResponse>("/tenant-rbac/roles");
-    setRoles(res.roles);
+    const [rolesRes, jobRolesRes] = await Promise.all([
+      api.get<RolesListResponse>("/tenant-rbac/roles"),
+      api.get<JobRolesListResponse>("/tenant-rbac/job-roles"),
+    ]);
+    setRoles(rolesRes.roles);
+    setJobRoles(jobRolesRes.roles);
   }, []);
 
   // Initial load: roles list + permission registry (once perms have settled).
@@ -207,11 +273,13 @@ export default function TenantRbacPage() {
     Promise.all([
       api.get<RolesListResponse>("/tenant-rbac/roles"),
       api.get<RbacRegistry>("/tenant-rbac/registry"),
+      api.get<JobRolesListResponse>("/tenant-rbac/job-roles"),
     ])
-      .then(([rolesRes, reg]) => {
+      .then(([rolesRes, reg, jobRolesRes]) => {
         if (!active) return;
         setRoles(rolesRes.roles);
         setRegistry(reg);
+        setJobRoles(jobRolesRes.roles);
       })
       .catch((err) => {
         if (!active) return;
@@ -433,41 +501,45 @@ export default function TenantRbacPage() {
       ) : (
         <div className="grid gap-6 lg:grid-cols-[minmax(240px,300px)_1fr]">
           {/* Role picker */}
-          <aside className="space-y-2">
-            {roles.map((r) => {
-              const active = r.key === selected;
-              return (
-                <button
+          <aside className="space-y-4">
+            <div className="space-y-2">
+              <p className="px-1 text-xs font-semibold uppercase tracking-wide text-faint">
+                Roles
+              </p>
+              {roles.map((r) => (
+                <RoleCard
                   key={r.key}
-                  type="button"
-                  onClick={() => setSelected(r.key)}
-                  className={cx(
-                    "w-full rounded-2xl border p-4 text-left transition",
-                    active
-                      ? "border-brand-500 bg-brand-500/5 ring-1 ring-brand-500/40"
-                      : "border-line bg-surface hover:bg-surface-2"
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="font-semibold text-ink">{r.name}</span>
-                    <TypeBadge appliesTo={r.appliesTo} />
-                  </div>
-                  <p className="mt-1 line-clamp-2 text-xs text-muted">
-                    {r.description}
-                  </p>
-                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
-                    <span>
-                      {r.effectiveCount} permission
-                      {r.effectiveCount === 1 ? "" : "s"}
-                    </span>
-                    {r.overriddenCount > 0 && (
-                      <Badge tone="amber">{r.overriddenCount} overridden</Badge>
-                    )}
-                    {r.restricted && <Badge tone="red">Restricted</Badge>}
-                  </div>
-                </button>
-              );
-            })}
+                  name={r.name}
+                  description={r.description}
+                  appliesTo={r.appliesTo}
+                  effectiveCount={r.effectiveCount}
+                  overriddenCount={r.overriddenCount}
+                  restricted={r.restricted}
+                  active={r.key === selected}
+                  onSelect={() => setSelected(r.key)}
+                />
+              ))}
+            </div>
+            {jobRoles.length > 0 && (
+              <div className="space-y-2">
+                <p className="px-1 text-xs font-semibold uppercase tracking-wide text-faint">
+                  Job roles
+                </p>
+                {jobRoles.map((r) => (
+                  <RoleCard
+                    key={r.key}
+                    name={r.name}
+                    description={r.description}
+                    appliesTo={r.appliesTo}
+                    effectiveCount={r.effectiveCount}
+                    overriddenCount={r.overriddenCount}
+                    baseRole={r.baseRole}
+                    active={r.key === selected}
+                    onSelect={() => setSelected(r.key)}
+                  />
+                ))}
+              </div>
+            )}
           </aside>
 
           {/* Selected role detail */}

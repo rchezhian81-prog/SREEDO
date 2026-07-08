@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 import { query } from "../db/postgres";
 import { ApiError } from "../utils/api-error";
 import type { AuthenticatedUser, UserRole } from "../types";
+import { JOB_ROLES } from "../modules/tenant-rbac/tenant-rbac.job-roles";
 
 // In-memory cache of role -> permission keys. The catalogue is static reference
 // data (seeded by migration + edited via the RBAC console), so a short TTL is
@@ -22,6 +23,12 @@ async function loadRolePermissions(): Promise<Map<string, Set<string>>> {
   for (const row of rows) {
     if (!map.has(row.role)) map.set(row.role, new Set());
     map.get(row.role)!.add(row.key);
+  }
+  // Finer job-role (jr_…) default sets are authoritative from the code registry,
+  // not the seeded role_permissions rows — so resolution is robust even if those
+  // rows are absent, and the registry can never drift from enforcement.
+  for (const jr of JOB_ROLES) {
+    map.set(jr.key, new Set(jr.permissions));
   }
   cache = { at: Date.now(), map };
   return map;
@@ -71,6 +78,40 @@ async function loadTenantOverrides(
 export function invalidateTenantOverrideCache(institutionId?: string): void {
   if (institutionId) tenantCache.delete(institutionId);
   else tenantCache.clear();
+}
+
+// --- Finer job-role resolution (PR-T2.1) -----------------------------------
+//
+// A tenant user optionally carries `users.job_role_key` (a `jr_…` finer role).
+// When present it REPLACES the coarse role for permission resolution (against
+// role_permissions + per-tenant overrides, both already keyed by role string);
+// when null, resolution uses the coarse role — exactly today's behaviour. The
+// key is looked up per user and cached briefly (mirrors platform_role), and
+// busted when a user's job-role is (re)assigned.
+const jobRoleCache = new Map<string, { at: number; jobRole: string | null }>();
+
+/** Drop the cached job_role_key for a user (call after assigning their role). */
+export function invalidateJobRoleCache(userId?: string): void {
+  if (userId) jobRoleCache.delete(userId);
+  else jobRoleCache.clear();
+}
+
+async function jobRoleOf(userId: string): Promise<string | null> {
+  const hit = jobRoleCache.get(userId);
+  if (hit && Date.now() - hit.at < TTL_MS) return hit.jobRole;
+  let jobRole: string | null = null;
+  try {
+    const { rows } = await query<{ job_role_key: string | null }>(
+      "SELECT job_role_key FROM users WHERE id = $1",
+      [userId]
+    );
+    jobRole = rows[0]?.job_role_key ?? null;
+  } catch {
+    // job_role_key column may not exist yet (pre-0107) — fall back to coarse role.
+    jobRole = null;
+  }
+  jobRoleCache.set(userId, { at: Date.now(), jobRole });
+  return jobRole;
 }
 
 /** Merge a role's global default keys with a tenant's overrides (deny wins). */
@@ -157,9 +198,11 @@ export async function effectivePermissions(user: {
   institutionId?: string | null;
 }): Promise<string[]> {
   if (user.role !== "super_admin") {
-    const base = (await loadRolePermissions()).get(user.role);
+    // Finer job-role (jr_…) replaces the coarse role for resolution when set.
+    const resolutionRole = (await jobRoleOf(user.id)) ?? user.role;
+    const base = (await loadRolePermissions()).get(resolutionRole);
     if (!user.institutionId) return [...(base ?? [])];
-    const ov = (await loadTenantOverrides(user.institutionId)).get(user.role);
+    const ov = (await loadTenantOverrides(user.institutionId)).get(resolutionRole);
     return [...mergeTenantOverrides(base, ov)];
   }
   if (await isFullAccessPlatformUser(user.id)) {
@@ -201,10 +244,12 @@ export async function permissionsForRole(role: UserRole): Promise<string[]> {
 
 async function userHasPermission(user: AuthenticatedUser, key: string): Promise<boolean> {
   if (user.role !== "super_admin") {
-    const base = (await loadRolePermissions()).get(user.role);
+    // Finer job-role (jr_…) replaces the coarse role for resolution when set.
+    const resolutionRole = (await jobRoleOf(user.id)) ?? user.role;
+    const base = (await loadRolePermissions()).get(resolutionRole);
     if (!user.institutionId) return base?.has(key) ?? false;
     // Per-tenant override: deny wins over grant wins over the global default.
-    const ov = (await loadTenantOverrides(user.institutionId)).get(user.role);
+    const ov = (await loadTenantOverrides(user.institutionId)).get(resolutionRole);
     if (ov?.deny.has(key)) return false;
     if (ov?.grant.has(key)) return true;
     return base?.has(key) ?? false;
