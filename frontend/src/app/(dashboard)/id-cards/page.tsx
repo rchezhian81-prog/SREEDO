@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
+import { useTerms } from "@/lib/terms";
 import { useAuthStore } from "@/stores/auth-store";
 import {
   Button,
@@ -47,6 +48,7 @@ async function downloadPdf(path: string, filename: string) {
 export default function IdCardsPage() {
   const user = useAuthStore((state) => state.user);
   const isAdmin = user?.role === "admin";
+  const term = useTerms();
 
   const [students, setStudents] = useState<Student[]>([]);
   const [sections, setSections] = useState<SectionOption[]>([]);
@@ -226,18 +228,18 @@ export default function IdCardsPage() {
 
           <Card>
             <h2 className="mb-4 text-lg font-semibold text-slate-900">
-              Bulk (section)
+              {`Bulk (${term.section.toLowerCase()})`}
             </h2>
             <div className="flex flex-wrap items-end gap-3">
               <div className="w-72">
                 <span className="mb-1 block text-sm font-medium text-slate-700">
-                  Section
+                  {term.section}
                 </span>
                 <Select
                   value={sectionId}
                   onChange={(event) => setSectionId(event.target.value)}
                 >
-                  <option value="">Select section…</option>
+                  <option value="">{`Select ${term.section.toLowerCase()}…`}</option>
                   {sections.map((section) => (
                     <option key={section.id} value={section.id}>
                       {section.label}
@@ -246,7 +248,7 @@ export default function IdCardsPage() {
                 </Select>
               </div>
               <Button onClick={downloadSectionIds} disabled={bulkLoading}>
-                {bulkLoading ? "Downloading…" : "Download section ID cards"}
+                {bulkLoading ? "Downloading…" : `Download ${term.section.toLowerCase()} ID cards`}
               </Button>
             </div>
             <div className="mt-3">

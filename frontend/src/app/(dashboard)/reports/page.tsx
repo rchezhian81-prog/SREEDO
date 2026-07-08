@@ -377,13 +377,13 @@ export default function ReportsPage() {
               </div>
               <div className="w-56">
                 <span className="mb-1 block text-sm font-medium text-slate-700">
-                  Section
+                  {term.section}
                 </span>
                 <Select
                   value={msSectionId}
                   onChange={(event) => setMsSectionId(event.target.value)}
                 >
-                  <option value="">Select section…</option>
+                  <option value="">{`Select ${term.section.toLowerCase()}…`}</option>
                   {sections.map((section) => (
                     <option key={section.id} value={section.id}>
                       {section.label}

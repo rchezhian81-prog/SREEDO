@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import { useTerms } from "@/lib/terms";
 import { useAuthStore } from "@/stores/auth-store";
 import { Card, PageHeader, Spinner } from "@/components/ui";
 import type { Period, Room } from "@/types";
@@ -10,6 +11,7 @@ import { useI18n } from "@/i18n/I18nProvider";
 
 export default function TimetableHubPage() {
   const { t } = useI18n();
+  const term = useTerms();
   const role = useAuthStore((state) => state.user?.role);
   const isAdmin = role === "admin";
 
@@ -60,7 +62,7 @@ export default function TimetableHubPage() {
                   🏫
                 </div>
                 <h3 className="mt-2 font-semibold text-slate-900">
-                  Class timetable
+                  {`${term.klass} timetable`}
                 </h3>
                 <p className="mt-1 text-sm text-slate-500">
                   View and manage the weekly schedule for a section.
@@ -74,7 +76,7 @@ export default function TimetableHubPage() {
                   👩‍🏫
                 </div>
                 <h3 className="mt-2 font-semibold text-slate-900">
-                  Teacher timetable
+                  {`${term.teacher} timetable`}
                 </h3>
                 <p className="mt-1 text-sm text-slate-500">
                   See where each teacher is scheduled across the week.

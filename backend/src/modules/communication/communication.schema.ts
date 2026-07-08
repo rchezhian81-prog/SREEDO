@@ -6,12 +6,14 @@ export const AUDIENCE_TYPES = [
   "staff",
   "section",
   "class",
+  "semester",
+  "batch",
   "student",
   "parent",
   "user",
 ] as const;
 
-const REF_REQUIRED = ["section", "class", "student", "parent", "user"];
+const REF_REQUIRED = ["section", "class", "semester", "batch", "student", "parent", "user"];
 
 export const sendMessageSchema = z
   .object({

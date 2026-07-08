@@ -29,12 +29,14 @@ const sanitize = (name: string) => name.replace(/[^\w.\- ]+/g, "_").slice(0, 120
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: query, name: sectionId, schema: { type: string, format: uuid } }
+ *       - { in: query, name: semesterId, schema: { type: string, format: uuid } }
+ *       - { in: query, name: batchId, schema: { type: string, format: uuid } }
  *       - { in: query, name: subjectId, schema: { type: string, format: uuid } }
  *     responses:
  *       200: { description: Homework list }
  *   post:
  *     tags: [Homework]
- *     summary: Create homework for a section + subject (teacher)
+ *     summary: Create homework for a subject and one cohort — a section (school) or a semester (college) (teacher)
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true
@@ -42,9 +44,11 @@ const sanitize = (name: string) => name.replace(/[^\w.\- ]+/g, "_").slice(0, 120
  *         application/json:
  *           schema:
  *             type: object
- *             required: [sectionId, subjectId, title]
+ *             required: [subjectId, title]
  *             properties:
- *               sectionId: { type: string, format: uuid }
+ *               sectionId: { type: string, format: uuid, description: "School cohort — provide exactly one of sectionId or semesterId" }
+ *               semesterId: { type: string, format: uuid, description: "College cohort — provide exactly one of sectionId or semesterId" }
+ *               batchId: { type: string, format: uuid, description: "Optional — narrows a semester target to one batch within it" }
  *               subjectId: { type: string, format: uuid }
  *               title: { type: string }
  *               description: { type: string }
@@ -52,7 +56,7 @@ const sanitize = (name: string) => name.replace(/[^\w.\- ]+/g, "_").slice(0, 120
  *               dueDate: { type: string, format: date }
  *               maxMarks: { type: number }
  *     responses:
- *       201: { description: Created homework (notifies the section) }
+ *       201: { description: Created homework (notifies the cohort) }
  */
 homeworkRouter.get("/", requirePermission("homework:read"), async (req, res) => {
   const filters = listHomeworkQuerySchema.parse(req.query);

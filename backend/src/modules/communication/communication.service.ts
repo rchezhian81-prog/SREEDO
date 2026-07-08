@@ -100,6 +100,28 @@ export async function resolveAudience(
              WHERE g.institution_id = $1 AND sec.class_id = $2`;
       params = [institutionId, audienceRef];
       break;
+    case "semester":
+      // College cohort: students actively enrolled in the semester (+ guardians).
+      sql = `SELECT u.id FROM users u JOIN students s ON s.user_id = u.id
+             JOIN enrollments e ON e.student_id = s.id
+             WHERE e.institution_id = $1 AND e.semester_id = $2 AND e.status = 'active'
+             UNION
+             SELECT g.user_id FROM guardians g JOIN students s ON s.id = g.student_id
+             JOIN enrollments e ON e.student_id = s.id
+             WHERE g.institution_id = $1 AND e.semester_id = $2 AND e.status = 'active'`;
+      params = [institutionId, audienceRef];
+      break;
+    case "batch":
+      // College cohort narrowed to a batch: actively enrolled students (+ guardians).
+      sql = `SELECT u.id FROM users u JOIN students s ON s.user_id = u.id
+             JOIN enrollments e ON e.student_id = s.id
+             WHERE e.institution_id = $1 AND e.batch_id = $2 AND e.status = 'active'
+             UNION
+             SELECT g.user_id FROM guardians g JOIN students s ON s.id = g.student_id
+             JOIN enrollments e ON e.student_id = s.id
+             WHERE g.institution_id = $1 AND e.batch_id = $2 AND e.status = 'active'`;
+      params = [institutionId, audienceRef];
+      break;
     case "student":
       sql = `SELECT user_id AS id FROM students
              WHERE id = $2 AND institution_id = $1 AND user_id IS NOT NULL

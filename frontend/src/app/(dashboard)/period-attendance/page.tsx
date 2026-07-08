@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
+import { useTerms } from "@/lib/terms";
 import {
   Button,
   cx,
@@ -29,6 +30,7 @@ interface Period { id: string; name: string }
 interface RosterRow { studentId: string; name: string; admissionNo: string | null; status: Status | null }
 
 export default function PeriodAttendancePage() {
+  const term = useTerms();
   const [sections, setSections] = useState<SectionOption[]>([]);
   const [periods, setPeriods] = useState<Period[]>([]);
   const [sectionId, setSectionId] = useState("");
@@ -135,7 +137,7 @@ export default function PeriodAttendancePage() {
       {loading ? (
         <Spinner />
       ) : rows.length === 0 ? (
-        <EmptyState message="No students in this section (or no period selected)" />
+        <EmptyState message={`No students in this ${term.section.toLowerCase()} (or no period selected)`} />
       ) : (
         <>
           <div className="overflow-x-auto rounded-xl border border-line bg-surface">

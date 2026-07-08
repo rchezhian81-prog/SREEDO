@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/api";
+import { useTerms } from "@/lib/terms";
 import { useAuthStore } from "@/stores/auth-store";
 import {
   Button,
@@ -56,6 +57,7 @@ function renderCell(value: unknown): string {
 
 export default function ReportsCenterPage() {
   const { t } = useI18n();
+  const term = useTerms();
   const [reports, setReports] = useState<ReportMeta[]>([]);
   const [permissions, setPermissions] = useState<string[]>([]);
   const [role, setRole] = useState("");
@@ -261,13 +263,13 @@ export default function ReportsCenterPage() {
               <div className="mb-4 flex flex-wrap items-end gap-3">
                 <div className="w-56">
                   <span className="mb-1 block text-sm font-medium text-slate-700">
-                    Section
+                    {term.section}
                   </span>
                   <Select
                     value={sectionId}
                     onChange={(event) => setSectionId(event.target.value)}
                   >
-                    <option value="">All sections</option>
+                    <option value="">{`All ${term.sectionPlural.toLowerCase()}`}</option>
                     {sections.map((section) => (
                       <option key={section.id} value={section.id}>
                         {section.label}

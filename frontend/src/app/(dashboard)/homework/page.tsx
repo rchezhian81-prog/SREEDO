@@ -18,6 +18,9 @@ import {
   Textarea,
 } from "@/components/ui";
 import type {
+  CollegeBatch,
+  CollegeProgram,
+  CollegeSemester,
   Homework,
   HomeworkAttachment,
   HomeworkDetail,
@@ -27,6 +30,7 @@ import type {
 } from "@/types";
 import { useI18n } from "@/i18n/I18nProvider";
 import { useTerms } from "@/lib/terms";
+import { useModeStore } from "@/stores/mode-store";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
 
@@ -113,6 +117,11 @@ function formatDate(value: string | null) {
 
 interface HomeworkForm {
   sectionId: string;
+  // College cohort picker: programId only scopes the semester/batch dropdowns.
+  // The homework is posted with semesterId (+ optional batchId).
+  programId: string;
+  semesterId: string;
+  batchId: string;
   subjectId: string;
   title: string;
   description: string;
@@ -123,6 +132,9 @@ interface HomeworkForm {
 
 const emptyForm: HomeworkForm = {
   sectionId: "",
+  programId: "",
+  semesterId: "",
+  batchId: "",
   subjectId: "",
   title: "",
   description: "",
@@ -136,15 +148,28 @@ export default function HomeworkPage() {
   const { t } = useI18n();
   const role = useAuthStore((state) => state.user?.role);
   const canManage = role === "admin" || role === "teacher";
+  // College tenants target a semester (via a program → semester picker) instead
+  // of a class section; the school flow is unchanged.
+  const mode = useModeStore((state) => state.mode);
+  const isCollege = mode === "college";
 
   const [sections, setSections] = useState<SectionOption[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [programs, setPrograms] = useState<CollegeProgram[]>([]);
   const [list, setList] = useState<Homework[]>([]);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
 
   const [filterSection, setFilterSection] = useState("");
   const [filterSubject, setFilterSubject] = useState("");
+  // College filter: program scopes the semester dropdown; the list filters by
+  // the chosen semester.
+  const [filterProgram, setFilterProgram] = useState("");
+  const [filterSemesters, setFilterSemesters] = useState<CollegeSemester[]>([]);
+  const [filterSemester, setFilterSemester] = useState("");
+  // Semester + batch options for the create modal (depend on the form's program).
+  const [formSemesters, setFormSemesters] = useState<CollegeSemester[]>([]);
+  const [formBatches, setFormBatches] = useState<CollegeBatch[]>([]);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -156,25 +181,43 @@ export default function HomeworkPage() {
   const [formError, setFormError] = useState<string | null>(null);
 
   const loadSelectors = useCallback(() => {
-    return Promise.all([
-      api.get<SchoolClass[]>("/classes").then((classes) =>
-        setSections(
-          classes.flatMap((schoolClass) =>
-            schoolClass.sections.map((section) => ({
-              id: section.id,
-              label: `${schoolClass.name} - ${section.name}`,
-            }))
+    const tasks: Promise<unknown>[] = [
+      api.get<Subject[]>("/subjects").then(setSubjects),
+    ];
+    if (isCollege) {
+      // Programs power the cohort picker; guarded so a portal user lacking
+      // college:read degrades to an empty picker (their list stays auto-scoped).
+      tasks.push(
+        api
+          .get<CollegeProgram[]>("/college/programs")
+          .then(setPrograms)
+          .catch(() => undefined)
+      );
+    } else {
+      tasks.push(
+        api.get<SchoolClass[]>("/classes").then((classes) =>
+          setSections(
+            classes.flatMap((schoolClass) =>
+              schoolClass.sections.map((section) => ({
+                id: section.id,
+                label: `${schoolClass.name} - ${section.name}`,
+              }))
+            )
           )
         )
-      ),
-      api.get<Subject[]>("/subjects").then(setSubjects),
-    ]);
-  }, []);
+      );
+    }
+    return Promise.all(tasks);
+  }, [isCollege]);
 
   const loadList = useCallback(async () => {
     setListError(null);
     const params = new URLSearchParams();
-    if (filterSection) params.set("sectionId", filterSection);
+    if (isCollege) {
+      if (filterSemester) params.set("semesterId", filterSemester);
+    } else if (filterSection) {
+      params.set("sectionId", filterSection);
+    }
     if (filterSubject) params.set("subjectId", filterSubject);
     const query = params.toString();
     try {
@@ -184,7 +227,7 @@ export default function HomeworkPage() {
         err instanceof ApiError ? err.message : "Failed to load homework"
       );
     }
-  }, [filterSection, filterSubject]);
+  }, [isCollege, filterSection, filterSemester, filterSubject]);
 
   useEffect(() => {
     setLoading(true);
@@ -197,6 +240,39 @@ export default function HomeworkPage() {
     loadList();
   }, [loadList]);
 
+  // College filter: reload semesters (and reset the choice) when the program changes.
+  useEffect(() => {
+    setFilterSemester("");
+    if (!isCollege || !filterProgram) {
+      setFilterSemesters([]);
+      return;
+    }
+    api
+      .get<CollegeSemester[]>(
+        `/college/semesters?programId=${encodeURIComponent(filterProgram)}`
+      )
+      .then(setFilterSemesters)
+      .catch(() => setFilterSemesters([]));
+  }, [isCollege, filterProgram]);
+
+  // Create modal: reload semesters + batches when the form's program changes.
+  useEffect(() => {
+    if (!isCollege || !form.programId) {
+      setFormSemesters([]);
+      setFormBatches([]);
+      return;
+    }
+    const p = encodeURIComponent(form.programId);
+    api
+      .get<CollegeSemester[]>(`/college/semesters?programId=${p}`)
+      .then(setFormSemesters)
+      .catch(() => setFormSemesters([]));
+    api
+      .get<CollegeBatch[]>(`/college/batches?programId=${p}`)
+      .then(setFormBatches)
+      .catch(() => setFormBatches([]));
+  }, [isCollege, form.programId]);
+
   const openCreate = () => {
     setEditing(null);
     setFormError(null);
@@ -208,7 +284,10 @@ export default function HomeworkPage() {
     setEditing(homework);
     setFormError(null);
     setForm({
-      sectionId: homework.sectionId,
+      sectionId: homework.sectionId ?? "",
+      programId: "",
+      semesterId: homework.semesterId ?? "",
+      batchId: homework.batchId ?? "",
       subjectId: homework.subjectId,
       title: homework.title,
       description: homework.description ?? "",
@@ -221,12 +300,18 @@ export default function HomeworkPage() {
 
   const saveHomework = async () => {
     setFormError(null);
-    if (!editing && !form.sectionId) {
-      setFormError("Select a section");
-      return;
+    if (!editing) {
+      if (isCollege && !form.semesterId) {
+        setFormError(`Select a ${term.term.toLowerCase()}`);
+        return;
+      }
+      if (!isCollege && !form.sectionId) {
+        setFormError(`Select a ${term.section.toLowerCase()}`);
+        return;
+      }
     }
     if (!form.subjectId) {
-      setFormError("Select a subject");
+      setFormError(`Select a ${term.subject.toLowerCase()}`);
       return;
     }
     if (!form.title.trim()) {
@@ -246,7 +331,10 @@ export default function HomeworkPage() {
       if (editing) {
         await api.patch(`/homework/${editing.id}`, common);
       } else {
-        await api.post("/homework", { sectionId: form.sectionId, ...common });
+        const target = isCollege
+          ? { semesterId: form.semesterId, batchId: form.batchId || undefined }
+          : { sectionId: form.sectionId };
+        await api.post("/homework", { ...target, ...common });
       }
       setModalOpen(false);
       setForm(emptyForm);
@@ -295,31 +383,69 @@ export default function HomeworkPage() {
         <div className="space-y-6">
           <Card>
             <div className="flex flex-wrap items-end gap-3">
-              <div className="w-72">
-                <span className="mb-1 block text-sm font-medium text-slate-700">
-                  Section
-                </span>
-                <Select
-                  value={filterSection}
-                  onChange={(event) => setFilterSection(event.target.value)}
-                >
-                  <option value="">All sections</option>
-                  {sections.map((section) => (
-                    <option key={section.id} value={section.id}>
-                      {section.label}
-                    </option>
-                  ))}
-                </Select>
-              </div>
+              {isCollege ? (
+                <>
+                  <div className="w-64">
+                    <span className="mb-1 block text-sm font-medium text-slate-700">
+                      {term.klass}
+                    </span>
+                    <Select
+                      value={filterProgram}
+                      onChange={(event) => setFilterProgram(event.target.value)}
+                    >
+                      <option value="">{`All ${term.klassPlural.toLowerCase()}`}</option>
+                      {programs.map((program) => (
+                        <option key={program.id} value={program.id}>
+                          {program.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                  <div className="w-64">
+                    <span className="mb-1 block text-sm font-medium text-slate-700">
+                      {term.term}
+                    </span>
+                    <Select
+                      value={filterSemester}
+                      onChange={(event) => setFilterSemester(event.target.value)}
+                      disabled={!filterProgram}
+                    >
+                      <option value="">{`All ${term.term.toLowerCase()}s`}</option>
+                      {filterSemesters.map((semester) => (
+                        <option key={semester.id} value={semester.id}>
+                          {semester.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                </>
+              ) : (
+                <div className="w-72">
+                  <span className="mb-1 block text-sm font-medium text-slate-700">
+                    {term.section}
+                  </span>
+                  <Select
+                    value={filterSection}
+                    onChange={(event) => setFilterSection(event.target.value)}
+                  >
+                    <option value="">{`All ${term.sectionPlural.toLowerCase()}`}</option>
+                    {sections.map((section) => (
+                      <option key={section.id} value={section.id}>
+                        {section.label}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              )}
               <div className="w-56">
                 <span className="mb-1 block text-sm font-medium text-slate-700">
-                  Subject
+                  {term.subject}
                 </span>
                 <Select
                   value={filterSubject}
                   onChange={(event) => setFilterSubject(event.target.value)}
                 >
-                  <option value="">All subjects</option>
+                  <option value="">{`All ${term.subjectPlural.toLowerCase()}`}</option>
                   {subjects.map((subject) => (
                     <option key={subject.id} value={subject.id}>
                       {subject.name}
@@ -343,7 +469,11 @@ export default function HomeworkPage() {
                   <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
                     <tr>
                       <th className="px-4 py-3">Title</th>
-                      <th className="px-4 py-3">Class / Section</th>
+                      <th className="px-4 py-3">
+                        {isCollege
+                          ? `${term.klass} / ${term.term}`
+                          : `${term.klass} / ${term.section}`}
+                      </th>
                       <th className="px-4 py-3">{term.subject}</th>
                       <th className="px-4 py-3">Due</th>
                       <th className="px-4 py-3">Submissions</th>
@@ -357,7 +487,17 @@ export default function HomeworkPage() {
                           {homework.title}
                         </td>
                         <td className="px-4 py-3 text-slate-600">
-                          {homework.className && homework.sectionName
+                          {homework.semesterName
+                            ? `${
+                                homework.programName
+                                  ? `${homework.programName} - `
+                                  : ""
+                              }${homework.semesterName}${
+                                homework.batchName
+                                  ? ` · ${homework.batchName}`
+                                  : ""
+                              }`
+                            : homework.className && homework.sectionName
                             ? `${homework.className} - ${homework.sectionName}`
                             : "—"}
                         </td>
@@ -412,23 +552,83 @@ export default function HomeworkPage() {
         onClose={() => setModalOpen(false)}
       >
         <div className="space-y-4">
-          {!editing && (
-            <Field label={term.section}>
-              <Select
-                value={form.sectionId}
-                onChange={(event) =>
-                  setForm({ ...form, sectionId: event.target.value })
-                }
-              >
-                <option value="">Select section…</option>
-                {sections.map((section) => (
-                  <option key={section.id} value={section.id}>
-                    {section.label}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          )}
+          {!editing &&
+            (isCollege ? (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label={term.klass}>
+                    <Select
+                      value={form.programId}
+                      onChange={(event) =>
+                        setForm({
+                          ...form,
+                          programId: event.target.value,
+                          semesterId: "",
+                          batchId: "",
+                        })
+                      }
+                    >
+                      <option value="">{`Select ${term.klass.toLowerCase()}…`}</option>
+                      {programs.map((program) => (
+                        <option key={program.id} value={program.id}>
+                          {program.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label={term.term}>
+                    <Select
+                      value={form.semesterId}
+                      onChange={(event) =>
+                        setForm({ ...form, semesterId: event.target.value })
+                      }
+                      disabled={!form.programId}
+                    >
+                      <option value="">{`Select ${term.term.toLowerCase()}…`}</option>
+                      {formSemesters.map((semester) => (
+                        <option key={semester.id} value={semester.id}>
+                          {semester.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                </div>
+                {/* Batch is optional — narrows the homework to one batch within
+                    the semester; blank targets the whole semester. */}
+                <Field label={`${term.section} (optional)`}>
+                  <Select
+                    value={form.batchId}
+                    onChange={(event) =>
+                      setForm({ ...form, batchId: event.target.value })
+                    }
+                    disabled={!form.programId}
+                  >
+                    <option value="">{`Whole ${term.term.toLowerCase()} (all ${term.sectionPlural.toLowerCase()})`}</option>
+                    {formBatches.map((batch) => (
+                      <option key={batch.id} value={batch.id}>
+                        {batch.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              </>
+            ) : (
+              <Field label={term.section}>
+                <Select
+                  value={form.sectionId}
+                  onChange={(event) =>
+                    setForm({ ...form, sectionId: event.target.value })
+                  }
+                >
+                  <option value="">{`Select ${term.section.toLowerCase()}…`}</option>
+                  {sections.map((section) => (
+                    <option key={section.id} value={section.id}>
+                      {section.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            ))}
           <Field label={term.subject}>
             <Select
               value={form.subjectId}
@@ -436,7 +636,7 @@ export default function HomeworkPage() {
                 setForm({ ...form, subjectId: event.target.value })
               }
             >
-              <option value="">Select subject…</option>
+              <option value="">{`Select ${term.subject.toLowerCase()}…`}</option>
               {subjects.map((subject) => (
                 <option key={subject.id} value={subject.id}>
                   {subject.name}
@@ -641,7 +841,13 @@ function HomeworkDetailView({
               {detail.title}
             </h2>
             <p className="mt-1 text-sm text-slate-500">
-              {detail.className && detail.sectionName
+              {detail.semesterName
+                ? `${
+                    detail.programName ? `${detail.programName} - ` : ""
+                  }${detail.semesterName}${
+                    detail.batchName ? ` · ${detail.batchName}` : ""
+                  }`
+                : detail.className && detail.sectionName
                 ? `${detail.className} - ${detail.sectionName}`
                 : "—"}
               {detail.subjectName ? ` · ${detail.subjectName}` : ""}

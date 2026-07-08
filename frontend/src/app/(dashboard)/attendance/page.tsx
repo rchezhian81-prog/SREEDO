@@ -124,7 +124,7 @@ export default function AttendancePage() {
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <div className="w-56">
           <span className="mb-1 block text-sm font-medium text-ink">
-            Section
+            {term.section}
           </span>
           <Select
             value={sectionId}
@@ -165,7 +165,7 @@ export default function AttendancePage() {
       {loading ? (
         <Spinner />
       ) : rows.length === 0 ? (
-        <EmptyState message="No active students in this section" />
+        <EmptyState message={`No active students in this ${term.section.toLowerCase()}`} />
       ) : (
         <div className="mt-3 overflow-x-auto rounded-xl border border-line bg-surface">
           <table className="w-full text-left text-sm">

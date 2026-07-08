@@ -301,13 +301,13 @@ export default function ExamsPage() {
           </div>
 
           {sections.length === 0 || subjects.length === 0 ? (
-            <EmptyState message="Add classes/sections and subjects first (Classes page)." />
+            <EmptyState message={`Add ${term.klassPlural.toLowerCase()}/${term.sectionPlural.toLowerCase()} and ${term.subjectPlural.toLowerCase()} first (${term.klassPlural} page).`} />
           ) : (
             <>
               <div className="mb-4 flex flex-wrap items-end gap-3">
                 <div className="w-56">
                   <span className="mb-1 block text-sm font-medium text-ink">
-                    Section
+                    {term.section}
                   </span>
                   <Select
                     value={sectionId}
@@ -322,7 +322,7 @@ export default function ExamsPage() {
                 </div>
                 <div className="w-48">
                   <span className="mb-1 block text-sm font-medium text-ink">
-                    Subject
+                    {term.subject}
                   </span>
                   <Select
                     value={subjectId}
@@ -363,7 +363,7 @@ export default function ExamsPage() {
               {gridLoading ? (
                 <Spinner />
               ) : roster.length === 0 ? (
-                <EmptyState message="No students in this section" />
+                <EmptyState message={`No students in this ${term.section.toLowerCase()}`} />
               ) : (
                 <div className="overflow-x-auto rounded-xl border border-line">
                   <table className="w-full text-left text-sm">

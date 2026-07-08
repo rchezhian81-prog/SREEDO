@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
+import { useTerms } from "@/lib/terms";
 import { useAuthStore } from "@/stores/auth-store";
 import {
   Button,
@@ -36,6 +37,7 @@ type MappingForm = z.infer<typeof mappingSchema>;
 export default function CollegeSubjectsPage() {
   const role = useAuthStore((state) => state.user?.role);
   const isAdmin = role === "admin";
+  const term = useTerms();
 
   const [programs, setPrograms] = useState<CollegeProgram[]>([]);
   const [semesters, setSemesters] = useState<CollegeSemester[]>([]);
@@ -94,7 +96,9 @@ export default function CollegeSubjectsPage() {
       );
     } catch (err) {
       setLoadError(
-        err instanceof ApiError ? err.message : "Failed to load subjects"
+        err instanceof ApiError
+          ? err.message
+          : `Failed to load ${term.subjectPlural.toLowerCase()}`
       );
     } finally {
       setLoading(false);
@@ -136,31 +140,41 @@ export default function CollegeSubjectsPage() {
       await load();
     } catch (err) {
       setServerError(
-        err instanceof ApiError ? err.message : "Failed to add subject"
+        err instanceof ApiError
+          ? err.message
+          : `Failed to add ${term.subject.toLowerCase()}`
       );
     }
   };
 
   const removeMapping = async (mapping: CollegeProgramSubject) => {
-    if (!confirm(`Remove "${mapping.subjectName ?? "subject"}" from program?`))
+    if (
+      !confirm(
+        `Remove "${mapping.subjectName ?? term.subject.toLowerCase()}" from program?`
+      )
+    )
       return;
     try {
       await api.delete(`/college/program-subjects/${mapping.id}`);
       await load();
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Failed to remove subject");
+      alert(
+        err instanceof ApiError
+          ? err.message
+          : `Failed to remove ${term.subject.toLowerCase()}`
+      );
     }
   };
 
   return (
     <>
       <PageHeader
-        title="Semester Subjects"
-        subtitle="Subjects mapped to programs & semesters"
+        title={`Semester ${term.subjectPlural}`}
+        subtitle={`${term.subjectPlural} mapped to programs & semesters`}
         action={
           isAdmin ? (
             <Button onClick={openCreate} disabled={!programFilter}>
-              + Add subject
+              {`+ Add ${term.subject.toLowerCase()}`}
             </Button>
           ) : undefined
         }
@@ -212,19 +226,19 @@ export default function CollegeSubjectsPage() {
       </div>
 
       {!programFilter ? (
-        <EmptyState message="Select a program to view its subjects" />
+        <EmptyState message={`Select a program to view its ${term.subjectPlural.toLowerCase()}`} />
       ) : loading ? (
         <Spinner />
       ) : loadError ? (
         <ErrorNote message={loadError} />
       ) : mappings.length === 0 ? (
-        <EmptyState message="No subjects mapped for this selection" />
+        <EmptyState message={`No ${term.subjectPlural.toLowerCase()} mapped for this selection`} />
       ) : (
         <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
               <tr>
-                <th className="px-4 py-3">Subject</th>
+                <th className="px-4 py-3">{term.subject}</th>
                 <th className="px-4 py-3">Semester</th>
                 <th className="px-4 py-3">Credits</th>
                 {isAdmin && <th className="px-4 py-3" />}
@@ -256,14 +270,14 @@ export default function CollegeSubjectsPage() {
       )}
 
       <Modal
-        title="Add subject to program"
+        title={`Add ${term.subject.toLowerCase()} to program`}
         open={modalOpen}
         onClose={() => setModalOpen(false)}
       >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <Field label="Subject" error={errors.subjectId?.message}>
+          <Field label={term.subject} error={errors.subjectId?.message}>
             <Select {...register("subjectId")}>
-              <option value="">Select a subject…</option>
+              <option value="">{`Select a ${term.subject.toLowerCase()}…`}</option>
               {subjects.map((subject) => (
                 <option key={subject.id} value={subject.id}>
                   {subject.name}
@@ -295,7 +309,7 @@ export default function CollegeSubjectsPage() {
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Saving…" : "Add subject"}
+              {isSubmitting ? "Saving…" : `Add ${term.subject.toLowerCase()}`}
             </Button>
           </div>
         </form>
