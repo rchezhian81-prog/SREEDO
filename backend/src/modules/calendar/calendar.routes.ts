@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { uuidParam } from "../../utils/params";
-import { authenticate, authorize } from "../../middleware/auth";
+import { authenticate } from "../../middleware/auth";
 import { requireTenant, tenantId } from "../../middleware/tenant";
+import { requirePermission } from "../../middleware/permissions";
 import {
   createEventSchema,
   updateEventSchema,
@@ -52,7 +53,7 @@ calendarRouter.get("/events", async (req, res) => {
   res.json(await service.listEvents(filters, tenantId(req)));
 });
 
-calendarRouter.post("/events", authorize("admin"), async (req, res) => {
+calendarRouter.post("/events", requirePermission("calendar:manage"), async (req, res) => {
   const input = createEventSchema.parse(req.body);
   res.status(201).json(await service.createEvent(input, tenantId(req), req.user!.id));
 });
@@ -90,12 +91,12 @@ calendarRouter.get("/events/:id", async (req, res) => {
   res.json(await service.getEvent(uuidParam(req), tenantId(req)));
 });
 
-calendarRouter.patch("/events/:id", authorize("admin"), async (req, res) => {
+calendarRouter.patch("/events/:id", requirePermission("calendar:manage"), async (req, res) => {
   const input = updateEventSchema.parse(req.body);
   res.json(await service.updateEvent(uuidParam(req), input, tenantId(req)));
 });
 
-calendarRouter.delete("/events/:id", authorize("admin"), async (req, res) => {
+calendarRouter.delete("/events/:id", requirePermission("calendar:manage"), async (req, res) => {
   await service.deleteEvent(uuidParam(req), tenantId(req));
   res.status(204).end();
 });

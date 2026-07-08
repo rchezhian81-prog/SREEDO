@@ -3,8 +3,8 @@ import type { Request } from "express";
 import { authenticate } from "../../middleware/auth";
 import { requireTenant, tenantId } from "../../middleware/tenant";
 import { requirePermission } from "../../middleware/permissions";
-import { param } from "../../utils/params";
-import { updateRoleSchema, auditQuerySchema } from "./tenant-rbac.schema";
+import { param, uuidParam } from "../../utils/params";
+import { updateRoleSchema, auditQuerySchema, assignJobRoleSchema } from "./tenant-rbac.schema";
 import * as service from "./tenant-rbac.service";
 
 /**
@@ -87,6 +87,55 @@ tenantRbacRouter.get("/roles", READ, async (req, res) => {
  */
 tenantRbacRouter.get("/matrix", READ, async (req, res) => {
   res.json(await service.getMatrix(tenantId(req)));
+});
+
+/**
+ * @openapi
+ * /tenant-rbac/job-roles:
+ *   get:
+ *     tags: [Tenant RBAC]
+ *     summary: The assignable finer job-roles (with per-tenant effective/override counts)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Job roles }
+ *       403: { description: Missing tenant_rbac:read }
+ */
+tenantRbacRouter.get("/job-roles", READ, async (req, res) => {
+  res.json(await service.listJobRoles(tenantId(req)));
+});
+
+/**
+ * @openapi
+ * /tenant-rbac/users/{userId}/job-role:
+ *   post:
+ *     tags: [Tenant RBAC]
+ *     summary: Assign (or clear) a user's finer job-role
+ *     description: >
+ *       Sets users.job_role_key and the coarse role to the job-role's base role.
+ *       jobRoleKey=null clears it. Portal (student/parent) accounts are rejected;
+ *       the last manager/owner cannot be demoted; an actor cannot self-demote.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: userId, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [jobRoleKey]
+ *             properties: { jobRoleKey: { type: string, nullable: true } }
+ *     responses:
+ *       200: { description: Updated user role }
+ *       400: { description: Safety rail violated }
+ *       403: { description: Missing tenant_rbac:manage }
+ *       404: { description: User or job-role not found }
+ */
+tenantRbacRouter.post("/users/:userId/job-role", MANAGE, async (req, res) => {
+  const { jobRoleKey } = assignJobRoleSchema.parse(req.body);
+  res.json(
+    await service.assignJobRole(tenantId(req), uuidParam(req, "userId"), jobRoleKey, actorFrom(req))
+  );
 });
 
 /**

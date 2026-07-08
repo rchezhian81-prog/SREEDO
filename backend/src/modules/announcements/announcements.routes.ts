@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { uuidParam } from "../../utils/params";
-import { authenticate, authorize } from "../../middleware/auth";
+import { authenticate } from "../../middleware/auth";
 import { requireTenant, tenantId } from "../../middleware/tenant";
+import { requirePermission } from "../../middleware/permissions";
 import { parsePagination } from "../../utils/pagination";
 import {
   createAnnouncementSchema,
@@ -14,7 +15,7 @@ export const announcementsRouter = Router();
 
 announcementsRouter.use(authenticate, requireTenant);
 
-const publisher = authorize("admin", "teacher");
+const publisher = requirePermission("announcements:manage");
 
 /** Publishers (admin/teacher) also see scheduled (future-dated) announcements. */
 function canSeeScheduled(req: { user?: { role?: string } }): boolean {

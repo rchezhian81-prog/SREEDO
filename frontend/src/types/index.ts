@@ -319,6 +319,7 @@ export interface AccountUser {
   twoFactorEnabled: boolean;
   isLocked: boolean;
   lockedUntil: string | null;
+  jobRoleKey?: string | null;
   createdAt: string;
 }
 

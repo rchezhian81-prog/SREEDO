@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { uuidParam } from "../../utils/params";
-import { authenticate, authorize } from "../../middleware/auth";
+import { authenticate } from "../../middleware/auth";
 import { requireTenant, tenantId } from "../../middleware/tenant";
 import { requirePermission } from "../../middleware/permissions";
 import { parsePagination } from "../../utils/pagination";
@@ -33,7 +33,10 @@ export const feesRouter = Router();
 
 feesRouter.use(authenticate, requireTenant);
 
-const billing = authorize("admin", "accountant");
+// Core fee money-writes (T2.1): invoices/structures need fees:manage, payments
+// need fees:payment. Seeded to admin+accountant, so behaviour is unchanged.
+const manageFees = requirePermission("fees:manage");
+const takePayment = requirePermission("fees:payment");
 
 /**
  * @openapi
@@ -68,7 +71,7 @@ feesRouter.get("/structures", async (req, res) => {
   res.json(await feesService.listFeeStructures(tenantId(req)));
 });
 
-feesRouter.post("/structures", billing, async (req, res) => {
+feesRouter.post("/structures", manageFees, async (req, res) => {
   const input = createFeeStructureSchema.parse(req.body);
   res.status(201).json(await feesService.createFeeStructure(input, tenantId(req)));
 });
@@ -118,7 +121,7 @@ feesRouter.get("/invoices", async (req, res) => {
   res.json(result);
 });
 
-feesRouter.post("/invoices", billing, async (req, res) => {
+feesRouter.post("/invoices", manageFees, async (req, res) => {
   const input = createInvoiceSchema.parse(req.body);
   res.status(201).json(await feesService.createInvoice(input, tenantId(req)));
 });
@@ -165,7 +168,7 @@ feesRouter.get("/invoices/:id", async (req, res) => {
  *       200: { description: Updated invoice; emails a receipt to the guardian when SMTP is configured }
  *       400: { description: Amount exceeds outstanding balance }
  */
-feesRouter.post("/invoices/:id/payments", billing, async (req, res) => {
+feesRouter.post("/invoices/:id/payments", takePayment, async (req, res) => {
   const input = recordPaymentSchema.parse(req.body);
   res.json(
     await feesService.recordPayment(uuidParam(req), input, req.user!.id, tenantId(req))

@@ -3,6 +3,7 @@ import { ApiError } from "../../utils/api-error";
 import type { UserRole } from "../../types";
 import {
   effectivePermissions,
+  invalidateJobRoleCache,
   invalidateTenantOverrideCache,
   tenantRolePermissions,
 } from "../../middleware/permissions";
@@ -16,6 +17,7 @@ import {
   TENANT_ROLE_KEYS,
   type TenantRoleMeta,
 } from "./tenant-rbac.registry";
+import { JOB_ROLES, JOB_ROLE_BY_KEY, isJobRoleKey } from "./tenant-rbac.job-roles";
 
 // PR-T2 — Tenant RBAC v2 service. Reads/writes per-tenant role permission
 // overrides (tenant_role_permissions) with safety rails, and records an audit
@@ -32,9 +34,22 @@ export interface ActorContext {
 }
 
 function roleMeta(role: string): TenantRoleMeta {
-  const meta = TENANT_ROLES.find((r) => r.key === role);
-  if (!meta) throw ApiError.notFound("Unknown tenant role");
-  return meta;
+  const coarse = TENANT_ROLES.find((r) => r.key === role);
+  if (coarse) return coarse;
+  // Finer job-roles (jr_…) are also editable/viewable in the console.
+  const job = JOB_ROLE_BY_KEY[role];
+  if (job) {
+    return {
+      key: job.key,
+      name: job.name,
+      description: job.description,
+      appliesTo: job.appliesTo,
+      builtIn: true,
+      // The full-access job-role is protected like the admin coarse role.
+      management: job.key === "jr_owner_management",
+    };
+  }
+  throw ApiError.notFound("Unknown tenant role");
 }
 
 /** The tenant permission registry (groups + roles + high-risk keys). */
@@ -104,6 +119,8 @@ export async function getMatrix(institutionId: string) {
 /** Users holding a given role within the tenant (for "users in role"). */
 export async function usersInRole(institutionId: string, role: string) {
   roleMeta(role);
+  // Job-roles live in users.job_role_key (TEXT); coarse roles in users.role (enum).
+  const column = isJobRoleKey(role) ? "job_role_key" : "role";
   const { rows } = await query<{
     id: string;
     email: string;
@@ -112,7 +129,7 @@ export async function usersInRole(institutionId: string, role: string) {
   }>(
     `SELECT id, email, full_name AS "fullName", is_active AS "isActive"
      FROM users
-     WHERE institution_id = $1 AND role = $2
+     WHERE institution_id = $1 AND ${column} = $2
      ORDER BY full_name`,
     [institutionId, role]
   );
@@ -312,6 +329,131 @@ export async function listAudit(
     [institutionId]
   );
   return { data: rows, total: Number(countRows[0]?.count ?? 0) };
+}
+
+// --- Finer job-roles (PR-T2.1) ---------------------------------------------
+
+/** The built-in job-roles with per-tenant effective/override counts. */
+export async function listJobRoles(institutionId: string) {
+  const roles = await Promise.all(
+    JOB_ROLES.map(async (jr) => {
+      const p = await tenantRolePermissions(institutionId, jr.key as UserRole);
+      const effective = p.effective.filter((k) => ALL_TENANT_PERMISSION_KEYS.has(k));
+      const overridden = new Set([...p.grants, ...p.denies]).size;
+      return {
+        key: jr.key,
+        name: jr.name,
+        description: jr.description,
+        appliesTo: jr.appliesTo,
+        baseRole: jr.baseRole,
+        builtIn: true,
+        effectiveCount: effective.length,
+        overriddenCount: overridden,
+      };
+    })
+  );
+  return { roles };
+}
+
+/** A user is a "manager" if they can manage RBAC via coarse admin or the owner job-role. */
+function isManagerRow(role: string, jobRoleKey: string | null): boolean {
+  return (role === "admin" && !jobRoleKey) || jobRoleKey === "jr_owner_management";
+}
+
+/**
+ * Assign (or clear, jobRoleKey=null) a user's finer job-role. Also sets the
+ * user's coarse role to the job-role's base_role so coarse authorize() checks
+ * and the fallback stay consistent. Safety: portal users stay portal; the last
+ * manager/owner cannot be demoted; an actor cannot self-demote out of management.
+ */
+export async function assignJobRole(
+  institutionId: string,
+  targetUserId: string,
+  jobRoleKey: string | null,
+  actor: ActorContext
+) {
+  const { rows } = await query<{
+    id: string;
+    email: string;
+    fullName: string;
+    role: string;
+    jobRoleKey: string | null;
+  }>(
+    `SELECT id, email, full_name AS "fullName", role, job_role_key AS "jobRoleKey"
+     FROM users WHERE id = $1 AND institution_id = $2`,
+    [targetUserId, institutionId]
+  );
+  const target = rows[0];
+  if (!target) throw ApiError.notFound("User not found");
+  // Portal accounts never gain admin surface via a job-role.
+  if (target.role === "student" || target.role === "parent") {
+    throw ApiError.badRequest("Job roles cannot be assigned to student or parent accounts.");
+  }
+
+  let newRole = target.role;
+  let newJobKey: string | null = null;
+  if (jobRoleKey) {
+    if (!isJobRoleKey(jobRoleKey)) throw ApiError.badRequest("Invalid job role.");
+    // Built-in job-roles are the source of truth in code; only custom (per-tenant)
+    // roles are looked up in tenant_roles.
+    const builtIn = JOB_ROLE_BY_KEY[jobRoleKey];
+    if (builtIn) {
+      newRole = builtIn.baseRole;
+    } else {
+      const jr = (
+        await query<{ base_role: string }>(
+          `SELECT base_role FROM tenant_roles
+           WHERE key = $1 AND status = 'active' AND institution_id = $2 LIMIT 1`,
+          [jobRoleKey, institutionId]
+        )
+      ).rows[0];
+      if (!jr) throw ApiError.notFound("Job role not available for this tenant.");
+      newRole = jr.base_role;
+    }
+    newJobKey = jobRoleKey;
+  }
+
+  const wasManager = isManagerRow(target.role, target.jobRoleKey);
+  const willBeManager = isManagerRow(newRole, newJobKey);
+
+  if (target.id === actor.userId && wasManager && !willBeManager) {
+    throw ApiError.badRequest(
+      "You cannot remove your own management access (self-lockout prevented)."
+    );
+  }
+  if (wasManager && !willBeManager) {
+    const others = Number(
+      (
+        await query<{ c: string }>(
+          `SELECT count(*)::text AS c FROM users
+           WHERE institution_id = $1 AND is_active = true AND id <> $2
+             AND ((role = 'admin' AND job_role_key IS NULL) OR job_role_key = 'jr_owner_management')`,
+          [institutionId, targetUserId]
+        )
+      ).rows[0]?.c ?? 0
+    );
+    if (others < 1) {
+      throw ApiError.badRequest("At least one management / owner user must remain.");
+    }
+  }
+
+  await query("UPDATE users SET role = $1, job_role_key = $2 WHERE id = $3 AND institution_id = $4", [
+    newRole,
+    newJobKey,
+    targetUserId,
+    institutionId,
+  ]);
+  invalidateJobRoleCache(targetUserId);
+
+  await recordAudit(
+    actor,
+    "user.job_role.assigned",
+    newJobKey ?? newRole,
+    { role: target.role, jobRole: target.jobRoleKey },
+    { userId: targetUserId, email: target.email, role: newRole, jobRole: newJobKey },
+    null
+  );
+  return { id: targetUserId, role: newRole, jobRoleKey: newJobKey };
 }
 
 export { TENANT_ROLE_KEYS };
