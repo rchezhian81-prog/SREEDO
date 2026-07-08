@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { uuidParam } from "../../utils/params";
 import { authenticate, authorize } from "../../middleware/auth";
+import { requirePermission } from "../../middleware/permissions";
 import { requireTenant, tenantId } from "../../middleware/tenant";
 import { parsePagination } from "../../utils/pagination";
 import { accessibleStudentIds, assertStudentAccess } from "../../utils/scope";
@@ -70,7 +71,7 @@ studentsRouter.get("/", async (req, res) => {
   res.json(result);
 });
 
-studentsRouter.post("/", authorize("admin"), async (req, res) => {
+studentsRouter.post("/", requirePermission("students:create"), async (req, res) => {
   const input = createStudentSchema.parse(req.body);
   const student = await studentsService.createStudent(input, tenantId(req));
   res.status(201).json(student);
@@ -102,7 +103,7 @@ studentsRouter.post("/", authorize("admin"), async (req, res) => {
  *       400: { description: Validation failed or duplicate admission number }
  *       403: { description: Plan limit exceeded }
  */
-studentsRouter.post("/import", authorize("admin"), async (req, res) => {
+studentsRouter.post("/import", requirePermission("students:import"), async (req, res) => {
   const { rows } = importStudentsSchema.parse(req.body);
   const result = await studentsService.importStudents(rows, tenantId(req));
   res.status(201).json(result);
@@ -132,7 +133,7 @@ studentsRouter.post("/import", authorize("admin"), async (req, res) => {
  *       200: { description: "{ promoted, graduated }" }
  *       400: { description: No target provided, or target not found }
  */
-studentsRouter.post("/promote", authorize("admin"), async (req, res) => {
+studentsRouter.post("/promote", requirePermission("students:promote"), async (req, res) => {
   const input = promoteStudentsSchema.parse(req.body);
   res.json(await studentsService.promoteStudents(input, tenantId(req)));
 });
@@ -174,12 +175,12 @@ studentsRouter.get("/:id", async (req, res) => {
   res.json(await studentsService.getStudent(id, tenantId(req)));
 });
 
-studentsRouter.patch("/:id", authorize("admin"), async (req, res) => {
+studentsRouter.patch("/:id", requirePermission("students:update"), async (req, res) => {
   const input = updateStudentSchema.parse(req.body);
   res.json(await studentsService.updateStudent(uuidParam(req), input, tenantId(req)));
 });
 
-studentsRouter.delete("/:id", authorize("admin"), async (req, res) => {
+studentsRouter.delete("/:id", requirePermission("students:delete"), async (req, res) => {
   const { hard } = deleteStudentQuerySchema.parse(req.query);
   const id = uuidParam(req);
   if (hard) {

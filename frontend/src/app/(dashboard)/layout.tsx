@@ -25,8 +25,9 @@ type NavItem = {
   // When set, the item is hidden if the tenant has an explicit enabled-modules
   // list that does not include this key. Untagged items are always shown.
   moduleKey?: string;
-  // Super-admin nav only: the effective permission required to see this item.
-  // Untagged items always show; owners hold every permission so keep them all.
+  // The effective permission required to see this item. Untagged items always
+  // show; owners/admins hold every permission so keep them all. Used by both the
+  // super-admin nav and (PR-T2) the tenant nav for per-tenant role-aware hiding.
   perm?: string;
 };
 
@@ -34,58 +35,59 @@ const SCHOOL_NAV: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: "grid" },
   { href: "/get-started", label: "Get Started", icon: "rocket", adminOnly: true },
   { href: "/analytics", label: "Analytics", icon: "trendUp" },
-  { href: "/students", label: "Students", icon: "cap", moduleKey: "students" },
+  { href: "/students", label: "Students", icon: "cap", moduleKey: "students", perm: "students:read" },
   { href: "/admissions", label: "Admissions", icon: "card", adminOnly: true, moduleKey: "admissions" },
   { href: "/teachers", label: "Teachers", icon: "board", moduleKey: "staff" },
   { href: "/classes", label: "Classes", icon: "school" },
-  { href: "/timetable", label: "Timetable", icon: "calendar", moduleKey: "timetable" },
+  { href: "/timetable", label: "Timetable", icon: "calendar", moduleKey: "timetable", perm: "timetable:read" },
   { href: "/timetable/generate", label: "Auto Timetable", icon: "sparkles", adminOnly: true, moduleKey: "timetable" },
   { href: "/calendar", label: "Calendar", icon: "calendar" },
-  { href: "/library", label: "Library", icon: "file", moduleKey: "library" },
-  { href: "/transport", label: "Transport", icon: "bus", moduleKey: "transport" },
-  { href: "/hostel", label: "Hostel", icon: "building", moduleKey: "hostel" },
-  { href: "/inventory", label: "Inventory", icon: "package", moduleKey: "inventory" },
-  { href: "/staff", label: "Staff Attendance", icon: "briefcase" },
+  { href: "/library", label: "Library", icon: "file", moduleKey: "library", perm: "library:read" },
+  { href: "/transport", label: "Transport", icon: "bus", moduleKey: "transport", perm: "transport:read" },
+  { href: "/hostel", label: "Hostel", icon: "building", moduleKey: "hostel", perm: "hostel:read" },
+  { href: "/inventory", label: "Inventory", icon: "package", moduleKey: "inventory", perm: "inventory:read" },
+  { href: "/staff", label: "Staff Attendance", icon: "briefcase", perm: "staff_attendance:read" },
   { href: "/front-office", label: "Front Office", icon: "help", adminOnly: true },
   { href: "/lost-found", label: "Lost & Found", icon: "tag", adminOnly: true },
   { href: "/infirmary", label: "Infirmary", icon: "health", adminOnly: true },
   { href: "/alumni", label: "Alumni", icon: "users", adminOnly: true },
   { href: "/cafeteria", label: "Cafeteria", icon: "utensils", adminOnly: true },
-  { href: "/leave", label: "Leave", icon: "calcheck" },
+  { href: "/leave", label: "Leave", icon: "calcheck", perm: "leave:read" },
   { href: "/payroll", label: "Payroll", icon: "wallet", moduleKey: "payroll" },
   { href: "/attendance", label: "Attendance", icon: "calcheck", moduleKey: "attendance" },
   { href: "/period-attendance", label: "Period Attendance", icon: "calcheck", moduleKey: "attendance" },
   { href: "/exams", label: "Exams", icon: "file", moduleKey: "exams" },
-  { href: "/reports", label: "Reports", icon: "barChart", moduleKey: "reports" },
-  { href: "/documents", label: "Documents", icon: "file", moduleKey: "documents" },
-  { href: "/homework", label: "Homework", icon: "board" },
+  { href: "/reports", label: "Reports", icon: "barChart", moduleKey: "reports", perm: "reports:read" },
+  { href: "/documents", label: "Documents", icon: "file", moduleKey: "documents", perm: "documents:read" },
+  { href: "/homework", label: "Homework", icon: "board", perm: "homework:read" },
   { href: "/study-materials", label: "Study Materials", icon: "bookOpen" },
   { href: "/live-classes", label: "Live Classes", icon: "video" },
   { href: "/quizzes", label: "Quizzes", icon: "quiz" },
   { href: "/biometric", label: "Biometric", icon: "fingerprint", adminOnly: true },
   { href: "/polls", label: "Polls", icon: "barChart" },
   { href: "/gallery", label: "Gallery", icon: "image", adminOnly: true },
-  { href: "/id-cards", label: "ID Cards", icon: "card" },
+  { href: "/id-cards", label: "ID Cards", icon: "card", perm: "id_cards:read" },
   { href: "/transfer-certificates", label: "Transfer Certificates", icon: "file" },
-  { href: "/reports-center", label: "Reports Center", icon: "barChart" },
-  { href: "/report-builder", label: "Report Builder", icon: "barChart" },
-  { href: "/scheduled-reports", label: "Scheduled Reports", icon: "calendar" },
+  { href: "/reports-center", label: "Reports Center", icon: "barChart", perm: "reports:center:read" },
+  { href: "/report-builder", label: "Report Builder", icon: "barChart", perm: "custom_reports:read" },
+  { href: "/scheduled-reports", label: "Scheduled Reports", icon: "calendar", perm: "scheduled_reports:read" },
   { href: "/disciplinary", label: "Disciplinary", icon: "shield" },
-  { href: "/fees", label: "Fees", icon: "card", moduleKey: "fees" },
+  { href: "/fees", label: "Fees", icon: "card", moduleKey: "fees", perm: "fees:read" },
   { href: "/fees/setup", label: "Fee Setup", icon: "gear" },
   { href: "/fees/refunds", label: "Fee Refunds", icon: "receipt", adminOnly: true },
   { href: "/online-payments", label: "Online Payments", icon: "wallet" },
   { href: "/accounting", label: "Accounting", icon: "wallet", adminOnly: true },
   { href: "/announcements", label: "Announcements", icon: "megaphone" },
-  { href: "/communication", label: "Communication", icon: "mail", moduleKey: "communication" },
+  { href: "/communication", label: "Communication", icon: "mail", moduleKey: "communication", perm: "communication:read" },
   { href: "/messaging", label: "Messaging", icon: "message" },
   { href: "/feedback", label: "Feedback", icon: "message", adminOnly: true },
   { href: "/assistant", label: "AI Assistant", icon: "sparkles" },
-  { href: "/ai-insights", label: "AI Insights", icon: "trendUp" },
+  { href: "/ai-insights", label: "AI Insights", icon: "trendUp", perm: "ai:read" },
   { href: "/jobs", label: "Jobs", icon: "gear", adminOnly: true },
   { href: "/integrations", label: "Integrations", icon: "link", adminOnly: true },
   { href: "/branding", label: "Branding", icon: "palette", adminOnly: true },
   { href: "/settings", label: "Settings", icon: "gear", adminOnly: true },
+  { href: "/settings/rbac", label: "Roles & Permissions", icon: "shield", perm: "tenant_rbac:read" },
   { href: "/users", label: "Users", icon: "users", adminOnly: true },
   { href: "/activity", label: "Activity Log", icon: "file", adminOnly: true },
   { href: "/security", label: "Security", icon: "shield" },
@@ -95,10 +97,10 @@ const SCHOOL_NAV: NavItem[] = [
 // higher-ed structure (departments → programs → semesters → results).
 // Everything else (operations, finance, comms, admin) is shared with school.
 const COLLEGE_ACADEMICS: NavItem[] = [
-  { href: "/college", label: "College Home", icon: "building" },
-  { href: "/college/departments", label: "Departments", icon: "network" },
-  { href: "/college/programs", label: "Programs", icon: "layers" },
-  { href: "/college/semesters", label: "Semesters", icon: "calendar" },
+  { href: "/college", label: "College Home", icon: "building", perm: "college:read" },
+  { href: "/college/departments", label: "Departments", icon: "network", perm: "departments:read" },
+  { href: "/college/programs", label: "Programs", icon: "layers", perm: "programs:read" },
+  { href: "/college/semesters", label: "Semesters", icon: "calendar", perm: "semesters:read" },
   { href: "/college/subjects", label: "Subjects", icon: "bookOpen" },
   { href: "/college/enrollments", label: "Enrollments", icon: "userPlus" },
   { href: "/college/results", label: "Results", icon: "clipboard" },
@@ -487,7 +489,12 @@ export default function DashboardLayout({
             !enabledModules ||
             enabledModules.length === 0 ||
             enabledModules.includes(item.moduleKey)
-        );
+        )
+        // Per-tenant role-aware hiding (PR-T2): drop items whose effective
+        // permission the caller lacks. Items without a `perm` always show;
+        // can(undefined) is true and can() is permissive while permissions load,
+        // so a permitted user's nav never flickers or disappears.
+        .filter((item) => canNav(item.perm));
   // In a module-limited support session, keep only /dashboard plus items whose
   // mapped module is in the session's allowed set.
   if (support && supportScope === "module_limited") {

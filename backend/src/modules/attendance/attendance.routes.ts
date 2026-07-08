@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { uuidParam } from "../../utils/params";
-import { authenticate, authorize } from "../../middleware/auth";
+import { authenticate } from "../../middleware/auth";
+import { requirePermission } from "../../middleware/permissions";
 import { requireTenant, tenantId } from "../../middleware/tenant";
 import {
   accessibleStudentIds,
@@ -61,7 +62,7 @@ attendanceRouter.get("/", async (req, res) => {
   res.json(await attendanceService.listByDate(filters, tenantId(req)));
 });
 
-attendanceRouter.post("/", authorize("admin", "teacher"), async (req, res) => {
+attendanceRouter.post("/", requirePermission("attendance:mark"), async (req, res) => {
   const input = bulkMarkAttendanceSchema.parse(req.body);
   res.json(await attendanceService.bulkMark(input, req.user!.id, tenantId(req)));
 });

@@ -32,6 +32,60 @@ export function invalidatePermissionCache(): void {
   cache = null;
 }
 
+// --- Per-tenant permission overrides (PR-T2) -------------------------------
+//
+// The global role_permissions above is shared by every tenant. Tenant RBAC v2
+// layers per-institution overrides on top: effect='grant' adds a key to the
+// role's global default, effect='deny' removes one. A tenant with NO override
+// rows resolves to exactly the global defaults, so this is a pure no-op until a
+// tenant customises its roles. Cached per institution with the same short TTL
+// and busted by invalidateTenantOverrideCache() after an edit.
+type TenantOverride = { grant: Set<string>; deny: Set<string> };
+const tenantCache = new Map<string, { at: number; map: Map<string, TenantOverride> }>();
+
+async function loadTenantOverrides(
+  institutionId: string
+): Promise<Map<string, TenantOverride>> {
+  const hit = tenantCache.get(institutionId);
+  if (hit && Date.now() - hit.at < TTL_MS) return hit.map;
+  const { rows } = await query<{ role: string; permission_key: string; effect: string }>(
+    `SELECT role, permission_key, effect
+     FROM tenant_role_permissions
+     WHERE institution_id = $1`,
+    [institutionId]
+  );
+  const map = new Map<string, TenantOverride>();
+  for (const row of rows) {
+    let ov = map.get(row.role);
+    if (!ov) {
+      ov = { grant: new Set(), deny: new Set() };
+      map.set(row.role, ov);
+    }
+    (row.effect === "deny" ? ov.deny : ov.grant).add(row.permission_key);
+  }
+  tenantCache.set(institutionId, { at: Date.now(), map });
+  return map;
+}
+
+/** Clears cached per-tenant overrides (call after editing a tenant's grants). */
+export function invalidateTenantOverrideCache(institutionId?: string): void {
+  if (institutionId) tenantCache.delete(institutionId);
+  else tenantCache.clear();
+}
+
+/** Merge a role's global default keys with a tenant's overrides (deny wins). */
+function mergeTenantOverrides(
+  base: Set<string> | undefined,
+  ov: TenantOverride | undefined
+): Set<string> {
+  const out = new Set<string>(base ?? []);
+  if (ov) {
+    for (const k of ov.grant) out.add(k);
+    for (const k of ov.deny) out.delete(k);
+  }
+  return out;
+}
+
 // --- Platform sub-role resolution (Super Admin H) ---------------------------
 //
 // Every platform-team member has user_role='super_admin', so a role check alone
@@ -100,10 +154,13 @@ export async function isFullAccessPlatformUser(userId: string): Promise<boolean>
 export async function effectivePermissions(user: {
   id: string;
   role: UserRole;
+  institutionId?: string | null;
 }): Promise<string[]> {
   if (user.role !== "super_admin") {
-    const map = await loadRolePermissions();
-    return [...(map.get(user.role) ?? [])];
+    const base = (await loadRolePermissions()).get(user.role);
+    if (!user.institutionId) return [...(base ?? [])];
+    const ov = (await loadTenantOverrides(user.institutionId)).get(user.role);
+    return [...mergeTenantOverrides(base, ov)];
   }
   if (await isFullAccessPlatformUser(user.id)) {
     const { rows } = await query<{ key: string }>("SELECT key FROM permissions");
@@ -112,6 +169,24 @@ export async function effectivePermissions(user: {
   const pr = await platformRoleOf(user.id);
   const map = await loadRolePermissions();
   return pr ? [...(map.get(pr) ?? [])] : [];
+}
+
+/**
+ * For a tenant role: its global default keys, its per-tenant overrides, and the
+ * resulting effective keys. Powers the tenant RBAC matrix/detail (PR-T2).
+ */
+export async function tenantRolePermissions(
+  institutionId: string,
+  role: UserRole
+): Promise<{ defaults: string[]; effective: string[]; grants: string[]; denies: string[] }> {
+  const base = (await loadRolePermissions()).get(role) ?? new Set<string>();
+  const ov = (await loadTenantOverrides(institutionId)).get(role);
+  return {
+    defaults: [...base],
+    effective: [...mergeTenantOverrides(base, ov)],
+    grants: ov ? [...ov.grant] : [],
+    denies: ov ? [...ov.deny] : [],
+  };
 }
 
 /** The effective permission keys for a bare role (tenant roles + super_admin=all). */
@@ -126,8 +201,13 @@ export async function permissionsForRole(role: UserRole): Promise<string[]> {
 
 async function userHasPermission(user: AuthenticatedUser, key: string): Promise<boolean> {
   if (user.role !== "super_admin") {
-    const map = await loadRolePermissions();
-    return map.get(user.role)?.has(key) ?? false;
+    const base = (await loadRolePermissions()).get(user.role);
+    if (!user.institutionId) return base?.has(key) ?? false;
+    // Per-tenant override: deny wins over grant wins over the global default.
+    const ov = (await loadTenantOverrides(user.institutionId)).get(user.role);
+    if (ov?.deny.has(key)) return false;
+    if (ov?.grant.has(key)) return true;
+    return base?.has(key) ?? false;
   }
   // Platform user: owner / unclassified → full access; otherwise per platform_role.
   if (await isFullAccessPlatformUser(user.id)) return true;

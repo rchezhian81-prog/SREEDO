@@ -386,6 +386,29 @@ export default function SettingsPage() {
             </div>
           </Card>
 
+          {/* Roles & permissions */}
+          <Card>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
+                  <Icon name="shieldCheck" className="h-4 w-4 text-brand-600" />
+                  Roles &amp; permissions
+                </h2>
+                <p className="mt-1 text-sm text-muted">
+                  Control what each built-in role (teacher, accountant, front
+                  office…) can see and do. High-risk changes are audited.
+                </p>
+              </div>
+              <Link
+                href="/settings/rbac"
+                className="inline-flex items-center gap-2 rounded-xl border border-line bg-surface px-4 py-2.5 text-sm font-semibold text-ink transition hover:bg-hover"
+              >
+                Manage roles
+                <Icon name="arrowRight" className="h-4 w-4" />
+              </Link>
+            </div>
+          </Card>
+
           {/* Terminology preview */}
           <Card>
             <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
