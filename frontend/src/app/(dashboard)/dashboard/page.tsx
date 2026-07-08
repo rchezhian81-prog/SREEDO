@@ -1,21 +1,46 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { api } from "@/lib/api";
-import { cx, EmptyState, PageHeader, Spinner } from "@/components/ui";
+import { api, ApiError } from "@/lib/api";
+import { cx, Badge, EmptyState, ErrorNote, PageHeader, Spinner } from "@/components/ui";
 import { Icon, type IconName } from "@/components/icons";
 import { useAuthStore } from "@/stores/auth-store";
-import type { Announcement, DashboardStats, Paginated } from "@/types";
-import { useI18n } from "@/i18n/I18nProvider";
+import { usePermissions } from "@/lib/use-permissions";
+import { useTerms, type TermSet } from "@/lib/terms";
+import type { DashboardSummary } from "@/types";
 
-const inr = (n: number | undefined) => "₹" + (n ?? 0).toLocaleString("en-IN");
+const inr = (n: number) => "₹" + Math.round(n).toLocaleString("en-IN");
 
 const TONES: Record<string, string> = {
   blue: "bg-brand-500/12 text-brand-600 dark:text-brand-300",
   green: "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400",
   amber: "bg-amber-500/12 text-amber-600 dark:text-amber-400",
   red: "bg-red-500/12 text-red-600 dark:text-red-400",
+  violet: "bg-violet-500/12 text-violet-600 dark:text-violet-300",
+};
+
+// Needs-attention signals → a terminology-aware message, icon, tone and a link
+// to fix it. The backend only emits keys/counts (data), keeping wording here.
+const ATTENTION: Record<
+  string,
+  { icon: IconName; label: (t: TermSet, n?: number) => string; href: string }
+> = {
+  no_academic_year: { icon: "calendar", label: () => "No academic year is set", href: "/settings" },
+  no_classes: { icon: "school", label: (t) => `No ${t.klassPlural.toLowerCase()} configured yet`, href: "/classes" },
+  no_programs: { icon: "layers", label: (t) => `No ${t.klassPlural.toLowerCase()} configured yet`, href: "/college/programs" },
+  no_sections: { icon: "school", label: (t) => `No ${t.sectionPlural.toLowerCase()} configured yet`, href: "/classes" },
+  no_batches: { icon: "layers", label: (t) => `No ${t.sectionPlural.toLowerCase()} configured yet`, href: "/college/programs" },
+  no_students: { icon: "cap", label: () => "No active students enrolled yet", href: "/students" },
+  attendance_not_marked: { icon: "calcheck", label: () => "Attendance isn't marked for today", href: "/attendance" },
+  overdue_fees: { icon: "receipt", label: (_t, n) => `${n} overdue fee invoice${n === 1 ? "" : "s"}`, href: "/fees" },
+  failed_comms: { icon: "alert", label: (_t, n) => `${n} failed communication${n === 1 ? "" : "s"}`, href: "/communication" },
+};
+
+const SEVERITY_TONE: Record<string, keyof typeof TONES> = {
+  danger: "red",
+  warning: "amber",
+  info: "blue",
 };
 
 function StatCard({
@@ -24,22 +49,19 @@ function StatCard({
   label,
   value,
   hint,
+  href,
 }: {
   icon: IconName;
-  tone: keyof typeof TONES | string;
+  tone: keyof typeof TONES;
   label: string;
   value: string | number;
   hint?: string;
+  href?: string;
 }) {
-  return (
-    <div className="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-5 shadow-card">
+  const inner = (
+    <>
       <div className="flex items-center gap-3.5">
-        <div
-          className={cx(
-            "grid h-[52px] w-[52px] shrink-0 place-items-center rounded-2xl",
-            TONES[tone] ?? TONES.blue
-          )}
-        >
+        <div className={cx("grid h-[52px] w-[52px] shrink-0 place-items-center rounded-2xl", TONES[tone])}>
           <Icon name={icon} className="h-6 w-6" />
         </div>
         <div className="min-w-0">
@@ -49,10 +71,16 @@ function StatCard({
           </div>
         </div>
       </div>
-      {hint && (
-        <div className="text-[12.5px] font-medium text-muted">{hint}</div>
-      )}
-    </div>
+      {hint && <div className="mt-3 text-[12.5px] font-medium text-muted">{hint}</div>}
+    </>
+  );
+  const cls = "block rounded-2xl border border-line bg-surface p-5 shadow-card";
+  return href ? (
+    <Link href={href} className={cx(cls, "transition hover:bg-surface-2")}>
+      {inner}
+    </Link>
+  ) : (
+    <div className={cls}>{inner}</div>
   );
 }
 
@@ -60,20 +88,13 @@ function Panel({
   title,
   action,
   children,
-  className,
 }: {
   title: string;
   action?: React.ReactNode;
   children: React.ReactNode;
-  className?: string;
 }) {
   return (
-    <div
-      className={cx(
-        "overflow-hidden rounded-2xl border border-line bg-surface shadow-card",
-        className
-      )}
-    >
+    <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
       <div className="flex items-center justify-between border-b border-line px-5 py-4">
         <h3 className="text-[15px] font-bold text-ink">{title}</h3>
         {action}
@@ -83,348 +104,235 @@ function Panel({
   );
 }
 
-function Donut({
-  segments,
-  size = 150,
-  center,
-}: {
-  segments: { value: number; color: string }[];
-  size?: number;
-  center: React.ReactNode;
-}) {
-  const total = segments.reduce((sum, s) => sum + s.value, 0) || 1;
-  let acc = 0;
-  const stops = segments
-    .map((s) => {
-      const start = (acc / total) * 100;
-      acc += s.value;
-      const end = (acc / total) * 100;
-      return `${s.color} ${start}% ${end}%`;
-    })
-    .join(", ");
-  const hole = Math.round(size * 0.64);
-  return (
-    <div
-      className="relative grid shrink-0 place-items-center rounded-full"
-      style={{ width: size, height: size, background: `conic-gradient(${stops})` }}
-    >
-      <div
-        className="absolute rounded-full bg-surface"
-        style={{ width: hole, height: hole }}
-      />
-      <div className="relative text-center">{center}</div>
-    </div>
-  );
-}
-
-const QUICK_ACTIONS: { label: string; sub: string; icon: IconName; href: string }[] =
-  [
-    { label: "Add Student", sub: "Register a new student", icon: "userPlus", href: "/students" },
-    { label: "Collect Fees", sub: "Record a fee payment", icon: "card", href: "/fees" },
-    { label: "Mark Attendance", sub: "Today's attendance", icon: "calcheck", href: "/attendance" },
-    { label: "New Announcement", sub: "Notify staff & parents", icon: "megaphone", href: "/announcements" },
-    { label: "Manage Exams", sub: "Schedule & results", icon: "file", href: "/exams" },
-  ];
-
 export default function DashboardPage() {
-  const { t } = useI18n();
   const user = useAuthStore((s) => s.user);
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const { can } = usePermissions();
+  const term = useTerms();
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    Promise.all([
-      api.get<DashboardStats>("/dashboard/stats"),
-      api.get<Paginated<Announcement>>("/announcements?limit=5"),
-    ])
-      .then(([statsData, announcementsData]) => {
-        setStats(statsData);
-        setAnnouncements(announcementsData.data);
-      })
-      .catch(() => undefined)
-      .finally(() => setLoading(false));
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setSummary(await api.get<DashboardSummary>("/dashboard/summary"));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to load the dashboard");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
+  useEffect(() => {
+    load();
+  }, [load]);
+
   if (loading) return <Spinner />;
+  if (error || !summary) {
+    return (
+      <div className="space-y-4">
+        <ErrorNote message={error ?? "Dashboard unavailable"} />
+        <button
+          onClick={load}
+          className="inline-flex items-center gap-2 rounded-xl border border-line bg-surface px-4 py-2.5 text-sm font-semibold text-ink transition hover:bg-hover"
+        >
+          <Icon name="history" className="h-4 w-4" /> Retry
+        </button>
+      </div>
+    );
+  }
 
-  const attendance = stats?.attendanceToday;
-  const marked = attendance?.marked ?? 0;
-  const present = attendance?.present ?? 0;
-  const absent = Math.max(0, marked - present);
-  const ratePct =
-    marked > 0 ? Math.round((attendance?.rate ?? 0) * 100) : null;
-
-  const collected = stats?.fees.totalCollected ?? 0;
-  const invoiced = stats?.fees.totalInvoiced ?? 0;
-  const outstanding = Math.max(0, invoiced - collected);
-  const collectedPct = invoiced > 0 ? Math.round((collected / invoiced) * 100) : 0;
-
+  const { institution: inst, academic, operations: ops, finance, communication } = summary;
+  const isCollege = inst.type === "college";
   const firstName = user?.fullName?.split(" ")[0] ?? "there";
+  const att = ops.attendanceToday;
+  const attRate = att.marked > 0 && att.rate !== null ? Math.round(att.rate * 100) : null;
 
   return (
     <>
       <PageHeader
-        title={t("pages.dashboard.title")}
-        subtitle={`Welcome back, ${firstName}! Here's what's happening today.`}
-        action={
-          <Link
-            href="/students"
-            className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-[0_8px_18px_rgb(37_99_235_/_0.32)] transition hover:bg-brand-700"
-          >
-            <Icon name="plus" className="h-4 w-4" />
-            Add Student
-          </Link>
-        }
+        title="Dashboard"
+        subtitle={`Welcome back, ${firstName}! Here's your institution at a glance.`}
       />
 
-      <div className="grid items-start gap-5 xl:grid-cols-[1fr_304px]">
-        {/* Main column */}
-        <div className="flex flex-col gap-5">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard
-              icon="users"
-              tone="blue"
-              label="Active Students"
-              value={(stats?.activeStudents ?? 0).toLocaleString("en-IN")}
-              hint={`Across ${stats?.classes ?? 0} classes`}
-            />
-            <StatCard
-              icon="board"
-              tone="green"
-              label="Teachers"
-              value={(stats?.activeTeachers ?? 0).toLocaleString("en-IN")}
-              hint="Active faculty members"
-            />
-            <StatCard
-              icon="calcheck"
-              tone="amber"
-              label="Attendance Today"
-              value={ratePct === null ? "—" : `${ratePct}%`}
-              hint={
-                marked > 0
-                  ? `${present} of ${marked} marked present`
-                  : "Not marked yet"
-              }
-            />
-            <StatCard
-              icon="wallet"
-              tone="red"
-              label="Fees Collected"
-              value={inr(collected)}
-              hint={`${collectedPct}% of ${inr(invoiced)} billed`}
-            />
-          </div>
+      <div className="space-y-5">
+        {/* Needs attention */}
+        {summary.needsAttention.length > 0 && (
+          <Panel title="Needs attention">
+            <ul className="divide-y divide-line">
+              {summary.needsAttention.map((a) => {
+                const meta = ATTENTION[a.key];
+                if (!meta) return null;
+                const tone = SEVERITY_TONE[a.severity] ?? "blue";
+                return (
+                  <li key={a.key}>
+                    <Link
+                      href={meta.href}
+                      className="flex items-center gap-3 px-5 py-3.5 transition hover:bg-surface-2"
+                    >
+                      <span className={cx("grid h-9 w-9 shrink-0 place-items-center rounded-xl", TONES[tone])}>
+                        <Icon name={meta.icon} className="h-[18px] w-[18px]" />
+                      </span>
+                      <span className="flex-1 text-sm font-semibold text-ink">
+                        {meta.label(term, a.count)}
+                      </span>
+                      <Icon name="chevronRight" className="h-[17px] w-[17px] text-faint" />
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </Panel>
+        )}
 
-          <div className="grid gap-5 lg:grid-cols-2">
-            <Panel title="Fees Collection">
-              <div className="flex items-center gap-5 p-5">
-                <Donut
-                  segments={[
-                    { value: collected, color: "#2563eb" },
-                    { value: outstanding, color: "#f59e0b" },
-                  ]}
-                  center={
-                    <>
-                      <div className="text-[20px] font-extrabold tracking-tight text-ink">
-                        {collectedPct}%
-                      </div>
-                      <div className="text-[11.5px] font-semibold text-muted">
-                        Collected
-                      </div>
-                    </>
-                  }
-                />
-                <div className="flex-1 space-y-3">
-                  <LegendRow color="#2563eb" name="Collected" value={inr(collected)} />
-                  <LegendRow color="#f59e0b" name="Outstanding" value={inr(outstanding)} />
-                  <div className="border-t border-line pt-3">
-                    <LegendRow
-                      name="Pending invoices"
-                      value={String(stats?.fees.pendingInvoices ?? 0)}
-                    />
-                  </div>
+        {/* Institution snapshot */}
+        <div className="rounded-2xl border border-line bg-surface p-5 shadow-card">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3.5">
+              <div className={cx("grid h-[52px] w-[52px] shrink-0 place-items-center rounded-2xl", isCollege ? TONES.violet : TONES.blue)}>
+                <Icon name="building" className="h-6 w-6" />
+              </div>
+              <div className="min-w-0">
+                <div className="truncate text-lg font-extrabold text-ink">{inst.name}</div>
+                <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[12.5px] text-muted">
+                  <Badge tone="blue">{isCollege ? "College" : "School"}</Badge>
+                  <span>·</span>
+                  <span>{inst.currentAcademicYear?.name ?? "No academic year"}</span>
+                  <span>·</span>
+                  <Badge tone={inst.isActive ? "green" : "red"}>{inst.isActive ? "Active" : "Inactive"}</Badge>
                 </div>
               </div>
-            </Panel>
-
-            <Panel title="Attendance Today">
-              {marked > 0 ? (
-                <div className="flex items-center gap-5 p-5">
-                  <Donut
-                    segments={[
-                      { value: present, color: "#10b981" },
-                      { value: absent, color: "#ef4444" },
-                    ]}
-                    center={
-                      <>
-                        <div className="text-[20px] font-extrabold tracking-tight text-ink">
-                          {ratePct}%
-                        </div>
-                        <div className="text-[11.5px] font-semibold text-muted">
-                          Present
-                        </div>
-                      </>
-                    }
-                  />
-                  <div className="flex-1 space-y-3">
-                    <LegendRow color="#10b981" name="Present" value={String(present)} />
-                    <LegendRow color="#ef4444" name="Absent" value={String(absent)} />
-                    <div className="border-t border-line pt-3">
-                      <LegendRow name="Total marked" value={String(marked)} />
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="p-5">
-                  <EmptyState message="Attendance has not been marked yet today" />
-                </div>
-              )}
-            </Panel>
-          </div>
-
-          <Panel
-            title="Recent Announcements"
-            action={
+            </div>
+            {can("academic_years:manage") && !inst.currentAcademicYear && (
               <Link
-                href="/announcements"
-                className="text-[12.5px] font-bold text-brand-600 hover:underline dark:text-brand-300"
+                href="/settings"
+                className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700"
               >
-                View All
+                <Icon name="calendar" className="h-4 w-4" /> Set academic year
               </Link>
-            }
+            )}
+          </div>
+        </div>
+
+        {/* Academic summary */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard icon="cap" tone="blue" label="Active Students" value={academic.activeStudents.toLocaleString("en-IN")} href="/students" />
+          <StatCard icon="board" tone="green" label={term.teachers} value={academic.activeStaff.toLocaleString("en-IN")} href="/teachers" />
+          {isCollege ? (
+            <>
+              <StatCard icon="layers" tone="violet" label={term.klassPlural} value={academic.programs} hint={`${academic.departments} departments`} href="/college/programs" />
+              <StatCard icon="bookOpen" tone="amber" label={term.subjectPlural} value={academic.subjects} hint={`${academic.semesters} semesters · ${academic.batches} ${term.sectionPlural.toLowerCase()}`} href="/college/subjects" />
+            </>
+          ) : (
+            <>
+              <StatCard icon="school" tone="blue" label={term.klassPlural} value={academic.classes} hint={`${academic.sections} ${term.sectionPlural.toLowerCase()}`} href="/classes" />
+              <StatCard icon="bookOpen" tone="amber" label={term.subjectPlural} value={academic.subjects} href="/classes" />
+            </>
+          )}
+        </div>
+
+        {/* Operations */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            icon="calcheck"
+            tone="amber"
+            label="Attendance Today"
+            value={attRate === null ? "—" : `${attRate}%`}
+            hint={att.marked > 0 ? `${att.present} of ${att.marked} present` : "Not marked yet"}
+            href="/attendance"
+          />
+          {ops.pendingAdmissions !== null && (
+            <StatCard icon="userPlus" tone="blue" label="Pending Admissions" value={ops.pendingAdmissions} hint="Enquiries & applications" href="/admissions" />
+          )}
+          <StatCard icon="file" tone="violet" label="Upcoming Exams" value={ops.upcomingExams} href="/exams" />
+          <StatCard icon="board" tone="green" label="Homework Due" value={ops.homeworkDue} hint="Assignments not past due" href="/homework" />
+        </div>
+
+        <div className="grid items-start gap-5 lg:grid-cols-2">
+          {/* Finance — only present when the caller has fees:read */}
+          {finance ? (
+            <Panel
+              title="Fees"
+              action={<Link href="/fees" className="text-[12.5px] font-bold text-brand-600 hover:underline dark:text-brand-300">Open fees</Link>}
+            >
+              <div className="grid grid-cols-2 gap-px bg-line">
+                <FinanceCell label="Collected today" value={inr(finance.collectedToday)} tone="green" />
+                <FinanceCell label="Outstanding" value={inr(finance.outstanding)} tone="amber" />
+                <FinanceCell label="Pending invoices" value={String(finance.pendingInvoices)} />
+                <FinanceCell label="Overdue invoices" value={String(finance.overdueInvoices)} tone={finance.overdueInvoices > 0 ? "red" : undefined} />
+              </div>
+            </Panel>
+          ) : (
+            <Panel title="Fees">
+              <div className="p-5">
+                <EmptyState message="You don't have access to fee figures" />
+              </div>
+            </Panel>
+          )}
+
+          {/* Communication */}
+          <Panel
+            title="Recent announcements"
+            action={<Link href="/announcements" className="text-[12.5px] font-bold text-brand-600 hover:underline dark:text-brand-300">View all</Link>}
           >
-            {announcements.length === 0 ? (
+            {communication.recentAnnouncements.length === 0 ? (
               <div className="p-5">
                 <EmptyState message="No announcements yet" />
               </div>
             ) : (
               <ul>
-                {announcements.map((a) => (
-                  <li
-                    key={a.id}
-                    className="flex items-start gap-3 border-b border-line px-5 py-4 last:border-0"
-                  >
+                {communication.recentAnnouncements.map((a) => (
+                  <li key={a.id} className="flex items-start gap-3 border-b border-line px-5 py-3.5 last:border-0">
                     <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand-500/12 text-brand-600 dark:text-brand-300">
-                      <Icon name="megaphone" className="h-[18px] w-[18px]" />
+                      <Icon name="megaphone" className="h-[17px] w-[17px]" />
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <h4 className="truncate text-sm font-bold text-ink">
-                          {a.title}
-                        </h4>
-                        {a.isPinned && (
-                          <span className="rounded-full bg-amber-500/12 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
-                            Pinned
-                          </span>
-                        )}
+                        <h4 className="truncate text-sm font-bold text-ink">{a.title}</h4>
+                        {a.isPinned && <Badge tone="amber">Pinned</Badge>}
                       </div>
-                      <p className="mt-0.5 line-clamp-1 text-[13px] text-muted">
-                        {a.body}
-                      </p>
-                      <p className="mt-1 text-[11px] text-faint">
-                        {new Date(a.publishedAt).toLocaleDateString()} ·{" "}
-                        {a.createdByName ?? "System"}
+                      <p className="mt-0.5 text-[11px] text-faint">
+                        {new Date(a.publishedAt).toLocaleDateString()}
                       </p>
                     </div>
                   </li>
                 ))}
               </ul>
             )}
-          </Panel>
-        </div>
-
-        {/* Right rail */}
-        <div className="flex flex-col gap-5">
-          <Panel title="Quick Actions">
-            {QUICK_ACTIONS.map((qa) => (
-              <Link
-                key={qa.href}
-                href={qa.href}
-                className="flex items-center gap-3 border-b border-line px-5 py-3.5 transition last:border-0 hover:bg-surface-2"
-              >
-                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-500/12 text-brand-600 dark:text-brand-300">
-                  <Icon name={qa.icon} className="h-[19px] w-[19px]" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-[13.5px] font-bold text-ink">
-                    {qa.label}
-                  </div>
-                  <div className="text-[11.5px] text-muted">{qa.sub}</div>
-                </div>
-                <Icon
-                  name="chevronRight"
-                  className="ml-auto h-[17px] w-[17px] text-faint"
-                />
-              </Link>
-            ))}
-          </Panel>
-
-          <Panel title="Notifications">
-            {announcements.length === 0 ? (
-              <div className="p-5">
-                <EmptyState message="You're all caught up" />
+            {communication.failedComms !== null && communication.failedComms > 0 && (
+              <div className="border-t border-line px-5 py-3 text-[12.5px] font-semibold text-red-600 dark:text-red-400">
+                {communication.failedComms} failed communication{communication.failedComms === 1 ? "" : "s"} — check delivery logs
               </div>
-            ) : (
-              announcements.slice(0, 4).map((a) => (
-                <div
-                  key={a.id}
-                  className="flex gap-3 border-b border-line px-5 py-4 last:border-0"
-                >
-                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand-500/12 text-brand-600 dark:text-brand-300">
-                    <Icon name="bell" className="h-[17px] w-[17px]" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="line-clamp-2 text-[12.5px] font-semibold text-ink">
-                      {a.title}
-                    </div>
-                    <div className="mt-1 text-[11px] text-faint">
-                      {new Date(a.publishedAt).toLocaleDateString()}
-                    </div>
-                  </div>
-                </div>
-              ))
             )}
           </Panel>
-
-          <div className="rounded-2xl border border-line bg-surface p-5 text-center shadow-card">
-            <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-brand-500/12 text-brand-600 dark:text-brand-300">
-              <Icon name="help" className="h-6 w-6" />
-            </div>
-            <div className="text-[14.5px] font-bold text-ink">Need Help?</div>
-            <p className="mx-auto mt-1.5 max-w-[220px] text-[12.5px] text-muted">
-              Read the guide to learn how to manage your school on GoCampus.
-            </p>
-            <button className="mt-3.5 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-line bg-surface-2 px-4 py-2.5 text-[12.5px] font-bold text-ink transition hover:bg-hover">
-              <Icon name="file" className="h-[15px] w-[15px]" />
-              View Help Guide
-            </button>
-          </div>
         </div>
       </div>
     </>
   );
 }
 
-function LegendRow({
-  color,
-  name,
+function FinanceCell({
+  label,
   value,
+  tone,
 }: {
-  color?: string;
-  name: string;
+  label: string;
   value: string;
+  tone?: "green" | "amber" | "red";
 }) {
+  const toneCls =
+    tone === "green"
+      ? "text-emerald-600 dark:text-emerald-400"
+      : tone === "amber"
+      ? "text-amber-600 dark:text-amber-400"
+      : tone === "red"
+      ? "text-red-600 dark:text-red-400"
+      : "text-ink";
   return (
-    <div className="flex items-center gap-2.5 text-[13px]">
-      {color && (
-        <span
-          className="h-2.5 w-2.5 shrink-0 rounded"
-          style={{ background: color }}
-        />
-      )}
-      <span className="font-medium text-ink">{name}</span>
-      <span className="ml-auto font-bold text-muted">{value}</span>
+    <div className="bg-surface p-5">
+      <div className="text-[12px] font-semibold text-muted">{label}</div>
+      <div className={cx("mt-1 text-[20px] font-extrabold tracking-tight", toneCls)}>{value}</div>
     </div>
   );
 }

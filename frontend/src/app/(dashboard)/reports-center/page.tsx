@@ -89,8 +89,14 @@ export default function ReportsCenterPage() {
     Promise.all([
       api.get<ReportMeta[]>("/report-center"),
       api.get<{ role: string; permissions: string[] }>("/auth/permissions"),
-      api.get<SchoolClass[]>("/classes").catch(() => [] as SchoolClass[]),
-      api.get<Exam[]>("/exams").catch(() => [] as Exam[]),
+      api.get<SchoolClass[]>("/classes").catch((err) => {
+        console.error("Failed to load classes", err);
+        return [] as SchoolClass[];
+      }),
+      api.get<Exam[]>("/exams").catch((err) => {
+        console.error("Failed to load exams", err);
+        return [] as Exam[];
+      }),
     ])
       .then(([reportList, perms, classes, examList]) => {
         setReports(reportList);
@@ -212,7 +218,7 @@ export default function ReportsCenterPage() {
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {categories.map(([category, items]) => (
                 <Card key={category}>
-                  <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+                  <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">
                     {category}
                   </h2>
                   <div className="space-y-2">
@@ -224,7 +230,7 @@ export default function ReportsCenterPage() {
                           "w-full rounded-lg border px-3 py-2 text-left text-sm font-medium transition",
                           report.key === selectedKey
                             ? "border-brand-500 bg-brand-50 text-brand-700"
-                            : "border-slate-200 text-slate-700 hover:bg-slate-50"
+                            : "border-line text-muted hover:bg-hover"
                         )}
                       >
                         {report.title}
@@ -239,7 +245,7 @@ export default function ReportsCenterPage() {
           {selectedReport && (
             <Card>
               <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-lg font-semibold text-slate-900">
+                <h2 className="text-lg font-semibold text-ink">
                   {selectedReport.title}
                 </h2>
                 <div className="flex flex-wrap gap-2">
@@ -262,7 +268,7 @@ export default function ReportsCenterPage() {
 
               <div className="mb-4 flex flex-wrap items-end gap-3">
                 <div className="w-56">
-                  <span className="mb-1 block text-sm font-medium text-slate-700">
+                  <span className="mb-1 block text-sm font-medium text-muted">
                     {term.section}
                   </span>
                   <Select
@@ -278,7 +284,7 @@ export default function ReportsCenterPage() {
                   </Select>
                 </div>
                 <div className="w-44">
-                  <span className="mb-1 block text-sm font-medium text-slate-700">
+                  <span className="mb-1 block text-sm font-medium text-muted">
                     From
                   </span>
                   <Input
@@ -288,7 +294,7 @@ export default function ReportsCenterPage() {
                   />
                 </div>
                 <div className="w-44">
-                  <span className="mb-1 block text-sm font-medium text-slate-700">
+                  <span className="mb-1 block text-sm font-medium text-muted">
                     To
                   </span>
                   <Input
@@ -298,7 +304,7 @@ export default function ReportsCenterPage() {
                   />
                 </div>
                 <div className="w-56">
-                  <span className="mb-1 block text-sm font-medium text-slate-700">
+                  <span className="mb-1 block text-sm font-medium text-muted">
                     Exam
                   </span>
                   <Select
@@ -330,9 +336,9 @@ export default function ReportsCenterPage() {
                 <Spinner />
               ) : data && data.rows.length > 0 ? (
                 <>
-                  <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <div className="overflow-x-auto rounded-xl border border-line">
                     <table className="w-full text-left text-sm">
-                      <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+                      <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
                         <tr>
                           {data.columns.map((col) => (
                             <th
@@ -344,13 +350,13 @@ export default function ReportsCenterPage() {
                           ))}
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-100">
+                      <tbody className="divide-y divide-line">
                         {data.rows.map((row, rowIndex) => (
                           <tr key={rowIndex}>
                             {data.columns.map((col) => (
                               <td
                                 key={col.key}
-                                className="whitespace-nowrap px-4 py-3 text-slate-600"
+                                className="whitespace-nowrap px-4 py-3 text-muted"
                               >
                                 {renderCell(row[col.key])}
                               </td>
@@ -360,7 +366,7 @@ export default function ReportsCenterPage() {
                       </tbody>
                     </table>
                   </div>
-                  <p className="mt-3 text-sm text-slate-500">
+                  <p className="mt-3 text-sm text-muted">
                     {data.rows.length}{" "}
                     {data.rows.length === 1 ? "row" : "rows"}
                   </p>

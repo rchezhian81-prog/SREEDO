@@ -84,7 +84,10 @@ export default function ScheduleForm({
       api
         .get<Paginated<AccountUser>>("/users?limit=200")
         .then((result) => result.data)
-        .catch(() => [] as AccountUser[]),
+        .catch((err) => {
+          console.error("Failed to load users", err);
+          return [] as AccountUser[];
+        }),
     ])
       .then(([reportList, userList]) => {
         setReports(reportList);
@@ -181,7 +184,7 @@ export default function ScheduleForm({
     <div className="space-y-6">
       {/* Report & schedule */}
       <Card>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">
           Report & schedule
         </h2>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -261,7 +264,7 @@ export default function ScheduleForm({
 
       {/* Delivery */}
       <Card>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">
           Delivery
         </h2>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -278,18 +281,18 @@ export default function ScheduleForm({
             </Select>
           </Field>
           <div>
-            <span className="mb-1 block text-sm font-medium text-slate-700">
+            <span className="mb-1 block text-sm font-medium text-muted">
               Channels
             </span>
             <div className="flex flex-wrap gap-4 pt-2">
               {CHANNELS.map((channel) => (
                 <label
                   key={channel.value}
-                  className="flex items-center gap-2 text-sm font-medium text-slate-700"
+                  className="flex items-center gap-2 text-sm font-medium text-muted"
                 >
                   <input
                     type="checkbox"
-                    className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                    className="h-4 w-4 rounded border-line text-brand-600 focus:ring-brand-500"
                     checked={channels.includes(channel.value)}
                     onChange={() => toggleChannel(channel.value)}
                   />
@@ -301,30 +304,30 @@ export default function ScheduleForm({
         </div>
 
         <div className="mt-4">
-          <span className="mb-1 block text-sm font-medium text-slate-700">
+          <span className="mb-1 block text-sm font-medium text-muted">
             Recipients
           </span>
           {sortedUsers.length === 0 ? (
-            <p className="text-sm text-slate-500">No users available.</p>
+            <p className="text-sm text-muted">No users available.</p>
           ) : (
-            <div className="max-h-64 overflow-y-auto rounded-lg border border-slate-200 p-3">
+            <div className="max-h-64 overflow-y-auto rounded-lg border border-line p-3">
               <div className="grid gap-2 sm:grid-cols-2">
                 {sortedUsers.map((user) => (
                   <label
                     key={user.id}
-                    className="flex items-center gap-2 text-sm text-slate-700"
+                    className="flex items-center gap-2 text-sm text-muted"
                   >
                     <input
                       type="checkbox"
-                      className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                      className="h-4 w-4 rounded border-line text-brand-600 focus:ring-brand-500"
                       checked={recipients.includes(user.id)}
                       onChange={() => toggleRecipient(user.id)}
                     />
                     <span>
-                      <span className="font-medium text-slate-900">
+                      <span className="font-medium text-ink">
                         {user.fullName}
                       </span>
-                      <span className="block text-xs text-slate-400">
+                      <span className="block text-xs text-faint">
                         {user.email}
                       </span>
                     </span>
@@ -333,7 +336,7 @@ export default function ScheduleForm({
               </div>
             </div>
           )}
-          <p className="mt-1 text-xs text-slate-400">
+          <p className="mt-1 text-xs text-faint">
             {recipients.length} recipient
             {recipients.length === 1 ? "" : "s"} selected
           </p>
@@ -342,19 +345,19 @@ export default function ScheduleForm({
 
       {/* Status & save */}
       <Card>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">
           Status
         </h2>
-        <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+        <label className="flex items-center gap-2 text-sm font-medium text-muted">
           <input
             type="checkbox"
-            className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+            className="h-4 w-4 rounded border-line text-brand-600 focus:ring-brand-500"
             checked={enabled}
             onChange={(event) => setEnabled(event.target.checked)}
           />
           Enabled
         </label>
-        <p className="mt-1 text-xs text-slate-400">
+        <p className="mt-1 text-xs text-faint">
           When disabled, the schedule will not run automatically.
         </p>
         <div className="mt-3">

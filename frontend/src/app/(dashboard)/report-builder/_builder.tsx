@@ -102,7 +102,10 @@ export default function ReportBuilderForm({
     setLoadError(null);
     Promise.all([
       api.get<ReportSource[]>("/custom-reports/sources"),
-      api.get<SchoolClass[]>("/classes").catch(() => [] as SchoolClass[]),
+      api.get<SchoolClass[]>("/classes").catch((err) => {
+        console.error("Failed to load classes", err);
+        return [] as SchoolClass[];
+      }),
     ])
       .then(([sourceList, classList]) => {
         setSources(sourceList);
@@ -259,7 +262,7 @@ export default function ReportBuilderForm({
     <div className="space-y-6">
       {/* Step 1 — source */}
       <Card>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">
           1. Report source
         </h2>
         <div className="max-w-md">
@@ -282,7 +285,7 @@ export default function ReportBuilderForm({
           </Field>
         </div>
         {selectedSource && (
-          <p className="mt-2 text-xs text-slate-400">
+          <p className="mt-2 text-xs text-faint">
             Category: {selectedSource.category}
           </p>
         )}
@@ -292,7 +295,7 @@ export default function ReportBuilderForm({
         <>
           {/* Step 2 — filters */}
           <Card>
-            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">
               2. Filters
             </h2>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -379,7 +382,7 @@ export default function ReportBuilderForm({
 
           {/* Step 3 — columns + live preview */}
           <Card>
-            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">
               3. Columns & preview
             </h2>
             <ErrorNote message={previewError} />
@@ -394,11 +397,11 @@ export default function ReportBuilderForm({
                     {preview.columns.map((col) => (
                       <label
                         key={col.key}
-                        className="flex items-center gap-2 text-sm font-medium text-slate-700"
+                        className="flex items-center gap-2 text-sm font-medium text-muted"
                       >
                         <input
                           type="checkbox"
-                          className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                          className="h-4 w-4 rounded border-line text-brand-600 focus:ring-brand-500"
                           checked={selectedColumns.includes(col.key)}
                           onChange={() => toggleColumn(col.key)}
                         />
@@ -422,9 +425,9 @@ export default function ReportBuilderForm({
                   }
                   return (
                     <>
-                      <div className="overflow-x-auto rounded-xl border border-slate-200">
+                      <div className="overflow-x-auto rounded-xl border border-line">
                         <table className="w-full text-left text-sm">
-                          <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+                          <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
                             <tr>
                               {visibleColumns.map((col) => (
                                 <th
@@ -436,13 +439,13 @@ export default function ReportBuilderForm({
                               ))}
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-slate-100">
+                          <tbody className="divide-y divide-line">
                             {preview.rows.slice(0, 50).map((row, rowIndex) => (
                               <tr key={rowIndex}>
                                 {visibleColumns.map((col) => (
                                   <td
                                     key={col.key}
-                                    className="whitespace-nowrap px-4 py-3 text-slate-600"
+                                    className="whitespace-nowrap px-4 py-3 text-muted"
                                   >
                                     {renderCell(row[col.key])}
                                   </td>
@@ -452,7 +455,7 @@ export default function ReportBuilderForm({
                           </tbody>
                         </table>
                       </div>
-                      <p className="mt-3 text-sm text-slate-500">
+                      <p className="mt-3 text-sm text-muted">
                         Showing {Math.min(preview.rows.length, 50)} of{" "}
                         {preview.rows.length}{" "}
                         {preview.rows.length === 1 ? "row" : "rows"}
@@ -468,7 +471,7 @@ export default function ReportBuilderForm({
 
           {/* Step 4 — save */}
           <Card>
-            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">
               4. Save
             </h2>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -492,7 +495,7 @@ export default function ReportBuilderForm({
               </Field>
             </div>
             {!canShare && (
-              <p className="mt-2 text-xs text-slate-400">
+              <p className="mt-2 text-xs text-faint">
                 Sharing requires the share permission — this report will be
                 private.
               </p>

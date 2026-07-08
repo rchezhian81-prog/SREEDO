@@ -8,6 +8,7 @@ import { usePermissions } from "@/lib/use-permissions";
 import {
   Badge,
   Button,
+  ConfirmDialog,
   EmptyState,
   ErrorNote,
   PageHeader,
@@ -36,6 +37,7 @@ export default function ScheduledReportsPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<ScheduledReport | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -99,12 +101,17 @@ export default function ScheduledReportsPage() {
     }
   };
 
-  const onDelete = async (schedule: ScheduledReport) => {
-    if (!confirm(`Delete schedule "${schedule.name}"?`)) return;
+  const onDelete = (schedule: ScheduledReport) => {
+    setDeleting(schedule);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleting) return;
     setActionError(null);
-    setBusyId(schedule.id);
+    setBusyId(deleting.id);
     try {
-      await api.delete(`/scheduled-reports/${schedule.id}`);
+      await api.delete(`/scheduled-reports/${deleting.id}`);
+      setDeleting(null);
       await load();
     } catch (err) {
       setActionError(
@@ -161,9 +168,9 @@ export default function ScheduledReportsPage() {
           {schedules.length === 0 ? (
             <EmptyState message="No scheduled reports yet. Create one to get started." />
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+            <div className="overflow-x-auto rounded-xl border border-line bg-surface">
               <table className="w-full text-left text-sm">
-                <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+                <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
                   <tr>
                     <th className="px-4 py-3">Name</th>
                     <th className="px-4 py-3">Report</th>
@@ -174,10 +181,10 @@ export default function ScheduledReportsPage() {
                     <th className="px-4 py-3" />
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-line">
                   {schedules.map((schedule) => (
-                    <tr key={schedule.id} className="hover:bg-slate-50">
-                      <td className="px-4 py-3 font-medium text-slate-900">
+                    <tr key={schedule.id} className="hover:bg-hover">
+                      <td className="px-4 py-3 font-medium text-ink">
                         <Link
                           href={`/scheduled-reports/${schedule.id}`}
                           className="text-brand-600 hover:text-brand-700"
@@ -185,14 +192,14 @@ export default function ScheduledReportsPage() {
                           {schedule.name}
                         </Link>
                       </td>
-                      <td className="px-4 py-3 text-slate-600">
+                      <td className="px-4 py-3 text-muted">
                         {schedule.reportName}
                       </td>
-                      <td className="px-4 py-3 text-slate-600">
+                      <td className="px-4 py-3 text-muted">
                         {FREQUENCY_LABELS[schedule.frequency]} ·{" "}
                         {schedule.runTime}
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                      <td className="whitespace-nowrap px-4 py-3 text-muted">
                         {formatDateTime(schedule.nextRunAt)}
                       </td>
                       <td className="px-4 py-3">
@@ -208,12 +215,12 @@ export default function ScheduledReportsPage() {
                               "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-60 " +
                               (schedule.enabled
                                 ? "bg-brand-600"
-                                : "bg-slate-300")
+                                : "bg-slate-300 dark:bg-slate-600")
                             }
                           >
                             <span
                               className={
-                                "inline-block h-5 w-5 transform rounded-full bg-white shadow transition " +
+                                "inline-block h-5 w-5 transform rounded-full bg-surface shadow transition " +
                                 (schedule.enabled
                                   ? "translate-x-5"
                                   : "translate-x-0.5")
@@ -232,7 +239,7 @@ export default function ScheduledReportsPage() {
                             {schedule.lastRun.status}
                           </Badge>
                         ) : (
-                          <span className="text-slate-400">—</span>
+                          <span className="text-faint">—</span>
                         )}
                       </td>
                       <td className="px-4 py-3">
@@ -283,6 +290,18 @@ export default function ScheduledReportsPage() {
           )}
         </div>
       )}
+
+      <ConfirmDialog
+        open={deleting !== null}
+        title="Delete schedule"
+        message={deleting ? `Delete schedule "${deleting.name}"?` : ""}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        tone="danger"
+        busy={deleting !== null && busyId === deleting.id}
+        onConfirm={confirmDelete}
+        onClose={() => setDeleting(null)}
+      />
     </>
   );
 }
