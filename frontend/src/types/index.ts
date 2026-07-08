@@ -216,6 +216,8 @@ export interface Homework {
   semesterId: string | null;
   semesterName: string | null;
   programName: string | null;
+  batchId: string | null;
+  batchName: string | null;
   subjectId: string;
   subjectName: string | null;
   title: string;

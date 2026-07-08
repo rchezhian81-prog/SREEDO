@@ -30,6 +30,7 @@ const sanitize = (name: string) => name.replace(/[^\w.\- ]+/g, "_").slice(0, 120
  *     parameters:
  *       - { in: query, name: sectionId, schema: { type: string, format: uuid } }
  *       - { in: query, name: semesterId, schema: { type: string, format: uuid } }
+ *       - { in: query, name: batchId, schema: { type: string, format: uuid } }
  *       - { in: query, name: subjectId, schema: { type: string, format: uuid } }
  *     responses:
  *       200: { description: Homework list }
@@ -47,6 +48,7 @@ const sanitize = (name: string) => name.replace(/[^\w.\- ]+/g, "_").slice(0, 120
  *             properties:
  *               sectionId: { type: string, format: uuid, description: "School cohort — provide exactly one of sectionId or semesterId" }
  *               semesterId: { type: string, format: uuid, description: "College cohort — provide exactly one of sectionId or semesterId" }
+ *               batchId: { type: string, format: uuid, description: "Optional — narrows a semester target to one batch within it" }
  *               subjectId: { type: string, format: uuid }
  *               title: { type: string }
  *               description: { type: string }

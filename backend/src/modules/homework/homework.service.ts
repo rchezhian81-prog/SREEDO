@@ -21,11 +21,13 @@ interface UploadFile {
   buffer: Buffer;
 }
 
-// A homework row targets a section (school) or a semester (college); the joins
-// are LEFT so a row shows up regardless of which cohort it belongs to.
+// A homework row targets a section (school) or a semester (college), and a
+// college target may narrow to a batch within that semester. The joins are LEFT
+// so a row shows up regardless of which cohort it belongs to.
 const HOMEWORK_SELECT = `
   h.id, h.section_id AS "sectionId", sec.name AS "sectionName", c.name AS "className",
   h.semester_id AS "semesterId", sem.name AS "semesterName", prog.name AS "programName",
+  h.batch_id AS "batchId", bat.name AS "batchName",
   h.subject_id AS "subjectId", subj.name AS "subjectName",
   h.title, h.description, h.instructions, h.due_date AS "dueDate",
   h.max_marks AS "maxMarks", h.created_by AS "createdBy", h.created_at AS "createdAt",
@@ -36,14 +38,16 @@ LEFT JOIN sections sec ON sec.id = h.section_id
 LEFT JOIN classes c ON c.id = sec.class_id
 LEFT JOIN semesters sem ON sem.id = h.semester_id
 LEFT JOIN programs prog ON prog.id = sem.program_id
+LEFT JOIN batches bat ON bat.id = h.batch_id
 JOIN subjects subj ON subj.id = h.subject_id`;
 
 /**
  * The cohorts a student/parent may see homework for, or `null` for staff
- * (unrestricted). School homework matches by `section_id`, college homework by
- * an active enrollment's `semester_id`; a caller can legitimately have both.
+ * (unrestricted). School homework matches by `section_id`; college homework by
+ * an active enrollment's `semester_id`, further narrowed to `batch_id` when the
+ * homework is batch-targeted. A caller can legitimately have both.
  */
-type HomeworkScope = { sections: string[]; semesters: string[] };
+type HomeworkScope = { sections: string[]; semesters: string[]; batches: string[] };
 
 async function accessibleHomeworkScope(
   req: Request,
@@ -51,33 +55,38 @@ async function accessibleHomeworkScope(
 ): Promise<HomeworkScope | null> {
   const studentIds = await accessibleStudentIds(req);
   if (studentIds === null) return null; // staff
-  if (studentIds.length === 0) return { sections: [], semesters: [] };
+  if (studentIds.length === 0) return { sections: [], semesters: [], batches: [] };
   const { rows: secRows } = await query<{ section_id: string }>(
     `SELECT DISTINCT section_id FROM students
      WHERE institution_id = $1 AND id = ANY($2::uuid[]) AND section_id IS NOT NULL`,
     [institutionId, studentIds]
   );
-  const { rows: semRows } = await query<{ semester_id: string }>(
-    `SELECT DISTINCT semester_id FROM enrollments
-     WHERE institution_id = $1 AND student_id = ANY($2::uuid[])
-       AND semester_id IS NOT NULL AND status = 'active'`,
+  const { rows: enrRows } = await query<{ semester_id: string | null; batch_id: string | null }>(
+    `SELECT DISTINCT semester_id, batch_id FROM enrollments
+     WHERE institution_id = $1 AND student_id = ANY($2::uuid[]) AND status = 'active'`,
     [institutionId, studentIds]
   );
   return {
     sections: secRows.map((r) => r.section_id),
-    semesters: semRows.map((r) => r.semester_id),
+    semesters: [...new Set(enrRows.map((r) => r.semester_id).filter(Boolean) as string[])],
+    batches: [...new Set(enrRows.map((r) => r.batch_id).filter(Boolean) as string[])],
   };
 }
 
-/** True when a homework row's cohort is within the caller's accessible scope. */
+/**
+ * True when a homework row's cohort is within the caller's accessible scope.
+ * A batch-targeted college homework requires the caller to also be in that batch;
+ * a semester-wide one (no batch) is visible to anyone enrolled in the semester.
+ */
 function scopeAllows(
   scope: HomeworkScope,
-  row: { sectionId?: string | null; semesterId?: string | null }
+  row: { sectionId?: string | null; semesterId?: string | null; batchId?: string | null }
 ): boolean {
-  return (
-    (!!row.sectionId && scope.sections.includes(row.sectionId)) ||
-    (!!row.semesterId && scope.semesters.includes(row.semesterId))
-  );
+  if (row.sectionId && scope.sections.includes(row.sectionId)) return true;
+  if (row.semesterId && scope.semesters.includes(row.semesterId)) {
+    return !row.batchId || scope.batches.includes(row.batchId);
+  }
+  return false;
 }
 
 async function attachmentsFor(
@@ -136,7 +145,7 @@ async function storeAttachment(
 }
 
 async function assertRef(
-  table: "sections" | "subjects" | "semesters",
+  table: "sections" | "subjects" | "semesters" | "batches",
   id: string,
   institutionId: string,
   label: string
@@ -159,13 +168,18 @@ export async function listHomework(
   const conditions = ["h.institution_id = $1"];
   const scope = await accessibleHomeworkScope(req, institutionId);
   if (scope !== null) {
-    // Student/parent: constrain to their section(s) OR semester(s).
+    // Student/parent: their section(s), OR a semester they're in — and for a
+    // batch-targeted row, only when they're also in that batch.
     params.push(scope.sections);
     const secIdx = params.length;
     params.push(scope.semesters);
     const semIdx = params.length;
+    params.push(scope.batches);
+    const batIdx = params.length;
     conditions.push(
-      `(h.section_id = ANY($${secIdx}::uuid[]) OR h.semester_id = ANY($${semIdx}::uuid[]))`
+      `(h.section_id = ANY($${secIdx}::uuid[])
+        OR (h.semester_id = ANY($${semIdx}::uuid[])
+            AND (h.batch_id IS NULL OR h.batch_id = ANY($${batIdx}::uuid[]))))`
     );
   } else {
     // Staff: optional explicit cohort filters.
@@ -176,6 +190,10 @@ export async function listHomework(
     if (filters.semesterId) {
       params.push(filters.semesterId);
       conditions.push(`h.semester_id = $${params.length}`);
+    }
+    if (filters.batchId) {
+      params.push(filters.batchId);
+      conditions.push(`h.batch_id = $${params.length}`);
     }
   }
   if (filters.subjectId) {
@@ -197,20 +215,30 @@ export async function createHomework(
 ) {
   await assertRef("subjects", input.subjectId, institutionId, "subject");
   // Exactly one cohort target is guaranteed by the schema's one-of refinement:
-  // a section (school) or a semester (college).
+  // a section (school) or a semester (college, optionally narrowed to a batch).
   if (input.sectionId) {
     await assertRef("sections", input.sectionId, institutionId, "section");
   } else {
     await assertRef("semesters", input.semesterId!, institutionId, "semester");
+    if (input.batchId) {
+      // The batch must belong to the same program as the semester.
+      const { rows: ok } = await query(
+        `SELECT 1 FROM batches b JOIN semesters s ON s.program_id = b.program_id
+         WHERE b.id = $1 AND s.id = $2 AND b.institution_id = $3`,
+        [input.batchId, input.semesterId, institutionId]
+      );
+      if (!ok[0]) throw ApiError.badRequest("Invalid batch for this semester");
+    }
   }
   const { rows } = await query<{ id: string }>(
     `INSERT INTO homework
-       (institution_id, section_id, semester_id, subject_id, title, description, instructions, due_date, max_marks, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
+       (institution_id, section_id, semester_id, batch_id, subject_id, title, description, instructions, due_date, max_marks, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
     [
       institutionId,
       input.sectionId ?? null,
       input.semesterId ?? null,
+      input.batchId ?? null,
       input.subjectId,
       input.title,
       input.description ?? "",
@@ -222,11 +250,14 @@ export async function createHomework(
   );
   const homework = await getHomeworkRow(rows[0].id, institutionId);
   // Notify the cohort (students + guardians): the section for school homework,
-  // the semester for college homework. The in-app fan-out is awaited so
-  // recipients exist immediately; external channels stay fire-and-forget inside
-  // sendMessage. A notify failure must never fail homework creation.
+  // the batch for a batch-targeted college homework, else the whole semester.
+  // The in-app fan-out is awaited so recipients exist immediately; external
+  // channels stay fire-and-forget inside sendMessage. A notify failure must
+  // never fail homework creation.
   const audience = input.sectionId
     ? { audienceType: "section" as const, audienceRef: input.sectionId }
+    : input.batchId
+    ? { audienceType: "batch" as const, audienceRef: input.batchId }
     : { audienceType: "semester" as const, audienceRef: input.semesterId! };
   await sendMessage(
     createdBy,
@@ -255,6 +286,7 @@ async function getHomeworkRow(id: string, institutionId: string) {
     dueDate: string | null;
     sectionId: string | null;
     semesterId: string | null;
+    batchId: string | null;
     createdBy: string | null;
   };
 }
@@ -362,14 +394,20 @@ export async function submitHomework(
   const student = studentRows[0];
   if (!student) throw ApiError.forbidden("No student record for this account");
   if (homework.semesterId) {
-    // College homework: the student needs an active enrollment in that semester.
+    // College homework: the student needs an active enrollment in that semester,
+    // and — when the homework is batch-targeted — in that batch too.
     const { rows: enr } = await query(
       `SELECT 1 FROM enrollments
-       WHERE institution_id = $1 AND student_id = $2 AND semester_id = $3 AND status = 'active'`,
-      [institutionId, student.id, homework.semesterId]
+       WHERE institution_id = $1 AND student_id = $2 AND semester_id = $3 AND status = 'active'
+         AND ($4::uuid IS NULL OR batch_id = $4)`,
+      [institutionId, student.id, homework.semesterId, homework.batchId]
     );
     if (!enr[0]) {
-      throw ApiError.forbidden("This homework is not assigned to your semester");
+      throw ApiError.forbidden(
+        homework.batchId
+          ? "This homework is not assigned to your batch"
+          : "This homework is not assigned to your semester"
+      );
     }
   } else if (student.section_id !== homework.sectionId) {
     throw ApiError.forbidden("This homework is not assigned to your section");
@@ -493,12 +531,14 @@ export async function downloadAttachment(
       const scope = (await accessibleHomeworkScope(req, institutionId)) ?? {
         sections: [],
         semesters: [],
+        batches: [],
       };
       const { rows: hw } = await query<{
         section_id: string | null;
         semester_id: string | null;
+        batch_id: string | null;
       }>(
-        "SELECT section_id, semester_id FROM homework WHERE id = $1 AND institution_id = $2",
+        "SELECT section_id, semester_id, batch_id FROM homework WHERE id = $1 AND institution_id = $2",
         [doc.owner_id, institutionId]
       );
       if (
@@ -506,6 +546,7 @@ export async function downloadAttachment(
         !scopeAllows(scope, {
           sectionId: hw[0].section_id,
           semesterId: hw[0].semester_id,
+          batchId: hw[0].batch_id,
         })
       ) {
         throw ApiError.forbidden("You cannot access this attachment");

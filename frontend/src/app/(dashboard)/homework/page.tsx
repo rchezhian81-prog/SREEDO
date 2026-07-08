@@ -18,6 +18,7 @@ import {
   Textarea,
 } from "@/components/ui";
 import type {
+  CollegeBatch,
   CollegeProgram,
   CollegeSemester,
   Homework,
@@ -116,10 +117,11 @@ function formatDate(value: string | null) {
 
 interface HomeworkForm {
   sectionId: string;
-  // College cohort picker: programId only scopes the semester dropdown; the
-  // homework is posted with semesterId.
+  // College cohort picker: programId only scopes the semester/batch dropdowns.
+  // The homework is posted with semesterId (+ optional batchId).
   programId: string;
   semesterId: string;
+  batchId: string;
   subjectId: string;
   title: string;
   description: string;
@@ -132,6 +134,7 @@ const emptyForm: HomeworkForm = {
   sectionId: "",
   programId: "",
   semesterId: "",
+  batchId: "",
   subjectId: "",
   title: "",
   description: "",
@@ -164,8 +167,9 @@ export default function HomeworkPage() {
   const [filterProgram, setFilterProgram] = useState("");
   const [filterSemesters, setFilterSemesters] = useState<CollegeSemester[]>([]);
   const [filterSemester, setFilterSemester] = useState("");
-  // Semester options for the create modal (depend on the form's chosen program).
+  // Semester + batch options for the create modal (depend on the form's program).
   const [formSemesters, setFormSemesters] = useState<CollegeSemester[]>([]);
+  const [formBatches, setFormBatches] = useState<CollegeBatch[]>([]);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -251,18 +255,22 @@ export default function HomeworkPage() {
       .catch(() => setFilterSemesters([]));
   }, [isCollege, filterProgram]);
 
-  // Create modal: reload semesters when the form's program changes.
+  // Create modal: reload semesters + batches when the form's program changes.
   useEffect(() => {
     if (!isCollege || !form.programId) {
       setFormSemesters([]);
+      setFormBatches([]);
       return;
     }
+    const p = encodeURIComponent(form.programId);
     api
-      .get<CollegeSemester[]>(
-        `/college/semesters?programId=${encodeURIComponent(form.programId)}`
-      )
+      .get<CollegeSemester[]>(`/college/semesters?programId=${p}`)
       .then(setFormSemesters)
       .catch(() => setFormSemesters([]));
+    api
+      .get<CollegeBatch[]>(`/college/batches?programId=${p}`)
+      .then(setFormBatches)
+      .catch(() => setFormBatches([]));
   }, [isCollege, form.programId]);
 
   const openCreate = () => {
@@ -279,6 +287,7 @@ export default function HomeworkPage() {
       sectionId: homework.sectionId ?? "",
       programId: "",
       semesterId: homework.semesterId ?? "",
+      batchId: homework.batchId ?? "",
       subjectId: homework.subjectId,
       title: homework.title,
       description: homework.description ?? "",
@@ -323,7 +332,7 @@ export default function HomeworkPage() {
         await api.patch(`/homework/${editing.id}`, common);
       } else {
         const target = isCollege
-          ? { semesterId: form.semesterId }
+          ? { semesterId: form.semesterId, batchId: form.batchId || undefined }
           : { sectionId: form.sectionId };
         await api.post("/homework", { ...target, ...common });
       }
@@ -483,7 +492,11 @@ export default function HomeworkPage() {
                                 homework.programName
                                   ? `${homework.programName} - `
                                   : ""
-                              }${homework.semesterName}`
+                              }${homework.semesterName}${
+                                homework.batchName
+                                  ? ` · ${homework.batchName}`
+                                  : ""
+                              }`
                             : homework.className && homework.sectionName
                             ? `${homework.className} - ${homework.sectionName}`
                             : "—"}
@@ -541,43 +554,64 @@ export default function HomeworkPage() {
         <div className="space-y-4">
           {!editing &&
             (isCollege ? (
-              <div className="grid grid-cols-2 gap-3">
-                <Field label={term.klass}>
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label={term.klass}>
+                    <Select
+                      value={form.programId}
+                      onChange={(event) =>
+                        setForm({
+                          ...form,
+                          programId: event.target.value,
+                          semesterId: "",
+                          batchId: "",
+                        })
+                      }
+                    >
+                      <option value="">{`Select ${term.klass.toLowerCase()}…`}</option>
+                      {programs.map((program) => (
+                        <option key={program.id} value={program.id}>
+                          {program.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label={term.term}>
+                    <Select
+                      value={form.semesterId}
+                      onChange={(event) =>
+                        setForm({ ...form, semesterId: event.target.value })
+                      }
+                      disabled={!form.programId}
+                    >
+                      <option value="">{`Select ${term.term.toLowerCase()}…`}</option>
+                      {formSemesters.map((semester) => (
+                        <option key={semester.id} value={semester.id}>
+                          {semester.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                </div>
+                {/* Batch is optional — narrows the homework to one batch within
+                    the semester; blank targets the whole semester. */}
+                <Field label={`${term.section} (optional)`}>
                   <Select
-                    value={form.programId}
+                    value={form.batchId}
                     onChange={(event) =>
-                      setForm({
-                        ...form,
-                        programId: event.target.value,
-                        semesterId: "",
-                      })
-                    }
-                  >
-                    <option value="">{`Select ${term.klass.toLowerCase()}…`}</option>
-                    {programs.map((program) => (
-                      <option key={program.id} value={program.id}>
-                        {program.name}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label={term.term}>
-                  <Select
-                    value={form.semesterId}
-                    onChange={(event) =>
-                      setForm({ ...form, semesterId: event.target.value })
+                      setForm({ ...form, batchId: event.target.value })
                     }
                     disabled={!form.programId}
                   >
-                    <option value="">{`Select ${term.term.toLowerCase()}…`}</option>
-                    {formSemesters.map((semester) => (
-                      <option key={semester.id} value={semester.id}>
-                        {semester.name}
+                    <option value="">{`Whole ${term.term.toLowerCase()} (all ${term.sectionPlural.toLowerCase()})`}</option>
+                    {formBatches.map((batch) => (
+                      <option key={batch.id} value={batch.id}>
+                        {batch.name}
                       </option>
                     ))}
                   </Select>
                 </Field>
-              </div>
+              </>
             ) : (
               <Field label={term.section}>
                 <Select
@@ -810,7 +844,9 @@ function HomeworkDetailView({
               {detail.semesterName
                 ? `${
                     detail.programName ? `${detail.programName} - ` : ""
-                  }${detail.semesterName}`
+                  }${detail.semesterName}${
+                    detail.batchName ? ` · ${detail.batchName}` : ""
+                  }`
                 : detail.className && detail.sectionName
                 ? `${detail.className} - ${detail.sectionName}`
                 : "—"}
