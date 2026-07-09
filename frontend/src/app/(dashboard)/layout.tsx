@@ -122,6 +122,7 @@ function tenantGroups(mode: CampusMode): NavGroup[] {
       title: "Staff & HR",
       items: [
         { href: "/teachers", label: "Teachers", termLabel: (t) => t.teachers, icon: "board", moduleKey: "staff" },
+        { href: "/staff/directory", label: "Staff Directory", icon: "users", moduleKey: "staff", perm: "teachers:manage" },
         { href: "/staff", label: "Staff Attendance", icon: "briefcase", perm: "staff_attendance:read" },
         { href: "/payroll", label: "Payroll", icon: "wallet", adminOnly: true, moduleKey: "payroll" },
       ],
