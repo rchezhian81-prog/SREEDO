@@ -129,4 +129,40 @@ describe("PR-T6 staff master (non-teaching)", () => {
       await num(`SELECT count(*) c FROM platform_audit_log WHERE institution_id = $1 AND action = 'staff.create'`, [instA])
     ).toBe(1);
   });
+
+  // ---- pre-merge safety: non-teaching staff cannot be assigned to teach ----
+  it("blocks assigning a non-teaching staff member to teach a subject (direct + import)", async () => {
+    const classId = (await query<{ id: string }>(
+      `INSERT INTO classes (institution_id, name, grade_level) VALUES ($1,'G1',1) RETURNING id`, [instA]
+    )).rows[0].id;
+    const sectionId = (await query<{ id: string }>(
+      `INSERT INTO sections (institution_id, class_id, name) VALUES ($1,$2,'A') RETURNING id`, [instA, classId]
+    )).rows[0].id;
+    const subjectId = (await query<{ id: string }>(
+      `INSERT INTO subjects (institution_id, name, code) VALUES ($1,'Math','MATH') RETURNING id`, [instA]
+    )).rows[0].id;
+    const nonTeach = await createStaff(tok.adminA, { firstName: "Dee", lastName: "Driver", staffType: "non_teaching", designation: "Driver", employeeNo: "NT-9" });
+    const teach = await createStaff(tok.adminA, { firstName: "Tia", lastName: "Teach", employeeNo: "TE-9" });
+
+    // Direct assignment endpoint: non-teaching UUID is rejected...
+    const bad = await request(app)
+      .post(`/api/v1/sections/${sectionId}/subjects`)
+      .set(auth(tok.adminA))
+      .send({ subjectId, teacherId: nonTeach.body.id });
+    expect(bad.status).toBe(400);
+    // ...a teaching teacher is accepted.
+    const ok = await request(app)
+      .post(`/api/v1/sections/${sectionId}/subjects`)
+      .set(auth(tok.adminA))
+      .send({ subjectId, teacherId: teach.body.id });
+    expect(ok.status).toBe(201);
+
+    // Import path: a non-teaching employee_no does not resolve as a teacher.
+    const dry = await request(app)
+      .post("/api/v1/dataio/import/section_subject/dry-run")
+      .set(auth(tok.adminA))
+      .send({ csv: "className,sectionName,subjectCode,employeeNo\nG1,A,MATH,NT-9" });
+    expect(dry.body.invalid).toBe(1);
+    expect(JSON.stringify(dry.body.rows[0].errors)).toContain("employeeNo");
+  });
 });

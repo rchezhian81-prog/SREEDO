@@ -36,6 +36,29 @@ async function nextEmployeeNo(
   return `EMP-${String(n).padStart(4, "0")}`;
 }
 
+/**
+ * Guard for teaching-role assignments (subject/class/course/timetable/homeroom/
+ * HOD): the referenced staff must exist in the tenant AND be teaching staff.
+ * Prevents a non-teaching staff UUID being assigned to teach even if passed
+ * directly to an assignment endpoint (PR-T6). Existing staff are all `teaching`
+ * (0111 backfill), so this rejects only non-teaching assignments.
+ */
+export async function assertTeachingStaff(
+  teacherId: string,
+  institutionId: string
+): Promise<void> {
+  const { rows } = await query<{ staff_type: string }>(
+    "SELECT staff_type FROM teachers WHERE id = $1 AND institution_id = $2",
+    [teacherId, institutionId]
+  );
+  if (!rows[0]) throw ApiError.notFound("Teacher not found");
+  if (rows[0].staff_type !== "teaching") {
+    throw ApiError.badRequest(
+      "Only teaching staff can be assigned to teach a subject, class, course or timetable slot"
+    );
+  }
+}
+
 export async function listTeachers(
   pagination: Pagination,
   filters: { search?: string; staffType?: "teaching" | "non_teaching" | "all" },

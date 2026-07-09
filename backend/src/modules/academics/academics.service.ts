@@ -1,5 +1,6 @@
 import { query, withTransaction } from "../../db/postgres";
 import { ApiError } from "../../utils/api-error";
+import { assertTeachingStaff } from "../teachers/teachers.service";
 import type { z } from "zod";
 import type {
   assignSectionSubjectSchema,
@@ -180,6 +181,8 @@ export async function createSection(
     [classId, institutionId]
   );
   if (!classRows[0]) throw ApiError.notFound("Class not found");
+  if (input.homeroomTeacherId)
+    await assertTeachingStaff(input.homeroomTeacherId, institutionId);
 
   const { rows } = await query(
     `INSERT INTO sections (institution_id, class_id, name, homeroom_teacher_id, capacity)
@@ -299,13 +302,7 @@ export async function assignSectionSubject(
   );
   if (!subjectRows[0]) throw ApiError.notFound("Subject not found");
 
-  if (input.teacherId) {
-    const { rows: teacherRows } = await query(
-      "SELECT id FROM teachers WHERE id = $1 AND institution_id = $2",
-      [input.teacherId, institutionId]
-    );
-    if (!teacherRows[0]) throw ApiError.notFound("Teacher not found");
-  }
+  if (input.teacherId) await assertTeachingStaff(input.teacherId, institutionId);
 
   let id: string;
   try {
@@ -331,13 +328,7 @@ export async function updateClassSubject(
   input: z.infer<typeof updateClassSubjectSchema>,
   institutionId: string
 ) {
-  if (input.teacherId) {
-    const { rows: teacherRows } = await query(
-      "SELECT id FROM teachers WHERE id = $1 AND institution_id = $2",
-      [input.teacherId, institutionId]
-    );
-    if (!teacherRows[0]) throw ApiError.notFound("Teacher not found");
-  }
+  if (input.teacherId) await assertTeachingStaff(input.teacherId, institutionId);
   const { rowCount } = await query(
     "UPDATE class_subjects SET teacher_id = $1 WHERE id = $2 AND institution_id = $3",
     [input.teacherId, id, institutionId]
