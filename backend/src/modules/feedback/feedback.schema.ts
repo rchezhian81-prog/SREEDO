@@ -1,6 +1,9 @@
 import { z } from "zod";
 
-export const FEEDBACK_TYPES = ["feedback", "complaint", "suggestion", "grievance"] as const;
+// PR-T7 — "enquiry" added so front-desk walk-in / phone enquiries log in the same
+// complaints/feedback surface. Additive only; feedback_entries.type is free TEXT
+// (no DB CHECK), so no migration is required.
+export const FEEDBACK_TYPES = ["feedback", "complaint", "suggestion", "grievance", "enquiry"] as const;
 export const FEEDBACK_STATUSES = ["open", "in_progress", "resolved", "closed"] as const;
 
 const baseFields = {
