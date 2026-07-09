@@ -609,6 +609,247 @@ const courses: ImportEntity<CourseIn> = {
   },
 };
 
+// ===========================================================================
+// ASSIGNMENTS — place students / assign teachers (basic, human-key resolved)
+// ===========================================================================
+
+// Student → section (school): sets students.section_id by admission no + class/section.
+interface PlacementIn { admissionNo: string; className: string; sectionName: string; _studentId?: string; _sectionId?: string }
+const studentPlacement: ImportEntity<PlacementIn> = {
+  key: "student_placement",
+  label: "Student Section Placement (School)",
+  appliesTo: "school",
+  permission: "students:update",
+  columns: [
+    { field: "admissionNo", required: true, note: "Existing student's admission no" },
+    { field: "className", required: true }, { field: "sectionName", required: true },
+  ],
+  toInput(rec) {
+    const parsed = z
+      .object({ admissionNo: z.string().min(1), className: z.string().min(1), sectionName: z.string().min(1) })
+      .safeParse({ admissionNo: s(rec.admissionNo), className: s(rec.className), sectionName: s(rec.sectionName) });
+    return parsed.success ? { input: parsed.data, errors: [] } : { errors: zErrors(parsed.error) };
+  },
+  async validate(inputs, inst) {
+    const studentMap = await keyToId(inst, `SELECT lower(admission_no) AS k, id FROM students WHERE institution_id = $1`);
+    const sectionMap = await keyToId(
+      inst,
+      `SELECT lower(c.name) || '::' || lower(sec.name) AS k, sec.id
+       FROM sections sec JOIN classes c ON c.id = sec.class_id WHERE sec.institution_id = $1`
+    );
+    return inputs.map((inp) => {
+      if (!inp) return [];
+      const errs: RowError[] = [];
+      const studentId = studentMap.get(norm(inp.admissionNo));
+      const sectionId = sectionMap.get(`${norm(inp.className)}::${norm(inp.sectionName)}`);
+      if (!studentId) errs.push({ field: "admissionNo", message: `Student "${inp.admissionNo}" not found` });
+      else inp._studentId = studentId;
+      if (!sectionId) errs.push({ field: "sectionName", message: `Section "${inp.className} / ${inp.sectionName}" not found` });
+      else inp._sectionId = sectionId;
+      return errs;
+    });
+  },
+  async commit(inputs, inst) {
+    return withTransaction(async (c) => {
+      for (const i of inputs)
+        await c.query(`UPDATE students SET section_id = $1, updated_at = now() WHERE id = $2 AND institution_id = $3`, [
+          i._sectionId, i._studentId, inst,
+        ]);
+      return inputs.length;
+    });
+  },
+};
+
+// Student → program/semester/batch (college enrollment).
+interface EnrollIn { admissionNo: string; programCode: string; semesterNumber?: number; batchName?: string; status?: string; _studentId?: string; _programId?: string; _semesterId?: string | null; _batchId?: string | null }
+const studentEnrollment: ImportEntity<EnrollIn> = {
+  key: "student_enrollment",
+  label: "Student Enrollment (College)",
+  appliesTo: "college",
+  permission: "college:create",
+  columns: [
+    { field: "admissionNo", required: true }, { field: "programCode", required: true },
+    { field: "semesterNumber", note: "Optional semester number in the program" },
+    { field: "batchName", note: "Optional batch name in the program" },
+    { field: "status", note: "Optional (default active)" },
+  ],
+  toInput(rec) {
+    const parsed = z
+      .object({ admissionNo: z.string().min(1), programCode: z.string().min(1), semesterNumber: z.number().int().min(1).max(20).optional(), batchName: z.string().max(80).optional(), status: z.string().max(40).optional() })
+      .safeParse({ admissionNo: s(rec.admissionNo), programCode: s(rec.programCode), semesterNumber: n(rec.semesterNumber), batchName: s(rec.batchName), status: s(rec.status) });
+    return parsed.success ? { input: parsed.data, errors: [] } : { errors: zErrors(parsed.error) };
+  },
+  async validate(inputs, inst) {
+    const studentMap = await keyToId(inst, `SELECT lower(admission_no) AS k, id FROM students WHERE institution_id = $1`);
+    const progMap = await keyToId(inst, `SELECT lower(code) AS k, id FROM programs WHERE institution_id = $1`);
+    const semMap = await keyToId(inst, `SELECT program_id || '::' || number AS k, id FROM semesters WHERE institution_id = $1`);
+    const batchMap = await keyToId(inst, `SELECT program_id || '::' || lower(name) AS k, id FROM batches WHERE institution_id = $1`);
+    const existing = await existingKeys(inst, `SELECT student_id || '::' || program_id AS k FROM enrollments WHERE institution_id = $1`);
+    const seen = new Set<string>();
+    return inputs.map((inp) => {
+      if (!inp) return [];
+      const errs: RowError[] = [];
+      const studentId = studentMap.get(norm(inp.admissionNo));
+      const programId = progMap.get(norm(inp.programCode));
+      if (!studentId) errs.push({ field: "admissionNo", message: `Student "${inp.admissionNo}" not found` });
+      else inp._studentId = studentId;
+      if (!programId) errs.push({ field: "programCode", message: `Program "${inp.programCode}" not found` });
+      else inp._programId = programId;
+      if (programId && inp.semesterNumber !== undefined) {
+        inp._semesterId = semMap.get(`${programId}::${inp.semesterNumber}`) ?? null;
+        if (!inp._semesterId) errs.push({ field: "semesterNumber", message: `Semester ${inp.semesterNumber} not found in ${inp.programCode}` });
+      }
+      if (programId && inp.batchName) {
+        inp._batchId = batchMap.get(`${programId}::${norm(inp.batchName)}`) ?? null;
+        if (!inp._batchId) errs.push({ field: "batchName", message: `Batch "${inp.batchName}" not found in ${inp.programCode}` });
+      }
+      if (studentId && programId) {
+        const key = `${studentId}::${programId}`;
+        if (existing.has(key)) errs.push({ field: "admissionNo", message: `Already enrolled in ${inp.programCode}` });
+        if (seen.has(key)) errs.push({ field: "admissionNo", message: `Duplicate enrollment in this file` });
+        seen.add(key);
+      }
+      return errs;
+    });
+  },
+  async commit(inputs, inst) {
+    return withTransaction(async (c) => {
+      for (const i of inputs)
+        await c.query(
+          `INSERT INTO enrollments (institution_id, student_id, program_id, semester_id, batch_id, status)
+           VALUES ($1,$2,$3,$4,$5,COALESCE($6,'active'))`,
+          [inst, i._studentId, i._programId, i._semesterId ?? null, i._batchId ?? null, i.status ?? null]
+        );
+      return inputs.length;
+    });
+  },
+};
+
+// Teacher → section-subject (school class_subjects). Note: class_subjects has no
+// institution_id; it is scoped via the (in-tenant) section.
+interface SectionSubjectIn { className: string; sectionName: string; subjectCode: string; employeeNo?: string; _sectionId?: string; _subjectId?: string; _teacherId?: string | null }
+const sectionSubject: ImportEntity<SectionSubjectIn> = {
+  key: "section_subject",
+  label: "Section Subject Assignment (School)",
+  appliesTo: "school",
+  permission: "subjects:manage",
+  columns: [
+    { field: "className", required: true }, { field: "sectionName", required: true },
+    { field: "subjectCode", required: true, note: "Existing subject code" },
+    { field: "employeeNo", note: "Optional teacher to assign" },
+  ],
+  toInput(rec) {
+    const parsed = z
+      .object({ className: z.string().min(1), sectionName: z.string().min(1), subjectCode: z.string().min(1), employeeNo: z.string().max(50).optional() })
+      .safeParse({ className: s(rec.className), sectionName: s(rec.sectionName), subjectCode: s(rec.subjectCode), employeeNo: s(rec.employeeNo) });
+    return parsed.success ? { input: parsed.data, errors: [] } : { errors: zErrors(parsed.error) };
+  },
+  async validate(inputs, inst) {
+    const sectionMap = await keyToId(
+      inst,
+      `SELECT lower(c.name) || '::' || lower(sec.name) AS k, sec.id
+       FROM sections sec JOIN classes c ON c.id = sec.class_id WHERE sec.institution_id = $1`
+    );
+    const subMap = await keyToId(inst, `SELECT upper(code) AS k, id FROM subjects WHERE institution_id = $1`);
+    const teacherMap = await keyToId(inst, `SELECT lower(employee_no) AS k, id FROM teachers WHERE institution_id = $1`);
+    const existing = await existingKeys(
+      inst,
+      `SELECT cs.section_id || '::' || cs.subject_id AS k FROM class_subjects cs
+       JOIN sections sec ON sec.id = cs.section_id WHERE sec.institution_id = $1`
+    );
+    const seen = new Set<string>();
+    return inputs.map((inp) => {
+      if (!inp) return [];
+      const errs: RowError[] = [];
+      const sectionId = sectionMap.get(`${norm(inp.className)}::${norm(inp.sectionName)}`);
+      const subjectId = subMap.get(inp.subjectCode.toUpperCase());
+      if (!sectionId) errs.push({ field: "sectionName", message: `Section "${inp.className} / ${inp.sectionName}" not found` });
+      else inp._sectionId = sectionId;
+      if (!subjectId) errs.push({ field: "subjectCode", message: `Subject "${inp.subjectCode}" not found` });
+      else inp._subjectId = subjectId;
+      if (inp.employeeNo) {
+        inp._teacherId = teacherMap.get(norm(inp.employeeNo)) ?? null;
+        if (!inp._teacherId) errs.push({ field: "employeeNo", message: `Teacher "${inp.employeeNo}" not found` });
+      }
+      if (sectionId && subjectId) {
+        const key = `${sectionId}::${subjectId}`;
+        if (existing.has(key)) errs.push({ field: "subjectCode", message: `Subject already assigned to this section` });
+        if (seen.has(key)) errs.push({ field: "subjectCode", message: `Duplicate assignment in this file` });
+        seen.add(key);
+      }
+      return errs;
+    });
+  },
+  async commit(inputs, inst) {
+    return withTransaction(async (c) => {
+      for (const i of inputs)
+        await c.query(
+          `INSERT INTO class_subjects (institution_id, section_id, subject_id, teacher_id) VALUES ($1,$2,$3,$4)`,
+          [inst, i._sectionId, i._subjectId, i._teacherId ?? null]
+        );
+      return inputs.length;
+    });
+  },
+};
+
+// Faculty → department/program/subject (college staff_allocations).
+interface StaffAllocIn { employeeNo: string; departmentCode?: string; programCode?: string; subjectCode?: string; _teacherId?: string; _deptId?: string | null; _programId?: string | null; _subjectId?: string | null }
+const staffAllocation: ImportEntity<StaffAllocIn> = {
+  key: "staff_allocation",
+  label: "Faculty Allocation (College)",
+  appliesTo: "college",
+  permission: "college:create",
+  columns: [
+    { field: "employeeNo", required: true, note: "Existing faculty employee no" },
+    { field: "departmentCode", note: "One of department/program/subject required" },
+    { field: "programCode" }, { field: "subjectCode" },
+  ],
+  toInput(rec) {
+    const parsed = z
+      .object({ employeeNo: z.string().min(1), departmentCode: z.string().max(40).optional(), programCode: z.string().max(40).optional(), subjectCode: z.string().max(20).optional() })
+      .refine((d) => d.departmentCode || d.programCode || d.subjectCode, { message: "Provide at least one of department/program/subject", path: ["departmentCode"] })
+      .safeParse({ employeeNo: s(rec.employeeNo), departmentCode: s(rec.departmentCode), programCode: s(rec.programCode), subjectCode: s(rec.subjectCode) });
+    return parsed.success ? { input: parsed.data, errors: [] } : { errors: zErrors(parsed.error) };
+  },
+  async validate(inputs, inst) {
+    const teacherMap = await keyToId(inst, `SELECT lower(employee_no) AS k, id FROM teachers WHERE institution_id = $1`);
+    const deptMap = await keyToId(inst, `SELECT lower(code) AS k, id FROM departments WHERE institution_id = $1`);
+    const progMap = await keyToId(inst, `SELECT lower(code) AS k, id FROM programs WHERE institution_id = $1`);
+    const subMap = await keyToId(inst, `SELECT upper(code) AS k, id FROM subjects WHERE institution_id = $1`);
+    return inputs.map((inp) => {
+      if (!inp) return [];
+      const errs: RowError[] = [];
+      const teacherId = teacherMap.get(norm(inp.employeeNo));
+      if (!teacherId) errs.push({ field: "employeeNo", message: `Faculty "${inp.employeeNo}" not found` });
+      else inp._teacherId = teacherId;
+      if (inp.departmentCode) {
+        inp._deptId = deptMap.get(norm(inp.departmentCode)) ?? null;
+        if (!inp._deptId) errs.push({ field: "departmentCode", message: `Department "${inp.departmentCode}" not found` });
+      }
+      if (inp.programCode) {
+        inp._programId = progMap.get(norm(inp.programCode)) ?? null;
+        if (!inp._programId) errs.push({ field: "programCode", message: `Program "${inp.programCode}" not found` });
+      }
+      if (inp.subjectCode) {
+        inp._subjectId = subMap.get(inp.subjectCode.toUpperCase()) ?? null;
+        if (!inp._subjectId) errs.push({ field: "subjectCode", message: `Subject "${inp.subjectCode}" not found` });
+      }
+      return errs;
+    });
+  },
+  async commit(inputs, inst) {
+    return withTransaction(async (c) => {
+      for (const i of inputs)
+        await c.query(
+          `INSERT INTO staff_allocations (institution_id, teacher_id, department_id, program_id, subject_id)
+           VALUES ($1,$2,$3,$4,$5)`,
+          [inst, i._teacherId, i._deptId ?? null, i._programId ?? null, i._subjectId ?? null]
+        );
+      return inputs.length;
+    });
+  },
+};
+
 /** Import entities registered in the center (school + college). */
 export const IMPORT_ENTITIES: ImportEntity[] = [
   classes as ImportEntity,
@@ -622,6 +863,10 @@ export const IMPORT_ENTITIES: ImportEntity[] = [
   semesters as ImportEntity,
   batches as ImportEntity,
   courses as ImportEntity,
+  studentPlacement as ImportEntity,
+  studentEnrollment as ImportEntity,
+  sectionSubject as ImportEntity,
+  staffAllocation as ImportEntity,
 ];
 
 export const IMPORT_BY_KEY: Record<string, ImportEntity> = Object.fromEntries(

@@ -207,4 +207,63 @@ describe("PR-T5 tenant import/export center", () => {
     expect(rows.body[0].valid).toBe(false);
     expect(rows.body[0].errors.length).toBeGreaterThan(0);
   });
+
+  // ---- assignments (scope items 5 & 6) ------------------------------------
+  it("imports student section placement (school)", async () => {
+    await query(
+      `INSERT INTO sections (institution_id, class_id, name)
+       SELECT $1, id, 'A' FROM classes WHERE institution_id = $1 AND name = 'Grade 1'`,
+      [instA]
+    );
+    const res = await request(app)
+      .post("/api/v1/dataio/import/student_placement/commit")
+      .set(auth(tok.adminA))
+      .send({ csv: "admissionNo,className,sectionName\nIOA-1,Grade 1,A" });
+    expect(res.status).toBe(200);
+    const placed = await count(
+      `SELECT count(*) c FROM students s JOIN sections sec ON sec.id = s.section_id
+       WHERE s.institution_id = $1 AND s.admission_no = 'IOA-1' AND sec.name = 'A'`,
+      [instA]
+    );
+    expect(placed).toBe(1);
+  });
+
+  it("imports section-subject assignment (school)", async () => {
+    await query(
+      `INSERT INTO sections (institution_id, class_id, name)
+       SELECT $1, id, 'A' FROM classes WHERE institution_id = $1 AND name = 'Grade 1'`,
+      [instA]
+    );
+    await query(`INSERT INTO subjects (institution_id, name, code) VALUES ($1, 'Math', 'MATH')`, [instA]);
+    const res = await request(app)
+      .post("/api/v1/dataio/import/section_subject/commit")
+      .set(auth(tok.adminA))
+      .send({ csv: "className,sectionName,subjectCode\nGrade 1,A,MATH" });
+    expect(res.status).toBe(200);
+    expect(res.body.imported).toBe(1);
+  });
+
+  it("imports college student enrollment", async () => {
+    const col = await createInstitution("IOC", "college");
+    await createUser({ email: "admin@ioc.dev", password: PW, role: "admin", institutionId: col });
+    const colTok = await tokenFor("admin@ioc.dev", PW);
+    const dept = (await query<{ id: string }>(
+      `INSERT INTO departments (institution_id, name, code) VALUES ($1,'Sci','SCI') RETURNING id`, [col]
+    )).rows[0].id;
+    await query(
+      `INSERT INTO programs (institution_id, department_id, name, code) VALUES ($1,$2,'B.Sc','BSC')`, [col, dept]
+    );
+    await query(
+      `INSERT INTO students (institution_id, admission_no, first_name, last_name, status)
+       VALUES ($1,'IOC-1','Meena','Rao','active')`,
+      [col]
+    );
+    const res = await request(app)
+      .post("/api/v1/dataio/import/student_enrollment/commit")
+      .set(auth(colTok))
+      .send({ csv: "admissionNo,programCode\nIOC-1,BSC" });
+    expect(res.status).toBe(200);
+    expect(res.body.imported).toBe(1);
+    expect(await count(`SELECT count(*) c FROM enrollments WHERE institution_id = $1`, [col])).toBe(1);
+  });
 });
