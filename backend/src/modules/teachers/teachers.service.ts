@@ -21,6 +21,9 @@ const TEACHER_COLUMNS = `
   specialization,
   joining_date AS "joiningDate",
   is_active AS "isActive",
+  staff_type AS "staffType",
+  designation,
+  department,
   created_at AS "createdAt"`;
 
 async function nextEmployeeNo(
@@ -33,13 +36,45 @@ async function nextEmployeeNo(
   return `EMP-${String(n).padStart(4, "0")}`;
 }
 
+/**
+ * Guard for teaching-role assignments (subject/class/course/timetable/homeroom/
+ * HOD): the referenced staff must exist in the tenant AND be teaching staff.
+ * Prevents a non-teaching staff UUID being assigned to teach even if passed
+ * directly to an assignment endpoint (PR-T6). Existing staff are all `teaching`
+ * (0111 backfill), so this rejects only non-teaching assignments.
+ */
+export async function assertTeachingStaff(
+  teacherId: string,
+  institutionId: string
+): Promise<void> {
+  const { rows } = await query<{ staff_type: string }>(
+    "SELECT staff_type FROM teachers WHERE id = $1 AND institution_id = $2",
+    [teacherId, institutionId]
+  );
+  if (!rows[0]) throw ApiError.notFound("Teacher not found");
+  if (rows[0].staff_type !== "teaching") {
+    throw ApiError.badRequest(
+      "Only teaching staff can be assigned to teach a subject, class, course or timetable slot"
+    );
+  }
+}
+
 export async function listTeachers(
   pagination: Pagination,
-  filters: { search?: string },
+  filters: { search?: string; staffType?: "teaching" | "non_teaching" | "all" },
   institutionId: string
 ) {
   const params: unknown[] = [institutionId];
   let where = "WHERE institution_id = $1";
+  // Default (no staffType) → teaching-only, so the Teachers list and every
+  // teacher-assignment picker keep showing teaching staff and never surface
+  // non-teaching staff. "all" opts into the full staff set; "non_teaching"
+  // drives the Staff Directory.
+  const staffType = filters.staffType ?? "teaching";
+  if (staffType !== "all") {
+    params.push(staffType);
+    where += ` AND staff_type = $${params.length}`;
+  }
   if (filters.search) {
     params.push(`%${filters.search}%`);
     where += ` AND (first_name ILIKE $${params.length} OR last_name ILIKE $${params.length} OR employee_no ILIKE $${params.length})`;
@@ -75,8 +110,8 @@ export async function createTeacher(
   const { rows } = await query(
     `INSERT INTO teachers (
        institution_id, employee_no, first_name, last_name, email, phone,
-       qualification, specialization, joining_date
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       qualification, specialization, joining_date, staff_type, designation, department
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, COALESCE($10,'teaching'), $11, $12)
      RETURNING ${TEACHER_COLUMNS}`,
     [
       institutionId,
@@ -88,6 +123,9 @@ export async function createTeacher(
       input.qualification ?? null,
       input.specialization ?? null,
       input.joiningDate ?? null,
+      input.staffType ?? null,
+      input.designation ?? null,
+      input.department ?? null,
     ]
   );
   return rows[0];
@@ -124,8 +162,8 @@ export async function importTeachers(
         await client.query(
           `INSERT INTO teachers (
              institution_id, employee_no, first_name, last_name, email, phone,
-             qualification, specialization, joining_date
-           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+             qualification, specialization, joining_date, staff_type, designation, department
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, COALESCE($10,'teaching'), $11, $12)`,
           [
             institutionId,
             employeeNo,
@@ -136,6 +174,9 @@ export async function importTeachers(
             input.qualification ?? null,
             input.specialization ?? null,
             input.joiningDate ?? null,
+            input.staffType ?? null,
+            input.designation ?? null,
+            input.department ?? null,
           ]
         );
         count++;
@@ -163,6 +204,9 @@ const UPDATE_COLUMN_MAP: Record<string, string> = {
   specialization: "specialization",
   joiningDate: "joining_date",
   isActive: "is_active",
+  staffType: "staff_type",
+  designation: "designation",
+  department: "department",
 };
 
 export async function updateTeacher(

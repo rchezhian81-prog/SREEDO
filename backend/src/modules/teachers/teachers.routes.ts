@@ -1,10 +1,11 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { uuidParam } from "../../utils/params";
 import { authenticate } from "../../middleware/auth";
 import { requirePermission } from "../../middleware/permissions";
 import { requireTenant, tenantId } from "../../middleware/tenant";
 import { requireStaff } from "../../utils/scope";
 import { parsePagination } from "../../utils/pagination";
+import { recordAudit } from "../observability/audit";
 import {
   createTeacherSchema,
   importTeachersSchema,
@@ -16,6 +17,15 @@ import * as teachersService from "./teachers.service";
 export const teachersRouter = Router();
 
 teachersRouter.use(authenticate, requireTenant);
+
+// Audit important staff changes (create/update/delete), teaching + non-teaching
+// alike (PR-T6). Fire after the mutation so a failed op isn't recorded.
+const actorOf = (req: Request) => ({
+  id: req.user!.id,
+  email: req.user!.email,
+  role: req.user!.role,
+  ip: req.ip ?? null,
+});
 
 /**
  * @openapi
@@ -58,7 +68,7 @@ teachersRouter.get("/", async (req, res) => {
   const queryParams = listTeachersQuerySchema.parse(req.query);
   const result = await teachersService.listTeachers(
     parsePagination(queryParams),
-    { search: queryParams.search },
+    { search: queryParams.search, staffType: queryParams.staffType },
     tenantId(req)
   );
   res.json(result);
@@ -66,7 +76,15 @@ teachersRouter.get("/", async (req, res) => {
 
 teachersRouter.post("/", requirePermission("teachers:manage"), async (req, res) => {
   const input = createTeacherSchema.parse(req.body);
-  res.status(201).json(await teachersService.createTeacher(input, tenantId(req)));
+  const created = await teachersService.createTeacher(input, tenantId(req));
+  await recordAudit(actorOf(req), {
+    action: "staff.create",
+    targetType: "teacher",
+    targetId: created.id,
+    institutionId: tenantId(req),
+    detail: { staffType: created.staffType, employeeNo: created.employeeNo, designation: created.designation ?? undefined },
+  });
+  res.status(201).json(created);
 });
 
 /**
@@ -136,10 +154,27 @@ teachersRouter.get("/:id", async (req, res) => {
 
 teachersRouter.patch("/:id", requirePermission("teachers:manage"), async (req, res) => {
   const input = updateTeacherSchema.parse(req.body);
-  res.json(await teachersService.updateTeacher(uuidParam(req), input, tenantId(req)));
+  const id = uuidParam(req);
+  const updated = await teachersService.updateTeacher(id, input, tenantId(req));
+  await recordAudit(actorOf(req), {
+    action: "staff.update",
+    targetType: "teacher",
+    targetId: id,
+    institutionId: tenantId(req),
+    detail: { staffType: updated.staffType, fields: Object.keys(input) },
+  });
+  res.json(updated);
 });
 
 teachersRouter.delete("/:id", requirePermission("teachers:manage"), async (req, res) => {
-  await teachersService.removeTeacher(uuidParam(req), tenantId(req));
+  const id = uuidParam(req);
+  await teachersService.removeTeacher(id, tenantId(req));
+  await recordAudit(actorOf(req), {
+    action: "staff.delete",
+    targetType: "teacher",
+    targetId: id,
+    institutionId: tenantId(req),
+    detail: {},
+  });
   res.status(204).end();
 });

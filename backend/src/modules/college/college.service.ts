@@ -1,5 +1,6 @@
 import { query } from "../../db/postgres";
 import { ApiError } from "../../utils/api-error";
+import { assertTeachingStaff } from "../teachers/teachers.service";
 import { invalidateInstitutionTypeCache } from "../../middleware/institution-type";
 import type { z } from "zod";
 import type {
@@ -113,7 +114,7 @@ export async function createDepartment(
   institutionId: string
 ) {
   if (input.headTeacherId)
-    await assertRef("teachers", input.headTeacherId, institutionId, "teacher");
+    await assertTeachingStaff(input.headTeacherId, institutionId);
   try {
     const { rows } = await query(
       `INSERT INTO departments (institution_id, name, code, head_teacher_id)
@@ -132,6 +133,8 @@ export async function updateDepartment(
   input: z.infer<typeof updateDepartmentSchema>,
   institutionId: string
 ) {
+  if (input.headTeacherId)
+    await assertTeachingStaff(input.headTeacherId, institutionId);
   const { sets, params } = buildSets(
     { name: "name", code: "code", headTeacherId: "head_teacher_id" },
     input as Record<string, unknown>
@@ -534,7 +537,7 @@ export async function createStaffAllocation(
   input: z.infer<typeof createStaffAllocationSchema>,
   institutionId: string
 ) {
-  await assertRef("teachers", input.teacherId, institutionId, "teacher");
+  await assertTeachingStaff(input.teacherId, institutionId);
   if (input.departmentId)
     await assertRef("departments", input.departmentId, institutionId, "department");
   if (input.programId) await assertRef("programs", input.programId, institutionId, "program");

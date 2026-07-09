@@ -1,5 +1,6 @@
 import { query } from "../../db/postgres";
 import { ApiError } from "../../utils/api-error";
+import { assertTeachingStaff } from "../teachers/teachers.service";
 import type { z } from "zod";
 import type {
   createEntrySchema,
@@ -376,7 +377,7 @@ export async function createEntry(
   await assertRef("periods", input.periodId, institutionId, "period");
   await assertRef("subjects", input.subjectId, institutionId, "subject");
   if (input.teacherId)
-    await assertRef("teachers", input.teacherId, institutionId, "teacher");
+    await assertTeachingStaff(input.teacherId, institutionId);
   if (input.roomId)
     await assertRef("rooms", input.roomId, institutionId, "room");
 

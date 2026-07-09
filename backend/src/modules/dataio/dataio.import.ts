@@ -268,12 +268,16 @@ const teachers: ImportEntity<TeacherIn> = {
     { field: "employeeNo", note: "Optional; auto-generated per institution when blank" },
     { field: "email" }, { field: "phone" }, { field: "qualification" }, { field: "specialization" },
     { field: "joiningDate", note: "YYYY-MM-DD" },
+    { field: "staffType", note: "teaching | non_teaching (default teaching)" },
+    { field: "designation", note: "Role title for non-teaching staff (e.g. Accountant)" },
+    { field: "department", note: "Optional non-teaching department" },
   ],
   toInput(rec) {
     const parsed = createTeacherSchema.safeParse({
       employeeNo: s(rec.employeeNo), firstName: s(rec.firstName), lastName: s(rec.lastName),
       email: s(rec.email), phone: s(rec.phone), qualification: s(rec.qualification),
       specialization: s(rec.specialization), joiningDate: s(rec.joiningDate),
+      staffType: s(rec.staffType), designation: s(rec.designation), department: s(rec.department),
     });
     return parsed.success ? { input: parsed.data, errors: [] } : { errors: zErrors(parsed.error) };
   },
@@ -751,7 +755,7 @@ const sectionSubject: ImportEntity<SectionSubjectIn> = {
        FROM sections sec JOIN classes c ON c.id = sec.class_id WHERE sec.institution_id = $1`
     );
     const subMap = await keyToId(inst, `SELECT upper(code) AS k, id FROM subjects WHERE institution_id = $1`);
-    const teacherMap = await keyToId(inst, `SELECT lower(employee_no) AS k, id FROM teachers WHERE institution_id = $1`);
+    const teacherMap = await keyToId(inst, `SELECT lower(employee_no) AS k, id FROM teachers WHERE institution_id = $1 AND staff_type = 'teaching'`);
     const existing = await existingKeys(
       inst,
       `SELECT cs.section_id || '::' || cs.subject_id AS k FROM class_subjects cs
@@ -812,7 +816,7 @@ const staffAllocation: ImportEntity<StaffAllocIn> = {
     return parsed.success ? { input: parsed.data, errors: [] } : { errors: zErrors(parsed.error) };
   },
   async validate(inputs, inst) {
-    const teacherMap = await keyToId(inst, `SELECT lower(employee_no) AS k, id FROM teachers WHERE institution_id = $1`);
+    const teacherMap = await keyToId(inst, `SELECT lower(employee_no) AS k, id FROM teachers WHERE institution_id = $1 AND staff_type = 'teaching'`);
     const deptMap = await keyToId(inst, `SELECT lower(code) AS k, id FROM departments WHERE institution_id = $1`);
     const progMap = await keyToId(inst, `SELECT lower(code) AS k, id FROM programs WHERE institution_id = $1`);
     const subMap = await keyToId(inst, `SELECT upper(code) AS k, id FROM subjects WHERE institution_id = $1`);
