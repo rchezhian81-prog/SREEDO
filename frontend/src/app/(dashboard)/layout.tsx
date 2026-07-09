@@ -160,6 +160,7 @@ function tenantGroups(mode: CampusMode): NavGroup[] {
         { href: "/settings", label: "Settings", icon: "gear", adminOnly: true },
         { href: "/settings/rbac", label: "Roles & Permissions", icon: "shield", perm: "tenant_rbac:read" },
         { href: "/users", label: "Users", icon: "users", adminOnly: true },
+        { href: "/data-io", label: "Import / Export", icon: "package", perm: "data_io:read" },
         { href: "/branding", label: "Branding", icon: "palette", adminOnly: true },
         { href: "/integrations", label: "Integrations", icon: "link", adminOnly: true },
         { href: "/jobs", label: "Jobs", icon: "gear", adminOnly: true },

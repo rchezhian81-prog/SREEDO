@@ -356,6 +356,16 @@ export const TENANT_PERMISSION_GROUPS: TenantPermissionGroup[] = [
     ],
   },
   {
+    key: "data_io",
+    title: "Import / Export",
+    appliesTo: "both",
+    permissions: [
+      { key: "data_io:read", label: "View the Import/Export center & history" },
+      { key: "data_io:import", label: "Import data (dry-run + commit)", highRisk: true },
+      { key: "data_io:export", label: "Export tenant data (CSV / XLSX)", highRisk: true },
+    ],
+  },
+  {
     key: "ai",
     title: "AI Insights",
     appliesTo: "both",
