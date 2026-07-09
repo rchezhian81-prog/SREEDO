@@ -67,7 +67,8 @@ const RAW_JOB_ROLES: JobRole[] = [
         "academic_setup", "admissions", "communication", "documents", "calendar",
         "homework", "discipline", "ai", "college_academics"),
       ["fee_categories:read", "fee_schedules:read", "fee_fines:read",
-       "fee_discounts:read", "online_payments:read", "fee_receipts:download"]
+       "fee_discounts:read", "online_payments:read", "fee_receipts:download",
+       "data_io:read", "data_io:export"]
     ),
   },
   {
@@ -78,7 +79,7 @@ const RAW_JOB_ROLES: JobRole[] = [
     appliesTo: "both",
     permissions: uniq(
       g("students", "admissions", "academic_setup", "documents", "front_office",
-        "calendar", "communication"),
+        "calendar", "communication", "data_io"),
       ["timetable:read"]
     ),
   },

@@ -53,6 +53,7 @@ import { commAdminRouter } from "./modules/communication/commadmin.routes";
 import { customReportsRouter } from "./modules/customreports/customreports.routes";
 import { dashboardRouter } from "./modules/dashboard/dashboard.routes";
 import { searchRouter } from "./modules/search/search.routes";
+import { dataioRouter } from "./modules/dataio/dataio.routes";
 import { disciplinaryRouter } from "./modules/disciplinary/disciplinary.routes";
 import { documentsRouter } from "./modules/documents/documents.routes";
 import { examsRouter } from "./modules/exams/exams.routes";
@@ -216,6 +217,7 @@ export function createApp(): express.Express {
   api.use("/announcements", announcementsRouter);
   api.use("/dashboard", dashboardRouter);
   api.use("/search", searchRouter);
+  api.use("/dataio", dataioRouter);
   api.use("/portal", portalRouter);
   api.use("/reports", reportsRouter);
   api.use("/report-center", reportCenterRouter);
