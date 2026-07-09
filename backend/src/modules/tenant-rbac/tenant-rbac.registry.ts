@@ -419,6 +419,16 @@ export const TENANT_PERMISSION_GROUPS: TenantPermissionGroup[] = [
     ],
   },
   {
+    key: "student_leave",
+    title: "Student Leave",
+    appliesTo: "both",
+    permissions: [
+      { key: "student_leave:read", label: "View student leave requests" },
+      { key: "student_leave:create", label: "File a student leave request" },
+      { key: "student_leave:approve", label: "Approve / reject student leave" },
+    ],
+  },
+  {
     key: "calendar",
     title: "Calendar & Events",
     appliesTo: "both",

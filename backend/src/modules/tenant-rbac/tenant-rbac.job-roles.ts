@@ -65,7 +65,7 @@ const RAW_JOB_ROLES: JobRole[] = [
     permissions: uniq(
       g("students", "staff", "attendance", "exams", "timetable", "reports",
         "academic_setup", "admissions", "communication", "documents", "calendar",
-        "homework", "discipline", "ai", "college_academics", "ptm"),
+        "homework", "discipline", "ai", "college_academics", "ptm", "student_leave"),
       ["fee_categories:read", "fee_schedules:read", "fee_fines:read",
        "fee_discounts:read", "online_payments:read", "fee_receipts:download",
        "data_io:read", "data_io:export"]
@@ -90,7 +90,7 @@ const RAW_JOB_ROLES: JobRole[] = [
     baseRole: "admin",
     appliesTo: "both",
     permissions: g("academic_setup", "timetable", "attendance", "exams", "reports",
-      "homework", "college_academics", "ptm"),
+      "homework", "college_academics", "ptm", "student_leave"),
   },
   {
     key: "admission_officer",
@@ -126,7 +126,7 @@ const RAW_JOB_ROLES: JobRole[] = [
     description: "Attendance marking, editing and reports.",
     baseRole: "teacher",
     appliesTo: "both",
-    permissions: ["attendance:mark", "reports:read"],
+    permissions: uniq(g("student_leave"), ["attendance:mark", "reports:read"]),
   },
   {
     key: "timetable_coordinator",
@@ -159,7 +159,7 @@ const RAW_JOB_ROLES: JobRole[] = [
     description: "Own class: attendance, homework, basic reports and parent communication.",
     baseRole: "teacher",
     appliesTo: "school",
-    permissions: uniq(g("homework", "ptm"),
+    permissions: uniq(g("homework", "ptm", "student_leave"),
       ["attendance:mark", "communication:read", "communication:send", "reports:read"]),
   },
   {
