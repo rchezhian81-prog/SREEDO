@@ -176,6 +176,21 @@ export const EXPORT_ENTITIES: ExportEntity[] = [
     `SELECT direction AS c0, caller_name AS c1, phone AS c2, purpose AS c3, related_to AS c4,
             to_char(follow_up_date, 'YYYY-MM-DD') AS c5, to_char(call_time, 'YYYY-MM-DD HH24:MI') AS c6
      FROM call_logs WHERE institution_id = $1 ORDER BY call_time DESC`),
+
+  // --- Parent meetings (PR-T8) ---
+  // Attendance carries student names + teacher notes → sensitive (reason-gated + audited).
+  sql("ptm_attendance", "Parent Meetings — Attendance", "both", "ptm:read", true,
+    ["Meeting", "Date", "Teacher", "Slot", "Student", "Status", "Notes"],
+    `SELECT m.title AS c0, to_char(m.meeting_date, 'YYYY-MM-DD') AS c1,
+            (t.first_name || ' ' || t.last_name) AS c2,
+            to_char(s.starts_at, 'YYYY-MM-DD HH24:MI') AS c3,
+            (st.first_name || ' ' || st.last_name) AS c4, b.status AS c5, b.notes AS c6
+     FROM ptm_bookings b
+     JOIN ptm_meetings m ON m.id = b.meeting_id
+     JOIN ptm_slots s ON s.id = b.slot_id
+     JOIN teachers t ON t.id = s.teacher_id
+     JOIN students st ON st.id = b.student_id
+     WHERE b.institution_id = $1 ORDER BY m.meeting_date DESC, s.starts_at`),
 ];
 
 export const EXPORT_BY_KEY: Record<string, ExportEntity> = Object.fromEntries(
