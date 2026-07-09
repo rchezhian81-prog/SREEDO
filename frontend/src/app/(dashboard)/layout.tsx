@@ -146,6 +146,7 @@ function tenantGroups(mode: CampusMode): NavGroup[] {
         { href: "/announcements", label: "Announcements", icon: "megaphone" },
         { href: "/communication", label: "Communication", icon: "mail", moduleKey: "communication", perm: "communication:read" },
         { href: "/messaging", label: "Messaging", icon: "message" },
+        { href: "/ptm", label: "Parent Meetings", icon: "users", perm: "ptm:read" },
         { href: "/polls", label: "Polls", icon: "barChart" },
       ],
     },

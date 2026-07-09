@@ -36,6 +36,7 @@ import { feeRefundsRouter } from "./modules/feerefunds/feerefunds.routes";
 import { pollsRouter } from "./modules/polls/polls.routes";
 import { lostFoundRouter } from "./modules/lostfound/lostfound.routes";
 import { frontOfficeRouter } from "./modules/frontoffice/frontoffice.routes";
+import { ptmRouter } from "./modules/ptm/ptm.routes";
 import { galleryRouter } from "./modules/gallery/gallery.routes";
 import { integrationsRouter } from "./modules/integrations/integrations.routes";
 import { extRouter } from "./modules/ext/ext.routes";
@@ -258,6 +259,7 @@ export function createApp(): express.Express {
   api.use("/polls", pollsRouter); // polls / surveys authoring (admin/teacher)
   api.use("/lost-found", lostFoundRouter); // lost & found register (front office)
   api.use("/front-office", frontOfficeRouter); // unified front office: postal/dispatch + call register + summary
+  api.use("/ptm", ptmRouter); // parent-teacher meetings: scheduling, slots, bookings, attendance
   api.use("/gallery", galleryRouter); // photo gallery (admin)
   api.use("/integrations", integrationsRouter); // API keys + webhooks (admin)
   api.use("/ext", extRouter); // external read-only API, authenticated by x-api-key

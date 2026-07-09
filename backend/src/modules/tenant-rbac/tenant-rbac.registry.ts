@@ -410,6 +410,15 @@ export const TENANT_PERMISSION_GROUPS: TenantPermissionGroup[] = [
     ],
   },
   {
+    key: "ptm",
+    title: "Parent Meetings (PTM)",
+    appliesTo: "both",
+    permissions: [
+      { key: "ptm:read", label: "View parent-teacher meetings" },
+      { key: "ptm:manage", label: "Schedule PTMs, slots, attendance & invites" },
+    ],
+  },
+  {
     key: "calendar",
     title: "Calendar & Events",
     appliesTo: "both",
