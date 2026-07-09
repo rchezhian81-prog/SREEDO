@@ -1,8 +1,10 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { uuidParam } from "../../utils/params";
-import { authenticate, authorize } from "../../middleware/auth";
+import { authenticate } from "../../middleware/auth";
 import { requireTenant, tenantId } from "../../middleware/tenant";
+import { requirePermission } from "../../middleware/permissions";
 import { parsePagination } from "../../utils/pagination";
+import { recordAudit } from "../observability/audit";
 import {
   createItemSchema,
   updateItemSchema,
@@ -10,9 +12,18 @@ import {
 } from "./lostfound.schema";
 import * as service from "./lostfound.service";
 
-// Lost & Found register — institution-admin / front office only, tenant-scoped.
+// Lost & Found register — part of the unified front office (PR-T7). Gated by the
+// shared front_office:* namespace (read/manage) instead of authorize("admin");
+// admin keeps access via the 0107 grant. Tenant-scoped.
 export const lostFoundRouter = Router();
-lostFoundRouter.use(authenticate, requireTenant, authorize("admin"));
+lostFoundRouter.use(authenticate, requireTenant);
+
+const actorOf = (req: Request) => ({
+  id: req.user!.id,
+  email: req.user!.email,
+  role: req.user!.role,
+  ip: req.ip ?? null,
+});
 
 /**
  * @openapi
@@ -51,12 +62,12 @@ lostFoundRouter.use(authenticate, requireTenant, authorize("admin"));
  *     responses:
  *       201: { description: Created item }
  */
-lostFoundRouter.get("/", async (req, res) => {
+lostFoundRouter.get("/", requirePermission("front_office:read"), async (req, res) => {
   const params = listItemsQuerySchema.parse(req.query);
   res.json(await service.listItems(parsePagination(params), params, tenantId(req)));
 });
 
-lostFoundRouter.post("/", async (req, res) => {
+lostFoundRouter.post("/", requirePermission("front_office:manage"), async (req, res) => {
   const input = createItemSchema.parse(req.body);
   res.status(201).json(await service.createItem(input, tenantId(req), req.user!.id));
 });
@@ -90,16 +101,24 @@ lostFoundRouter.post("/", async (req, res) => {
  *     responses:
  *       204: { description: Deleted }
  */
-lostFoundRouter.get("/:id", async (req, res) => {
+lostFoundRouter.get("/:id", requirePermission("front_office:read"), async (req, res) => {
   res.json(await service.getItem(uuidParam(req), tenantId(req)));
 });
 
-lostFoundRouter.patch("/:id", async (req, res) => {
+lostFoundRouter.patch("/:id", requirePermission("front_office:manage"), async (req, res) => {
   const input = updateItemSchema.parse(req.body);
   res.json(await service.updateItem(uuidParam(req), input, tenantId(req)));
 });
 
-lostFoundRouter.delete("/:id", async (req, res) => {
-  await service.deleteItem(uuidParam(req), tenantId(req));
+lostFoundRouter.delete("/:id", requirePermission("front_office:manage"), async (req, res) => {
+  const id = uuidParam(req);
+  await service.deleteItem(id, tenantId(req));
+  await recordAudit(actorOf(req), {
+    action: "frontoffice.lostfound.delete",
+    targetType: "lost_found_item",
+    targetId: id,
+    institutionId: tenantId(req),
+    detail: {},
+  });
   res.status(204).end();
 });

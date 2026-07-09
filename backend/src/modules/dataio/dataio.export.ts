@@ -146,6 +146,36 @@ export const EXPORT_ENTITIES: ExportEntity[] = [
     `SELECT to_char(created_at, 'YYYY-MM-DD HH24:MI') AS c0, actor_email AS c1, action AS c2,
             target_role AS c3, reason AS c4
      FROM tenant_rbac_audit WHERE institution_id = $1 ORDER BY created_at DESC LIMIT 5000`),
+
+  // --- Front office (PR-T7) ---
+  // Export-only, gated by front_office:read on top of data_io:export. Datasets
+  // that carry a phone / contact number are sensitive (reason-gated + audited);
+  // the item/mail logs without contact fields are ordinary operational pulls.
+  sql("fo_visitors", "Front Office — Visitors", "both", "front_office:read", true,
+    ["Visitor", "Phone", "Purpose", "To Meet", "Badge No", "In Time", "Out Time"],
+    `SELECT visitor_name AS c0, phone AS c1, purpose AS c2, whom_to_meet AS c3, badge_no AS c4,
+            to_char(in_time, 'YYYY-MM-DD HH24:MI') AS c5, to_char(out_time, 'YYYY-MM-DD HH24:MI') AS c6
+     FROM visitor_logs WHERE institution_id = $1 ORDER BY in_time DESC`),
+  sql("fo_complaints", "Front Office — Enquiries & Complaints", "both", "front_office:read", true,
+    ["Type", "Subject", "Message", "Submitter", "Contact", "Status", "Resolution", "Logged"],
+    `SELECT type AS c0, subject AS c1, message AS c2, submitter_name AS c3, submitter_contact AS c4,
+            status AS c5, resolution AS c6, to_char(created_at, 'YYYY-MM-DD') AS c7
+     FROM feedback_entries WHERE institution_id = $1 ORDER BY created_at DESC`),
+  sql("fo_lost_found", "Front Office — Lost & Found", "both", "front_office:read", false,
+    ["Type", "Title", "Description", "Location", "Status", "Reporter", "Date"],
+    `SELECT type AS c0, title AS c1, description AS c2, location AS c3, status AS c4,
+            reporter_name AS c5, to_char(item_date, 'YYYY-MM-DD') AS c6
+     FROM lost_found_items WHERE institution_id = $1 ORDER BY item_date DESC`),
+  sql("fo_postal", "Front Office — Postal / Dispatch", "both", "front_office:read", false,
+    ["Direction", "Type", "Ref No", "Party", "Addressee", "Carrier", "Tracking No", "Date", "Status"],
+    `SELECT direction AS c0, item_type AS c1, ref_no AS c2, party_name AS c3, addressee AS c4,
+            carrier AS c5, tracking_no AS c6, to_char(item_date, 'YYYY-MM-DD') AS c7, status AS c8
+     FROM postal_dispatches WHERE institution_id = $1 ORDER BY item_date DESC`),
+  sql("fo_calls", "Front Office — Call Register", "both", "front_office:read", true,
+    ["Direction", "Caller", "Phone", "Purpose", "Related To", "Follow-up", "Logged"],
+    `SELECT direction AS c0, caller_name AS c1, phone AS c2, purpose AS c3, related_to AS c4,
+            to_char(follow_up_date, 'YYYY-MM-DD') AS c5, to_char(call_time, 'YYYY-MM-DD HH24:MI') AS c6
+     FROM call_logs WHERE institution_id = $1 ORDER BY call_time DESC`),
 ];
 
 export const EXPORT_BY_KEY: Record<string, ExportEntity> = Object.fromEntries(

@@ -1,8 +1,10 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { uuidParam } from "../../utils/params";
-import { authenticate, authorize } from "../../middleware/auth";
+import { authenticate } from "../../middleware/auth";
 import { requireTenant, tenantId } from "../../middleware/tenant";
+import { requirePermission } from "../../middleware/permissions";
 import { parsePagination } from "../../utils/pagination";
+import { recordAudit } from "../observability/audit";
 import {
   createFeedbackSchema,
   updateFeedbackSchema,
@@ -28,7 +30,7 @@ export const feedbackRouter = Router();
  *             required: [institutionCode, subject, message]
  *             properties:
  *               institutionCode: { type: string }
- *               type: { type: string, enum: [feedback, complaint, suggestion, grievance] }
+ *               type: { type: string, enum: [feedback, complaint, suggestion, grievance, enquiry] }
  *               subject: { type: string }
  *               message: { type: string }
  *               submitterName: { type: string }
@@ -42,8 +44,19 @@ feedbackRouter.post("/submit", async (req, res) => {
   res.status(201).json(await service.createPublicFeedback(input));
 });
 
-// Everything below is institution-admin only, scoped to the tenant.
-feedbackRouter.use(authenticate, requireTenant, authorize("admin"));
+// PR-T7 — the enquiries/complaints surface is part of the unified front office,
+// so it is now gated by the shared front_office:* permission namespace (read for
+// reads, manage for writes) instead of the coarse authorize("admin"). admin
+// retains access (0107 grants admin front_office:read/manage); the jr_front_office
+// / jr_admin_officer job-roles can now be delegated here too. Tenant-scoped.
+feedbackRouter.use(authenticate, requireTenant);
+
+const actorOf = (req: Request) => ({
+  id: req.user!.id,
+  email: req.user!.email,
+  role: req.user!.role,
+  ip: req.ip ?? null,
+});
 
 /**
  * @openapi
@@ -55,14 +68,14 @@ feedbackRouter.use(authenticate, requireTenant, authorize("admin"));
  *     parameters:
  *       - { in: query, name: page, schema: { type: integer } }
  *       - { in: query, name: limit, schema: { type: integer } }
- *       - { in: query, name: type, schema: { type: string, enum: [feedback, complaint, suggestion, grievance] } }
+ *       - { in: query, name: type, schema: { type: string, enum: [feedback, complaint, suggestion, grievance, enquiry] } }
  *       - { in: query, name: status, schema: { type: string, enum: [open, in_progress, resolved, closed] } }
  *       - { in: query, name: search, schema: { type: string } }
  *     responses:
  *       200: { description: Paginated entries }
  *   post:
  *     tags: [Feedback]
- *     summary: Log a feedback / grievance entry (admin)
+ *     summary: Log a feedback / grievance / enquiry entry (front office)
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true
@@ -72,7 +85,7 @@ feedbackRouter.use(authenticate, requireTenant, authorize("admin"));
  *             type: object
  *             required: [subject, message]
  *             properties:
- *               type: { type: string, enum: [feedback, complaint, suggestion, grievance] }
+ *               type: { type: string, enum: [feedback, complaint, suggestion, grievance, enquiry] }
  *               subject: { type: string }
  *               message: { type: string }
  *               submitterName: { type: string }
@@ -80,12 +93,12 @@ feedbackRouter.use(authenticate, requireTenant, authorize("admin"));
  *     responses:
  *       201: { description: Created entry }
  */
-feedbackRouter.get("/", async (req, res) => {
+feedbackRouter.get("/", requirePermission("front_office:read"), async (req, res) => {
   const params = listFeedbackQuerySchema.parse(req.query);
   res.json(await service.listFeedback(parsePagination(params), params, tenantId(req)));
 });
 
-feedbackRouter.post("/", async (req, res) => {
+feedbackRouter.post("/", requirePermission("front_office:manage"), async (req, res) => {
   const input = createFeedbackSchema.parse(req.body);
   res.status(201).json(await service.createFeedback(input, tenantId(req), req.user!.id));
 });
@@ -119,16 +132,34 @@ feedbackRouter.post("/", async (req, res) => {
  *     responses:
  *       204: { description: Deleted }
  */
-feedbackRouter.get("/:id", async (req, res) => {
+feedbackRouter.get("/:id", requirePermission("front_office:read"), async (req, res) => {
   res.json(await service.getFeedback(uuidParam(req), tenantId(req)));
 });
 
-feedbackRouter.patch("/:id", async (req, res) => {
+feedbackRouter.patch("/:id", requirePermission("front_office:manage"), async (req, res) => {
   const input = updateFeedbackSchema.parse(req.body);
-  res.json(await service.updateFeedback(uuidParam(req), input, tenantId(req)));
+  const id = uuidParam(req);
+  const updated = await service.updateFeedback(id, input, tenantId(req));
+  // Complaint/grievance handling is accountable — audit status/resolution changes.
+  await recordAudit(actorOf(req), {
+    action: "frontoffice.complaint.update",
+    targetType: "feedback",
+    targetId: id,
+    institutionId: tenantId(req),
+    detail: { fields: Object.keys(input), status: input.status },
+  });
+  res.json(updated);
 });
 
-feedbackRouter.delete("/:id", async (req, res) => {
-  await service.deleteFeedback(uuidParam(req), tenantId(req));
+feedbackRouter.delete("/:id", requirePermission("front_office:manage"), async (req, res) => {
+  const id = uuidParam(req);
+  await service.deleteFeedback(id, tenantId(req));
+  await recordAudit(actorOf(req), {
+    action: "frontoffice.complaint.delete",
+    targetType: "feedback",
+    targetId: id,
+    institutionId: tenantId(req),
+    detail: {},
+  });
   res.status(204).end();
 });
