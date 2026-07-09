@@ -83,9 +83,10 @@ export const EXPORT_ENTITIES: ExportEntity[] = [
     `SELECT st.admission_no AS c0, st.first_name || ' ' || st.last_name AS c1, u.email AS c2, g.relationship AS c3
      FROM guardians g JOIN students st ON st.id = g.student_id JOIN users u ON u.id = g.user_id
      WHERE g.institution_id = $1 ORDER BY st.admission_no`),
-  sql("teachers", "Teachers / Faculty", "both", "", true,
-    ["Employee No", "First Name", "Last Name", "Email", "Phone", "Qualification", "Active"],
-    `SELECT employee_no AS c0, first_name AS c1, last_name AS c2, email AS c3, phone AS c4, qualification AS c5, is_active AS c6
+  sql("teachers", "Teachers / Faculty & Staff", "both", "", true,
+    ["Employee No", "First Name", "Last Name", "Email", "Phone", "Qualification", "Staff Type", "Designation", "Department", "Active"],
+    `SELECT employee_no AS c0, first_name AS c1, last_name AS c2, email AS c3, phone AS c4, qualification AS c5,
+            staff_type AS c6, designation AS c7, department AS c8, is_active AS c9
      FROM teachers WHERE institution_id = $1 ORDER BY employee_no`),
   sql("enrollments", "Enrollments (College)", "college", "", true,
     ["Admission No", "Student", "Program", "Semester #", "Batch", "Status"],

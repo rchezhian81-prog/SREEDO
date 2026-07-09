@@ -268,12 +268,16 @@ const teachers: ImportEntity<TeacherIn> = {
     { field: "employeeNo", note: "Optional; auto-generated per institution when blank" },
     { field: "email" }, { field: "phone" }, { field: "qualification" }, { field: "specialization" },
     { field: "joiningDate", note: "YYYY-MM-DD" },
+    { field: "staffType", note: "teaching | non_teaching (default teaching)" },
+    { field: "designation", note: "Role title for non-teaching staff (e.g. Accountant)" },
+    { field: "department", note: "Optional non-teaching department" },
   ],
   toInput(rec) {
     const parsed = createTeacherSchema.safeParse({
       employeeNo: s(rec.employeeNo), firstName: s(rec.firstName), lastName: s(rec.lastName),
       email: s(rec.email), phone: s(rec.phone), qualification: s(rec.qualification),
       specialization: s(rec.specialization), joiningDate: s(rec.joiningDate),
+      staffType: s(rec.staffType), designation: s(rec.designation), department: s(rec.department),
     });
     return parsed.success ? { input: parsed.data, errors: [] } : { errors: zErrors(parsed.error) };
   },
