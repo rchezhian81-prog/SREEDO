@@ -77,6 +77,7 @@ function tenantGroups(mode: CampusMode): NavGroup[] {
       items: [
         { href: "/dashboard", label: "Dashboard", icon: "grid" },
         { href: "/get-started", label: "Get Started", icon: "rocket", adminOnly: true },
+        { href: "/help", label: "Help & SOP", icon: "bookOpen", perm: "tenant_help:read" },
         { href: "/analytics", label: "Analytics", icon: "trendUp", adminOnly: true },
         { href: "/ai-insights", label: "AI Insights", icon: "sparkles", perm: "ai:read" },
       ],
