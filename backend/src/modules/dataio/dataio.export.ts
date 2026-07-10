@@ -177,6 +177,18 @@ export const EXPORT_ENTITIES: ExportEntity[] = [
             to_char(follow_up_date, 'YYYY-MM-DD') AS c5, to_char(call_time, 'YYYY-MM-DD HH24:MI') AS c6
      FROM call_logs WHERE institution_id = $1 ORDER BY call_time DESC`),
 
+  // --- Student leave (PR-T9) ---
+  // Student names + reasons → sensitive (reason-gated + audited).
+  sql("student_leave", "Student Leave Requests", "both", "student_leave:read", true,
+    ["Admission No", "Student", "Type", "From", "To", "Days", "Status", "Reason", "Reviewed By"],
+    `SELECT st.admission_no AS c0, (st.first_name || ' ' || st.last_name) AS c1, l.type AS c2,
+            to_char(l.from_date, 'YYYY-MM-DD') AS c3, to_char(l.to_date, 'YYYY-MM-DD') AS c4,
+            (l.to_date - l.from_date + 1) AS c5, l.status AS c6, l.reason AS c7, u.full_name AS c8
+     FROM student_leave_requests l
+     JOIN students st ON st.id = l.student_id
+     LEFT JOIN users u ON u.id = l.reviewed_by
+     WHERE l.institution_id = $1 ORDER BY l.from_date DESC`),
+
   // --- Parent meetings (PR-T8) ---
   // Attendance carries student names + teacher notes → sensitive (reason-gated + audited).
   sql("ptm_attendance", "Parent Meetings — Attendance", "both", "ptm:read", true,
