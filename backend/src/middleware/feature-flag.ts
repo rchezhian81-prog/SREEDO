@@ -44,6 +44,30 @@ export function invalidateFeatureFlagCache(institutionId?: string): void {
 }
 
 /**
+ * OPT-IN route guard (PR-T11): passes ONLY when the institution has explicitly
+ * enabled the key (`settings.featureFlags[key] === true`) — default-DENY, for
+ * net-new higher-risk surfaces that must be off until a tenant is opted in
+ * (e.g. the AI Copilot). Reuses the same JSONB source, TTL cache and
+ * `invalidateFeatureFlagCache` bust as `requireFeature`; super_admin bypasses.
+ * Existing routes keep using the default-allow `requireFeature` unchanged.
+ */
+export function requireFeatureOptIn(key: string, label?: string) {
+  return async (req: Request, _res: Response, next: NextFunction) => {
+    if (!req.user) throw ApiError.unauthorized();
+    if (req.user.role === "super_admin") return next();
+    const institutionId = req.user.institutionId;
+    if (!institutionId) throw ApiError.forbidden("Institution context required");
+    const flags = await featureFlags(institutionId);
+    if (flags[key] !== true) {
+      throw ApiError.forbidden(
+        `The ${label ?? key} feature is not enabled for this institution`
+      );
+    }
+    next();
+  };
+}
+
+/**
  * Route guard that blocks a feature when the caller's institution has explicitly
  * disabled it (`settings.featureFlags[key] === false`). Default-allow, so it is
  * safe to add to existing routes. Run after `authenticate` (+ `requireTenant`).

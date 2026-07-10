@@ -81,6 +81,13 @@ export const env = {
   openaiApiKey: optional("OPENAI_API_KEY"),
   openaiModel: process.env.OPENAI_MODEL ?? "gpt-4o",
 
+  // AI Copilot (PR-T11) — cost/abuse guards for the read-only assistant.
+  // Per-minute burst cap (copilotRateLimiter, keyed per user) and a per-user
+  // daily turn budget + per-turn completion token ceiling. Conservative defaults.
+  copilotRateLimitPerMinute: Number(process.env.COPILOT_RATE_LIMIT_PER_MINUTE ?? 6),
+  copilotMaxTurnsPerUserPerDay: Number(process.env.COPILOT_MAX_TURNS_PER_USER_PER_DAY ?? 50),
+  copilotMaxTokens: Number(process.env.COPILOT_MAX_TOKENS ?? 700),
+
   smtpHost: optional("SMTP_HOST"),
   smtpPort: Number(process.env.SMTP_PORT ?? 587),
   smtpUser: optional("SMTP_USER"),

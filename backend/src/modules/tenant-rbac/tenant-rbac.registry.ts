@@ -375,6 +375,7 @@ export const TENANT_PERMISSION_GROUPS: TenantPermissionGroup[] = [
       { key: "ai:document_search", label: "AI document search" },
       { key: "ai:risk_alerts", label: "AI risk alerts" },
       { key: "ai:workflow_suggestions", label: "AI workflow suggestions" },
+      { key: "ai:copilot", label: "Use the read-only AI Copilot" },
     ],
   },
   {
