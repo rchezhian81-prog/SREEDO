@@ -30,6 +30,23 @@ export const authRateLimiter = rateLimit({
  * IP for any unauthenticated request. In-memory today (single instance); swap in
  * a shared store (Redis) when running multi-instance.
  */
+/**
+ * AI Copilot limiter (PR-T11) — mounted ONLY on the /ai/copilot route, keyed by
+ * the calling USER (tighter than the institution bucket) so one person cannot
+ * burn the tenant's budget. Short 1-minute window for burst control; the
+ * per-user DAILY turn budget is enforced in the copilot service on top of this.
+ * Mounted after `authenticate`, so `req.user.id` is always present (the IP
+ * fallback only satisfies the type). In-memory, like the other limiters.
+ */
+export const copilotRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: env.copilotRateLimitPerMinute,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  keyGenerator: (req: Request) => `copilot:${req.user?.id ?? req.ip ?? "anon"}`,
+  message: { error: "Copilot rate limit reached, please wait a moment" },
+});
+
 export const tenantRateLimiter = rateLimit({
   windowMs,
   limit: env.tenantRateLimitMax,

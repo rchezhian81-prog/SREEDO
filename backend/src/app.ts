@@ -46,6 +46,7 @@ import { brandingRouter } from "./modules/branding/branding.routes";
 import { periodAttendanceRouter } from "./modules/periodattendance/periodattendance.routes";
 import { timetableGenRouter } from "./modules/timetablegen/timetablegen.routes";
 import { aiRouter } from "./modules/ai/ai.routes";
+import { copilotRouter } from "./modules/copilot/copilot.routes";
 import { aiInsightsRouter } from "./modules/aiinsights/aiinsights.routes";
 import { announcementsRouter } from "./modules/announcements/announcements.routes";
 import { attendanceRouter } from "./modules/attendance/attendance.routes";
@@ -238,6 +239,10 @@ export function createApp(): express.Express {
   api.use("/fee-receipts", feeReceiptsRouter);
   api.use("/id-cards", idCardsRouter);
   api.use("/certificates", certificatesRouter);
+  // AI Copilot (PR-T11) — read-only, opt-in-flag + ai:copilot gated. Mounted
+  // BEFORE the legacy /ai router so it gets its own (stricter) guard stack;
+  // all other /ai/* paths fall through to aiRouter unchanged.
+  api.use("/ai/copilot", copilotRouter);
   api.use("/ai", aiRouter);
   api.use("/ai-insights", aiInsightsRouter);
   api.use("/observability", observabilityRouter); // super-admin platform observability

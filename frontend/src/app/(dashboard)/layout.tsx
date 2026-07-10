@@ -80,6 +80,7 @@ function tenantGroups(mode: CampusMode): NavGroup[] {
         { href: "/help", label: "Help & SOP", icon: "bookOpen", perm: "tenant_help:read" },
         { href: "/analytics", label: "Analytics", icon: "trendUp", adminOnly: true },
         { href: "/ai-insights", label: "AI Insights", icon: "sparkles", perm: "ai:read" },
+        { href: "/copilot", label: "AI Copilot", icon: "sparkles", perm: "ai:copilot" },
       ],
     },
     { title: "Academic Setup", items: academic },
