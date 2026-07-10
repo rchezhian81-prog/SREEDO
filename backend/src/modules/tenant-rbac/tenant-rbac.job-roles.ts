@@ -228,9 +228,13 @@ const RAW_JOB_ROLES: JobRole[] = [
 // and tenant_roles.key all use the prefixed key; only the display `name` is
 // human-facing.
 export const JOB_ROLE_PREFIX = "jr_";
+// PR-T10: every staff job-role can read the tenant Help & SOP center — applied
+// as one rule here (not per role) so future job-roles inherit it. Student and
+// parent are coarse portal roles, not job-roles, so they stay excluded.
 export const JOB_ROLES: JobRole[] = RAW_JOB_ROLES.map((r) => ({
   ...r,
   key: `${JOB_ROLE_PREFIX}${r.key}`,
+  permissions: uniq(r.permissions, g("tenant_help")),
 }));
 
 export const JOB_ROLE_KEYS = JOB_ROLES.map((r) => r.key);

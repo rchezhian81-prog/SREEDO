@@ -429,6 +429,14 @@ export const TENANT_PERMISSION_GROUPS: TenantPermissionGroup[] = [
     ],
   },
   {
+    key: "tenant_help",
+    title: "Help & SOP",
+    appliesTo: "both",
+    permissions: [
+      { key: "tenant_help:read", label: "View the tenant Help & SOP center" },
+    ],
+  },
+  {
     key: "calendar",
     title: "Calendar & Events",
     appliesTo: "both",
