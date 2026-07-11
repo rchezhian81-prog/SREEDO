@@ -9,171 +9,31 @@ import { useBrandingStore, type Branding } from "@/stores/branding-store";
 import { cx, Spinner, SkipLink } from "@/components/ui";
 import { Icon, type IconName } from "@/components/icons";
 import { useThemeStore } from "@/stores/theme-store";
-import { useModeStore, type CampusMode } from "@/stores/mode-store";
-import { useTerms, type TermSet } from "@/lib/terms";
+import { useModeStore } from "@/stores/mode-store";
+import { useTerms } from "@/lib/terms";
 import { useI18n } from "@/i18n/I18nProvider";
 import { usePermissions } from "@/lib/use-permissions";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { RuntimeBanner } from "@/components/RuntimeBanner";
 import { SupportModeBanner } from "@/components/SupportModeBanner";
 import { Toaster } from "@/components/toast";
+import { CommandPalette } from "@/components/CommandPalette";
+import { useNavStore } from "@/stores/nav-store";
+import {
+  tenantGroups,
+  filterNavGroups,
+  flattenItems,
+  defaultOpenGroups,
+  splitFold,
+  FOLD_LIMIT,
+  QUICK_ACTIONS,
+  type NavGroup,
+  type NavItem,
+} from "@/lib/nav";
 
-type NavItem = {
-  href: string;
-  label: string;
-  icon: IconName;
-  adminOnly?: boolean;
-  // When set, the item is hidden if the tenant has an explicit enabled-modules
-  // list that does not include this key. Untagged items are always shown.
-  moduleKey?: string;
-  // The effective permission required to see this item. Untagged items always
-  // show; owners/admins hold every permission so keep them all. Used by both the
-  // super-admin nav and (PR-T2) the tenant nav for per-tenant role-aware hiding.
-  perm?: string;
-  // Label that varies by School/College — resolved from useTerms() in the
-  // component (module-level data can't call the hook).
-  termLabel?: (t: TermSet) => string;
-};
-
-type NavGroup = { title?: string; items: NavItem[] };
-
-// Tenant sidebar organised into a stable information architecture (PR-T4) — the
-// flat ~60-item list is grouped into eleven sections. Original per-item RBAC
-// gates are preserved; admin-sensitive items that previously showed to any staff
-// role now carry `adminOnly`. Reports (run / build / schedule) collapse into one
-// hub entry; the exam "report cards" page moves under Exams & Results.
-function tenantGroups(mode: CampusMode): NavGroup[] {
-  const isCollege = mode === "college";
-  const academic: NavItem[] = isCollege
-    ? [
-        { href: "/college", label: "College Home", icon: "building", perm: "college:read" },
-        { href: "/college/departments", label: "Departments", icon: "network", perm: "departments:read" },
-        { href: "/college/programs", label: "Programs", icon: "layers", perm: "programs:read" },
-        { href: "/college/semesters", label: "Semesters", icon: "calendar", perm: "semesters:read" },
-        { href: "/college/subjects", label: "Subjects", termLabel: (t) => t.subjectPlural, icon: "bookOpen" },
-        { href: "/college/enrollments", label: "Enrollments", icon: "userPlus" },
-        { href: "/timetable", label: "Timetable", icon: "calendar", moduleKey: "timetable", perm: "timetable:read" },
-        { href: "/timetable/generate", label: "Auto Timetable", icon: "sparkles", adminOnly: true, moduleKey: "timetable" },
-        { href: "/calendar", label: "Calendar", icon: "calendar" },
-      ]
-    : [
-        { href: "/classes", label: "Classes", icon: "school" },
-        { href: "/timetable", label: "Timetable", icon: "calendar", moduleKey: "timetable", perm: "timetable:read" },
-        { href: "/timetable/generate", label: "Auto Timetable", icon: "sparkles", adminOnly: true, moduleKey: "timetable" },
-        { href: "/calendar", label: "Calendar", icon: "calendar" },
-      ];
-  const examsResults: NavItem[] = [
-    { href: "/exams", label: "Exams", icon: "file", moduleKey: "exams" },
-    ...(isCollege
-      ? [{ href: "/college/results", label: "Results", icon: "clipboard" } as NavItem]
-      : []),
-    // Formerly the mislabelled "/reports" nav item — it is the report-card/grade
-    // page, so it lives under results with a terminology-aware label.
-    { href: "/reports", label: "Report Cards", termLabel: (t) => `${t.reportCard}s`, icon: "clipboard", moduleKey: "reports", perm: "reports:read" },
-  ];
-  return [
-    {
-      title: "Overview",
-      items: [
-        { href: "/dashboard", label: "Dashboard", icon: "grid" },
-        { href: "/get-started", label: "Get Started", icon: "rocket", adminOnly: true },
-        { href: "/help", label: "Help & SOP", icon: "bookOpen", perm: "tenant_help:read" },
-        { href: "/analytics", label: "Analytics", icon: "trendUp", adminOnly: true },
-        { href: "/ai-insights", label: "AI Insights", icon: "sparkles", perm: "ai:read" },
-        { href: "/copilot", label: "AI Copilot", icon: "sparkles", perm: "ai:copilot" },
-      ],
-    },
-    { title: "Academic Setup", items: academic },
-    {
-      title: "Students & Admissions",
-      items: [
-        { href: "/students", label: "Students", icon: "cap", moduleKey: "students", perm: "students:read" },
-        { href: "/admissions", label: "Admissions", icon: "userPlus", adminOnly: true, moduleKey: "admissions" },
-        { href: "/id-cards", label: "ID Cards", icon: "card", perm: "id_cards:read" },
-        { href: "/transfer-certificates", label: "Transfer Certificates", icon: "file", adminOnly: true },
-        { href: "/documents", label: "Documents", icon: "file", moduleKey: "documents", perm: "documents:read" },
-        { href: "/alumni", label: "Alumni", icon: "users", adminOnly: true },
-      ],
-    },
-    {
-      title: "Attendance & Daily Work",
-      items: [
-        { href: "/attendance", label: "Attendance", icon: "calcheck", moduleKey: "attendance" },
-        { href: "/period-attendance", label: "Period Attendance", icon: "calcheck", moduleKey: "attendance" },
-        { href: "/homework", label: "Homework", icon: "board", perm: "homework:read" },
-        { href: "/leave", label: "Staff Leave", icon: "calcheck", perm: "leave:read" },
-        { href: "/student-leave", label: "Student Leave", icon: "calcheck", perm: "student_leave:read" },
-        { href: "/disciplinary", label: "Disciplinary", icon: "shield", adminOnly: true },
-        { href: "/study-materials", label: "Study Materials", icon: "bookOpen" },
-        { href: "/live-classes", label: "Live Classes", icon: "video" },
-        { href: "/quizzes", label: "Quizzes", icon: "quiz" },
-        { href: "/biometric", label: "Biometric", icon: "fingerprint", adminOnly: true },
-      ],
-    },
-    {
-      title: "Fees & Accounts",
-      items: [
-        { href: "/fees", label: "Fees", icon: "card", moduleKey: "fees", perm: "fees:read" },
-        { href: "/fees/setup", label: "Fee Setup", icon: "gear", adminOnly: true },
-        { href: "/fees/refunds", label: "Fee Refunds", icon: "receipt", adminOnly: true },
-        { href: "/online-payments", label: "Online Payments", icon: "wallet", adminOnly: true },
-        { href: "/accounting", label: "Accounting", icon: "wallet", adminOnly: true },
-      ],
-    },
-    { title: "Exams & Results", items: examsResults },
-    {
-      title: "Staff & HR",
-      items: [
-        { href: "/teachers", label: "Teachers", termLabel: (t) => t.teachers, icon: "board", moduleKey: "staff" },
-        { href: "/staff/directory", label: "Staff Directory", icon: "users", moduleKey: "staff", perm: "teachers:manage" },
-        { href: "/staff", label: "Staff Attendance", icon: "briefcase", perm: "staff_attendance:read" },
-        { href: "/payroll", label: "Payroll", icon: "wallet", adminOnly: true, moduleKey: "payroll" },
-      ],
-    },
-    {
-      title: "Operations",
-      items: [
-        { href: "/library", label: "Library", icon: "bookOpen", moduleKey: "library", perm: "library:read" },
-        { href: "/transport", label: "Transport", icon: "bus", moduleKey: "transport", perm: "transport:read" },
-        { href: "/hostel", label: "Hostel", icon: "building", moduleKey: "hostel", perm: "hostel:read" },
-        { href: "/inventory", label: "Inventory", icon: "package", moduleKey: "inventory", perm: "inventory:read" },
-        { href: "/front-office", label: "Front Office", icon: "help", perm: "front_office:read" },
-        { href: "/infirmary", label: "Infirmary", icon: "health", adminOnly: true },
-        { href: "/cafeteria", label: "Cafeteria", icon: "utensils", adminOnly: true },
-        { href: "/gallery", label: "Gallery", icon: "image", adminOnly: true },
-      ],
-    },
-    {
-      title: "Communication",
-      items: [
-        { href: "/announcements", label: "Announcements", icon: "megaphone" },
-        { href: "/communication", label: "Communication", icon: "mail", moduleKey: "communication", perm: "communication:read" },
-        { href: "/messaging", label: "Messaging", icon: "message" },
-        { href: "/ptm", label: "Parent Meetings", icon: "users", perm: "ptm:read" },
-        { href: "/polls", label: "Polls", icon: "barChart" },
-      ],
-    },
-    {
-      title: "Reports",
-      items: [{ href: "/reports-hub", label: "Reports", icon: "barChart", perm: "reports:read" }],
-    },
-    {
-      title: "Administration",
-      items: [
-        { href: "/settings", label: "Settings", icon: "gear", adminOnly: true },
-        { href: "/settings/rbac", label: "Roles & Permissions", icon: "shield", perm: "tenant_rbac:read" },
-        { href: "/users", label: "Users", icon: "users", adminOnly: true },
-        { href: "/data-io", label: "Import / Export", icon: "package", perm: "data_io:read" },
-        { href: "/branding", label: "Branding", icon: "palette", adminOnly: true },
-        { href: "/integrations", label: "Integrations", icon: "link", adminOnly: true },
-        { href: "/jobs", label: "Jobs", icon: "gear", adminOnly: true },
-        { href: "/activity", label: "Activity Log", icon: "file", adminOnly: true },
-        { href: "/security", label: "Security", icon: "shield" },
-      ],
-    },
-  ];
-}
-
+// The tenant registry lives in @/lib/nav (PR-PX2) so the sidebar and the
+// command palette share one permission-truthful source. The super-admin nav
+// below is deliberately untouched (Super Admin is frozen).
 const SUPER_ADMIN_NAV: NavItem[] = [
   { href: "/super-admin/platform", label: "Platform Overview", icon: "grid", perm: "platform:read" },
   { href: "/super-admin/platform/tenants", label: "Tenants", icon: "building", perm: "platform:read" },
@@ -236,6 +96,53 @@ function hrefToSupportModule(href: string): string | null {
   return null;
 }
 
+function NavRow({
+  item,
+  active,
+  onNavigate,
+  pinned,
+  onTogglePin,
+}: {
+  item: NavItem;
+  active: boolean;
+  onNavigate?: () => void;
+  pinned: boolean;
+  onTogglePin?: (href: string) => void;
+}) {
+  return (
+    <div className="group/nav relative">
+      <Link
+        href={item.href}
+        onClick={onNavigate}
+        className={cx(
+          "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition",
+          onTogglePin && "pr-9",
+          active
+            ? "bg-gradient-to-r from-[#3070f7] to-[#2563eb] text-white shadow-[0_8px_18px_rgb(37_99_235_/_0.4)]"
+            : "text-[#a8b6dc] hover:bg-white/10 hover:text-white"
+        )}
+      >
+        <Icon name={item.icon} className="h-[19px] w-[19px] shrink-0" />
+        <span className="truncate">{item.label}</span>
+      </Link>
+      {onTogglePin && (
+        <button
+          onClick={() => onTogglePin(item.href)}
+          aria-label={pinned ? `Unpin ${item.label}` : `Pin ${item.label}`}
+          className={cx(
+            "absolute right-1.5 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-md transition",
+            pinned
+              ? "text-amber-300"
+              : "text-transparent hover:!text-white focus-visible:text-white group-hover/nav:text-white/50"
+          )}
+        >
+          <Icon name="star" className={cx("h-3.5 w-3.5", pinned && "fill-current")} />
+        </button>
+      )}
+    </div>
+  );
+}
+
 function SidebarContent({
   navGroups,
   pathname,
@@ -243,6 +150,13 @@ function SidebarContent({
   currentYearLabel,
   onNavigate,
   readOnly = false,
+  pinnedItems = [],
+  recentItems = [],
+  onTogglePin,
+  openGroups = {},
+  onToggleGroup,
+  expandedFolds = {},
+  onToggleFold,
 }: {
   navGroups: NavGroup[];
   pathname: string;
@@ -252,6 +166,15 @@ function SidebarContent({
   onNavigate?: () => void;
   // Support-mode only: a read-only session shows a pill and keeps the full nav.
   readOnly?: boolean;
+  // PX2 — pinned/recent blocks + collapsible groups. All optional so the
+  // super-admin sidebar (no title groups, no pins) renders exactly as before.
+  pinnedItems?: NavItem[];
+  recentItems?: NavItem[];
+  onTogglePin?: (href: string) => void;
+  openGroups?: Record<string, boolean>;
+  onToggleGroup?: (title: string) => void;
+  expandedFolds?: Record<string, boolean>;
+  onToggleFold?: (title: string) => void;
 }) {
   const branding = useBrandingStore((s) => s.branding);
   return (
@@ -296,34 +219,118 @@ function SidebarContent({
       )}
 
       <nav className="flex-1 space-y-3 overflow-y-auto py-1">
-        {navGroups.map((group) => (
-          <div key={group.title ?? "_"} className="space-y-0.5">
-            {group.title && (
-              <div className="px-3 pb-0.5 pt-1 text-[10px] font-bold uppercase tracking-wider text-[#6e7fb0]">
-                {group.title}
-              </div>
-            )}
-            {group.items.map((item) => {
-              const active = isActive(item.href, pathname);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={onNavigate}
-                  className={cx(
-                    "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition",
-                    active
-                      ? "bg-gradient-to-r from-[#3070f7] to-[#2563eb] text-white shadow-[0_8px_18px_rgb(37_99_235_/_0.4)]"
-                      : "text-[#a8b6dc] hover:bg-white/10 hover:text-white"
-                  )}
-                >
-                  <Icon name={item.icon} className="h-[19px] w-[19px] shrink-0" />
-                  {item.label}
-                </Link>
-              );
-            })}
+        {pinnedItems.length > 0 && (
+          <div className="space-y-0.5">
+            <div className="px-3 pb-0.5 pt-1 text-[10px] font-bold uppercase tracking-wider text-[#6e7fb0]">
+              Pinned
+            </div>
+            {pinnedItems.map((item) => (
+              <NavRow
+                key={`pin-${item.href}`}
+                item={item}
+                active={isActive(item.href, pathname)}
+                onNavigate={onNavigate}
+                pinned
+                onTogglePin={onTogglePin}
+              />
+            ))}
           </div>
-        ))}
+        )}
+        {recentItems.length > 0 && (
+          <div className="space-y-0.5">
+            <div className="px-3 pb-0.5 pt-1 text-[10px] font-bold uppercase tracking-wider text-[#6e7fb0]">
+              Recent
+            </div>
+            {recentItems.map((item) => (
+              <NavRow
+                key={`rec-${item.href}`}
+                item={item}
+                active={isActive(item.href, pathname)}
+                onNavigate={onNavigate}
+                pinned={false}
+                onTogglePin={undefined}
+              />
+            ))}
+          </div>
+        )}
+        {navGroups.map((group) => {
+          // Untitled groups (the frozen super-admin nav) render exactly as
+          // before PX2: always open, no fold, no pin affordance.
+          if (!group.title) {
+            return (
+              <div key="_" className="space-y-0.5">
+                {group.items.map((item) => (
+                  <NavRow
+                    key={item.href}
+                    item={item}
+                    active={isActive(item.href, pathname)}
+                    onNavigate={onNavigate}
+                    pinned={false}
+                    onTogglePin={undefined}
+                  />
+                ))}
+              </div>
+            );
+          }
+          const title = group.title;
+          const open = openGroups[title] ?? true;
+          const activeHref =
+            group.items.find((i) => isActive(i.href, pathname))?.href ?? null;
+          const { visible, foldedCount } = splitFold(
+            group.items,
+            activeHref,
+            expandedFolds[title] ?? false
+          );
+          return (
+            <div key={title} className="space-y-0.5">
+              <button
+                onClick={() => onToggleGroup?.(title)}
+                aria-expanded={open}
+                className="flex w-full items-center justify-between rounded-md px-3 pb-0.5 pt-1 text-[10px] font-bold uppercase tracking-wider text-[#6e7fb0] transition hover:text-white"
+              >
+                <span>{title}</span>
+                <span className="flex items-center gap-1.5">
+                  {!open && <span className="font-bold">{group.items.length}</span>}
+                  <Icon name={open ? "chevronDown" : "chevronRight"} className="h-3 w-3" />
+                </span>
+              </button>
+              {open && (
+                <>
+                  {visible.map((item) => (
+                    <NavRow
+                      key={item.href}
+                      item={item}
+                      active={isActive(item.href, pathname)}
+                      onNavigate={onNavigate}
+                      pinned={pinnedItems.some((p) => p.href === item.href)}
+                      onTogglePin={onTogglePin}
+                    />
+                  ))}
+                  {foldedCount > 0 && (
+                    <button
+                      onClick={() => onToggleFold?.(title)}
+                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-[12px] font-semibold text-[#6e7fb0] transition hover:text-white"
+                    >
+                      <Icon name="chevronDown" className="h-3.5 w-3.5" />
+                      Show {foldedCount} more
+                    </button>
+                  )}
+                  {foldedCount === 0 &&
+                    (expandedFolds[title] ?? false) &&
+                    group.items.length > FOLD_LIMIT && (
+                      <button
+                        onClick={() => onToggleFold?.(title)}
+                        className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-[12px] font-semibold text-[#6e7fb0] transition hover:text-white"
+                      >
+                        <Icon name="chevronRight" className="h-3.5 w-3.5" />
+                        Show less
+                      </button>
+                    )}
+                </>
+              )}
+            </div>
+          );
+        })}
       </nav>
 
       <div className="mt-2 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-3">
@@ -484,6 +491,7 @@ function Topbar({
   currentYearLabel,
   unreadCount,
   alertCount,
+  onOpenPalette,
 }: {
   user: { fullName?: string; email?: string; role?: string } | null;
   onMenu: () => void;
@@ -491,6 +499,8 @@ function Topbar({
   currentYearLabel: string | null;
   unreadCount: number;
   alertCount: number;
+  // PX2 — opens the command palette; absent for super admins (frozen area).
+  onOpenPalette?: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const initial = (user?.fullName?.[0] ?? "U").toUpperCase();
@@ -507,6 +517,17 @@ function Topbar({
       </button>
 
       <GlobalSearch />
+
+      {onOpenPalette && (
+        <button
+          onClick={onOpenPalette}
+          title="Command palette (Ctrl+K)"
+          aria-label="Open command palette"
+          className="hidden h-11 shrink-0 items-center rounded-xl border border-line bg-surface px-3 text-xs font-extrabold tracking-wide text-muted transition hover:bg-hover hover:text-ink sm:flex"
+        >
+          ⌘K
+        </button>
+      )}
 
       {/* Current academic session — real value from Tenant Settings, links there. */}
       <Link
@@ -627,6 +648,10 @@ export default function DashboardLayout({
   const [currentYearLabel, setCurrentYearLabel] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [alertCount, setAlertCount] = useState(0);
+  // PX2 shell state: command-palette visibility + per-session group/fold toggles.
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [groupToggles, setGroupToggles] = useState<Record<string, boolean>>({});
+  const [expandedFolds, setExpandedFolds] = useState<Record<string, boolean>>({});
 
   useEffect(() => setHydrated(true), []);
   useEffect(() => {
@@ -716,22 +741,13 @@ export default function DashboardLayout({
   // permissions; empty groups are dropped so headers never sit alone. Labels are
   // resolved from useTerms() so School↔College nouns flip.
   const rawGroups: NavGroup[] = isSuper ? [{ items: SUPER_ADMIN_NAV }] : tenantGroups(mode);
-  let navGroups: NavGroup[] = rawGroups
-    .map((group) => ({
-      title: group.title,
-      items: group.items
-        .filter((item) => isSuper || !item.adminOnly || user?.role === "admin")
-        .filter(
-          (item) =>
-            !item.moduleKey ||
-            !enabledModules ||
-            enabledModules.length === 0 ||
-            enabledModules.includes(item.moduleKey)
-        )
-        .filter((item) => canNav(item.perm))
-        .map((item) => ({ ...item, label: item.termLabel ? item.termLabel(term) : item.label })),
-    }))
-    .filter((group) => group.items.length > 0);
+  let navGroups: NavGroup[] = filterNavGroups(rawGroups, {
+    isSuper,
+    isAdmin: user?.role === "admin",
+    enabledModules,
+    can: canNav,
+    term,
+  });
   // In a module-limited support session, keep only /dashboard plus items whose
   // mapped module is in the session's allowed set.
   if (support && supportScope === "module_limited") {
@@ -747,6 +763,79 @@ export default function DashboardLayout({
       }))
       .filter((group) => group.items.length > 0);
   }
+
+  // ---- PX2: pinned + recent + nav diet + command palette (tenant roles only;
+  // the super-admin sidebar and behavior are byte-identical to pre-PX2). ----
+  const flatNav = flattenItems(navGroups);
+  const byHref = new Map(flatNav.map((i) => [i.href, i]));
+  const navPrefs = useNavStore((s) => (user?.id ? s.byUser[user.id] : undefined));
+  const togglePin = useNavStore((s) => s.togglePin);
+  const pushRecent = useNavStore((s) => s.pushRecent);
+  const pins = navPrefs?.pins ?? [];
+  const recents = navPrefs?.recents ?? [];
+  // Pins/recents render only when the item survived RBAC/module filtering —
+  // an href the user can no longer see simply doesn't show (never faked).
+  const pinnedItems = isSuper ? [] : pins.map((h) => byHref.get(h)).filter((i): i is NavItem => !!i);
+  const recentItems = isSuper ? [] : recents.map((h) => byHref.get(h)).filter((i): i is NavItem => !!i);
+  const quickActions = isSuper
+    ? []
+    : flattenItems(
+        filterNavGroups([{ items: QUICK_ACTIONS }], {
+          isSuper: false,
+          isAdmin: user?.role === "admin",
+          enabledModules,
+          can: canNav,
+          term,
+        })
+      );
+
+  // Group collapse state: per-role defaults, the active route's group is always
+  // forced open, and explicit user toggles win for the session.
+  const roleDefaults = defaultOpenGroups(user?.role);
+  const activeGroupTitle = navGroups.find(
+    (g) => g.title && g.items.some((i) => isActive(i.href, pathname))
+  )?.title;
+  const openGroups = Object.fromEntries(
+    navGroups
+      .filter((g) => g.title)
+      .map((g) => [
+        g.title as string,
+        groupToggles[g.title as string] ??
+          (roleDefaults.has(g.title as string) || g.title === activeGroupTitle),
+      ])
+  ) as Record<string, boolean>;
+  const handleToggleGroup = (title: string) =>
+    setGroupToggles((s) => ({ ...s, [title]: !openGroups[title] }));
+  const handleToggleFold = (title: string) =>
+    setExpandedFolds((s) => ({ ...s, [title]: !(s[title] ?? false) }));
+  const userId = user?.id;
+  const handleTogglePin = userId && !isSuper ? (href: string) => togglePin(userId, href) : undefined;
+
+  // ⌘K / Ctrl-K toggles the palette anywhere in the tenant dashboard. The
+  // super-admin console is frozen — the shortcut is inert there.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        if (isSuper) return;
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isSuper]);
+
+  // Record the visited page (longest matching registry href, RBAC-filtered) as
+  // a recent. /dashboard is the landing page — recording it would be noise.
+  useEffect(() => {
+    if (!hydrated || isSuper || !userId) return;
+    const match = flatNav
+      .filter((i) => isActive(i.href, pathname))
+      .sort((a, b) => b.href.length - a.href.length)[0];
+    if (match && match.href !== "/dashboard") pushRecent(userId, match.href);
+    // flatNav is derived per render; pathname is the real trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname, hydrated, isSuper, userId]);
 
   // While unauthenticated or mid-redirect to the correct area, show a spinner.
   // A super admin on the shared /security page is allowed to stay (it renders
@@ -783,6 +872,13 @@ export default function DashboardLayout({
             subtitle={subtitle}
             currentYearLabel={isSuper ? null : currentYearLabel}
             readOnly={supportReadOnly}
+            pinnedItems={pinnedItems}
+            recentItems={recentItems}
+            onTogglePin={handleTogglePin}
+            openGroups={openGroups}
+            onToggleGroup={handleToggleGroup}
+            expandedFolds={expandedFolds}
+            onToggleFold={handleToggleFold}
           />
         </div>
       </aside>
@@ -802,6 +898,13 @@ export default function DashboardLayout({
               currentYearLabel={isSuper ? null : currentYearLabel}
               onNavigate={() => setSidebarOpen(false)}
               readOnly={supportReadOnly}
+              pinnedItems={pinnedItems}
+              recentItems={recentItems}
+              onTogglePin={handleTogglePin}
+              openGroups={openGroups}
+              onToggleGroup={handleToggleGroup}
+              expandedFolds={expandedFolds}
+              onToggleFold={handleToggleFold}
             />
           </div>
         </div>
@@ -815,6 +918,7 @@ export default function DashboardLayout({
           currentYearLabel={isSuper ? null : currentYearLabel}
           unreadCount={isSuper ? 0 : unreadCount}
           alertCount={isSuper ? 0 : alertCount}
+          onOpenPalette={isSuper ? undefined : () => setPaletteOpen(true)}
         />
         <SupportModeBanner />
         <RuntimeBanner />
@@ -826,6 +930,16 @@ export default function DashboardLayout({
           {children}
         </main>
       </div>
+      {!isSuper && (
+        <CommandPalette
+          open={paletteOpen}
+          onClose={() => setPaletteOpen(false)}
+          pages={flatNav}
+          actions={quickActions}
+          pinned={pinnedItems}
+          recents={recentItems}
+        />
+      )}
       <Toaster />
     </div>
   );
