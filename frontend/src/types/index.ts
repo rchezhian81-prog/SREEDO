@@ -26,6 +26,50 @@ export interface PortalChild {
   relationship: string | null;
 }
 
+// PTM (T8) parent-facing shapes — GET /ptm/my and friends.
+export interface PortalPtmMeeting {
+  id: string;
+  title: string;
+  description: string | null;
+  meetingDate: string;
+  venue: string | null;
+  mode: "in_person" | "online" | null;
+  joinLink: string | null;
+  audienceType: string;
+  audienceRef: string | null;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PortalPtmSlot {
+  id: string;
+  teacherId: string;
+  teacherName: string;
+  startsAt: string;
+  endsAt: string;
+  capacity: number;
+  status: string;
+  /** Active-booking count — Postgres count() arrives as a string. */
+  booked: number | string;
+}
+
+export interface PortalPtmBooking {
+  id: string;
+  meetingId: string;
+  slotId: string;
+  studentId: string;
+  studentName: string;
+  status: "booked" | "attended" | "no_show" | "cancelled";
+  startsAt: string;
+  endsAt: string;
+}
+
+export interface PortalPtmData {
+  meetings: PortalPtmMeeting[];
+  bookings: PortalPtmBooking[];
+}
+
 export interface StudentSummary {
   profile: Student & { sectionName: string | null; className: string | null };
   attendance: {
