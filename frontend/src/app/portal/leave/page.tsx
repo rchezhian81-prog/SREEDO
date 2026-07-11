@@ -69,13 +69,11 @@ export default function PortalLeavePage() {
     }
   }, []);
 
+  // T9.2: students load the same list — the API returns exactly their own
+  // requests (read-only; filing/cancelling stay parent/staff actions).
   useEffect(() => {
-    if (isStudent) {
-      setLoading(false);
-      return;
-    }
     load();
-  }, [isStudent, load]);
+  }, [load]);
 
   const openForm = () => {
     setNotice(null);
@@ -131,15 +129,6 @@ export default function PortalLeavePage() {
     }
   };
 
-  if (isStudent) {
-    return (
-      <>
-        <PageHeader title={t("portalPages.leave.title")} />
-        <EmptyState message="Leave requests are filed and tracked by parent/guardian accounts. Please ask your parent or guardian to apply for leave." />
-      </>
-    );
-  }
-
   if (loading) return <Spinner />;
 
   if (error) {
@@ -170,9 +159,13 @@ export default function PortalLeavePage() {
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <PageHeader
           title={t("portalPages.leave.title")}
-          subtitle="Apply for leave and track approval status"
+          subtitle={
+            isStudent
+              ? "Your leave requests and their status"
+              : "Apply for leave and track approval status"
+          }
         />
-        <Button onClick={openForm}>New request</Button>
+        {!isStudent && <Button onClick={openForm}>New request</Button>}
       </div>
 
       {notice && (
@@ -182,7 +175,13 @@ export default function PortalLeavePage() {
       )}
 
       {list.length === 0 ? (
-        <EmptyState message="No leave requests yet. Use “New request” to file one." />
+        <EmptyState
+          message={
+            isStudent
+              ? "No leave requests yet. Leave is filed by your parent/guardian or the school office."
+              : "No leave requests yet. Use “New request” to file one."
+          }
+        />
       ) : (
         <div className="space-y-3">
           {list.map((row) => (

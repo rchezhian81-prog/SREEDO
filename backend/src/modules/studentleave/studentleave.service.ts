@@ -206,13 +206,23 @@ export async function cancelRequest(
   );
 }
 
-/** Guardian-scoped list: requests for the caller's linked children. */
-export async function listForParent(parentUserId: string, institutionId: string) {
-  const children = await childStudentIdsForUser(parentUserId, institutionId);
-  if (!children.length) return [];
+/**
+ * Read-scoped list for the /my surface: a parent sees requests for their
+ * linked children; a student login additionally sees their OWN requests
+ * (T9.2 — resolved via students.user_id, tenant-guarded). Read-only widening:
+ * filing/cancelling stay guardian-gated (parentCreate/cancelRequest unchanged).
+ */
+export async function listForRequester(userId: string, institutionId: string) {
+  const children = await childStudentIdsForUser(userId, institutionId);
+  const own = await query<{ id: string }>(
+    "SELECT id FROM students WHERE user_id = $1 AND institution_id = $2",
+    [userId, institutionId]
+  );
+  const ids = [...new Set([...children, ...own.rows.map((r) => r.id)])];
+  if (!ids.length) return [];
   const { rows } = await query(
     `SELECT ${LEAVE_SELECT} WHERE l.institution_id = $1 AND l.student_id = ANY($2::uuid[]) ORDER BY l.from_date DESC`,
-    [institutionId, children]
+    [institutionId, ids]
   );
   return rows;
 }
