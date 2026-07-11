@@ -10,7 +10,9 @@ import * as service from "./studentleave.service";
 
 // PR-T9 — Student Leave. Staff surface gated by student_leave:*; the /my parent
 // surface is guardian-scoped (a parent may only file/cancel/view for their own
-// linked children) and needs no student_leave grant. Tenant-scoped throughout.
+// linked children) and needs no student_leave grant. T9.2: a student login may
+// additionally READ their own requests via GET /my (write paths stay
+// guardian/staff-only). Tenant-scoped throughout.
 export const studentLeaveRouter = Router();
 studentLeaveRouter.use(authenticate, requireTenant);
 
@@ -25,7 +27,7 @@ const actorOf = (req: Request) => ({
  * /student-leave/my:
  *   get:
  *     tags: [Student Leave]
- *     summary: Leave requests for the caller's linked children (parent)
+ *     summary: Leave requests for the caller's linked children (parent) or own requests (student, read-only)
  *     security: [{ bearerAuth: [] }]
  *     responses: { 200: { description: Requests } }
  *   post:
@@ -38,7 +40,7 @@ const actorOf = (req: Request) => ({
  *     responses: { 201: { description: Created request }, 403: { description: Not your child } }
  */
 studentLeaveRouter.get("/my", async (req, res) => {
-  res.json(await service.listForParent(req.user!.id, tenantId(req)));
+  res.json(await service.listForRequester(req.user!.id, tenantId(req)));
 });
 
 studentLeaveRouter.post("/my", async (req, res) => {
