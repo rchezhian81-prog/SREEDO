@@ -32,7 +32,9 @@ access.
 
 ## 3. Main screens / pages
 
-- Assistant chat: `/assistant` → `frontend/src/app/(dashboard)/assistant/page.tsx`.
+- Assistant chat: **retired (PR-T11.1)** — `/assistant` now redirects to
+  `/copilot` (the governed AI Copilot). The `POST /ai/assistant` API below
+  still exists server-side but no longer has a first-party UI.
 - AI insights hub: `/ai-insights` → `frontend/src/app/(dashboard)/ai-insights/page.tsx`,
   with subpages:
   - `/ai-insights/summaries` → `.../ai-insights/summaries/page.tsx`
