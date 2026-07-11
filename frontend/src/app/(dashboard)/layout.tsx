@@ -168,7 +168,6 @@ function tenantGroups(mode: CampusMode): NavGroup[] {
         { href: "/integrations", label: "Integrations", icon: "link", adminOnly: true },
         { href: "/jobs", label: "Jobs", icon: "gear", adminOnly: true },
         { href: "/activity", label: "Activity Log", icon: "file", adminOnly: true },
-        { href: "/assistant", label: "AI Assistant", icon: "sparkles" },
         { href: "/security", label: "Security", icon: "shield" },
       ],
     },

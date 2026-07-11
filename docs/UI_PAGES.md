@@ -29,7 +29,7 @@ primitives; the **students page is the reference** for table+form screens.
 | Attendance | `/attendance` | section+date roster, bulk mark |
 | Fees | `/fees` | structures, invoices, payments, summary |
 | Announcements | `/announcements` | notice board CRUD |
-| AI Assistant | `/assistant` | chat with GPT-4o assistant |
+| AI Assistant | `/assistant` | retired (PR-T11.1) — redirects to `/copilot` |
 | Exams & Results | `/exams` | exam CRUD + per-section/subject mark entry grid |
 | Users / Account management | `/users` | admin-only: list, create, edit role/status, deactivate |
 
