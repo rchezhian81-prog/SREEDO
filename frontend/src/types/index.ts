@@ -70,6 +70,28 @@ export interface PortalPtmData {
   bookings: PortalPtmBooking[];
 }
 
+// Student Leave (T9) parent-facing shape — GET /student-leave/my rows.
+export type PortalLeaveStatus = "pending" | "approved" | "rejected" | "cancelled";
+export type PortalLeaveType = "sick" | "casual" | "emergency" | "other";
+
+export interface PortalLeaveRequest {
+  id: string;
+  studentId: string;
+  studentName: string;
+  admissionNo: string;
+  type: PortalLeaveType | null;
+  fromDate: string;
+  toDate: string;
+  days: number;
+  reason: string | null;
+  status: PortalLeaveStatus;
+  appliedBy: string | null;
+  reviewedBy: string | null;
+  reviewNote: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface StudentSummary {
   profile: Student & { sectionName: string | null; className: string | null };
   attendance: {

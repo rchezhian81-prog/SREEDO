@@ -92,6 +92,7 @@ export const en = {
   "portalNav.dashboard": "Dashboard",
   "portalNav.profile": "Profile",
   "portalNav.attendance": "Attendance",
+  "portalNav.leave": "Leave",
   "portalNav.timetable": "Timetable",
   "portalNav.ptm": "Meetings (PTM)",
   "portalNav.reportCard": "Report Card",
@@ -201,6 +202,7 @@ export const en = {
   // Portal page headers
   "portalPages.dashboard.title": "Dashboard",
   "portalPages.attendance.title": "Attendance",
+  "portalPages.leave.title": "Leave Requests",
   "portalPages.timetable.title": "Timetable",
   "portalPages.ptm.title": "Parent-Teacher Meetings",
   "portalPages.reports.title": "Report Card",
