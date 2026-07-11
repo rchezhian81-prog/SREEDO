@@ -88,6 +88,7 @@ export const ta: Partial<Record<keyof typeof en, string>> = {
   "portalNav.dashboard": "முகப்பு",
   "portalNav.profile": "சுயவிவரம்",
   "portalNav.attendance": "வருகை",
+  "portalNav.leave": "விடுப்பு",
   "portalNav.timetable": "கால அட்டவணை",
   "portalNav.ptm": "சந்திப்புகள் (PTM)",
   "portalNav.reportCard": "மதிப்பெண் அட்டை",
@@ -180,6 +181,7 @@ export const ta: Partial<Record<keyof typeof en, string>> = {
   // Portal page headers
   "portalPages.dashboard.title": "முகப்பு",
   "portalPages.attendance.title": "வருகை",
+  "portalPages.leave.title": "விடுப்பு கோரிக்கைகள்",
   "portalPages.timetable.title": "கால அட்டவணை",
   "portalPages.ptm.title": "பெற்றோர்-ஆசிரியர் சந்திப்புகள்",
   "portalPages.reports.title": "மதிப்பெண் அட்டை",
