@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { usePermissions } from "@/lib/use-permissions";
+import { formatDate } from "@/lib/format";
 import {
   Badge,
   Button,
@@ -148,12 +149,12 @@ export default function LeaveApprovalsPage() {
                     </Badge>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    {request.startDate}
+                    {formatDate(request.startDate)}
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    {request.endDate}
+                    {formatDate(request.endDate)}
                   </td>
-                  <td className="px-4 py-3">{request.days}</td>
+                  <td className="px-4 py-3">{Number(request.days)}</td>
                   <td className="px-4 py-3 max-w-[14rem] truncate">
                     {request.reason ?? "—"}
                   </td>
@@ -193,9 +194,10 @@ export default function LeaveApprovalsPage() {
           <form onSubmit={submitDecision} className="space-y-4">
             <p className="text-sm text-slate-600">
               {decision.request.teacherName} —{" "}
-              {decision.request.leaveTypeName} ({decision.request.days} day
-              {decision.request.days === 1 ? "" : "s"}), {decision.request.startDate}{" "}
-              to {decision.request.endDate}
+              {decision.request.leaveTypeName} ({Number(decision.request.days)} day
+              {Number(decision.request.days) === 1 ? "" : "s"}),{" "}
+              {formatDate(decision.request.startDate)} to{" "}
+              {formatDate(decision.request.endDate)}
             </p>
             <Field label="Note (optional)">
               <Textarea

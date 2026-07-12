@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { usePermissions } from "@/lib/use-permissions";
+import { formatDate } from "@/lib/format";
 import {
   Badge,
   Button,
@@ -246,12 +247,12 @@ export default function LeaveRequestsPage() {
                     )}
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    {request.startDate}
+                    {formatDate(request.startDate)}
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    {request.endDate}
+                    {formatDate(request.endDate)}
                   </td>
-                  <td className="px-4 py-3">{request.days}</td>
+                  <td className="px-4 py-3">{Number(request.days)}</td>
                   <td className="px-4 py-3 max-w-[14rem] truncate">
                     {request.reason ?? "—"}
                   </td>
