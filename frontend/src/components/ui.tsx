@@ -10,7 +10,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
-import { Icon } from "@/components/icons";
+import { Icon, type IconName } from "@/components/icons";
 
 export function cx(...classes: Array<string | false | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -146,15 +146,22 @@ export function Badge({
   tone = "slate",
   children,
 }: {
-  tone?: "slate" | "green" | "amber" | "red" | "blue";
+  // Semantic tones (success/warn/danger/info) are the PX3-preferred names and
+  // resolve through the status tokens so they stay correct in both themes; the
+  // colour aliases (green/amber/red/blue) are kept for existing callers.
+  tone?: "slate" | "success" | "warn" | "danger" | "info" | "green" | "amber" | "red" | "blue";
   children: ReactNode;
 }) {
   const tones = {
     slate: "bg-hover text-muted",
-    green: "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400",
-    amber: "bg-amber-500/12 text-amber-600 dark:text-amber-400",
-    red: "bg-red-500/12 text-red-600 dark:text-red-400",
-    blue: "bg-brand-500/12 text-brand-600 dark:text-brand-300",
+    success: "bg-success/12 text-success",
+    warn: "bg-warn/12 text-warn",
+    danger: "bg-danger/12 text-danger",
+    info: "bg-info/12 text-info",
+    green: "bg-success/12 text-success",
+    amber: "bg-warn/12 text-warn",
+    red: "bg-danger/12 text-danger",
+    blue: "bg-info/12 text-info",
   }[tone];
   return (
     <span
@@ -309,6 +316,113 @@ export function ConfirmDialog({
   );
 }
 
+/**
+ * Right-side detail drawer (PX3) for inspect/read flows — audit rows, report
+ * detail — where a full Modal is heavier than needed. Same accessibility
+ * contract as Modal (labelled, focus-trap, Esc-to-close, focus restore;
+ * WCAG 2.1.2 / 2.4.3 / 4.1.2) and the same design tokens. `width` clamps to the
+ * 480–640px band from the design system.
+ */
+export function Drawer({
+  title,
+  open,
+  onClose,
+  width = 520,
+  footer,
+  children,
+}: {
+  title: string;
+  open: boolean;
+  onClose: () => void;
+  width?: number;
+  footer?: ReactNode;
+  children: ReactNode;
+}) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+
+  useEffect(() => {
+    if (!open) return;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const node = panelRef.current;
+    const focusable = () =>
+      node
+        ? Array.from(
+            node.querySelectorAll<HTMLElement>(
+              'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'
+            )
+          )
+        : [];
+    (focusable()[0] ?? node)?.focus();
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const items = focusable();
+      if (items.length === 0) {
+        event.preventDefault();
+        return;
+      }
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      previouslyFocused?.focus?.();
+    };
+  }, [open, onClose]);
+
+  if (!open) return null;
+  const clamped = Math.min(640, Math.max(480, width));
+  return (
+    <div
+      className="fixed inset-0 z-50 flex justify-end bg-slate-950/55 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        style={{ width: `min(100vw, ${clamped}px)` }}
+        className="flex h-full flex-col border-l border-line bg-surface shadow-pop"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-line px-5 py-4">
+          <h2 id={titleId} className="text-lg font-bold text-ink">
+            {title}
+          </h2>
+          <button
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-faint transition hover:bg-hover hover:text-ink"
+            aria-label="Close"
+          >
+            <Icon name="x" className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
+        {footer && (
+          <div className="border-t border-line px-5 py-4">{footer}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function PageHeader({
   title,
   subtitle,
@@ -339,10 +453,30 @@ export function Spinner() {
   );
 }
 
-export function EmptyState({ message }: { message: string }) {
+/**
+ * Empty state. `message` alone keeps the original one-line look; passing an
+ * `icon` and/or `action` (the design-system's "next step") renders the fuller
+ * treatment used by the T4+ pages. All optional so existing callers are
+ * unaffected.
+ */
+export function EmptyState({
+  message,
+  icon,
+  action,
+}: {
+  message: string;
+  icon?: IconName;
+  action?: ReactNode;
+}) {
   return (
-    <div className="rounded-2xl border border-dashed border-line bg-surface/50 py-12 text-center text-sm text-muted">
-      {message}
+    <div className="rounded-2xl border border-dashed border-line bg-surface/50 px-6 py-12 text-center">
+      {icon && (
+        <span className="mx-auto mb-3 grid h-11 w-11 place-items-center rounded-full bg-hover text-muted">
+          <Icon name={icon} className="h-6 w-6" />
+        </span>
+      )}
+      <p className="text-sm text-muted">{message}</p>
+      {action && <div className="mt-4 flex justify-center">{action}</div>}
     </div>
   );
 }

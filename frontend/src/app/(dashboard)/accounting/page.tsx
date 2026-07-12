@@ -9,6 +9,7 @@ import {
   Badge,
   Button,
   Card,
+  ConfirmDialog,
   EmptyState,
   ErrorNote,
   Field,
@@ -92,6 +93,8 @@ export default function AccountingPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [rowError, setRowError] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<FinanceTransaction | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const limit = 10;
 
@@ -150,14 +153,18 @@ export default function AccountingPage() {
     }
   };
 
-  const removeTxn = async (txn: FinanceTransaction) => {
-    if (!confirm("Delete this transaction?")) return;
+  const confirmRemoveTxn = async () => {
+    if (!pendingDelete) return;
     setRowError(null);
+    setDeleting(true);
     try {
-      await api.delete(`/finance/transactions/${txn.id}`);
+      await api.delete(`/finance/transactions/${pendingDelete.id}`);
       await load();
     } catch (err) {
       setRowError(err instanceof ApiError ? err.message : "Failed to delete");
+    } finally {
+      setDeleting(false);
+      setPendingDelete(null);
     }
   };
 
@@ -246,7 +253,7 @@ export default function AccountingPage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button
-                      onClick={() => removeTxn(txn)}
+                      onClick={() => setPendingDelete(txn)}
                       className="text-xs font-medium text-red-600 hover:text-red-700"
                     >
                       Delete
@@ -320,6 +327,20 @@ export default function AccountingPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Delete transaction"
+        message={
+          pendingDelete
+            ? `Delete this ${pendingDelete.type} of ${money(pendingDelete.amount)}? This cannot be undone.`
+            : ""
+        }
+        confirmLabel="Delete"
+        busy={deleting}
+        onConfirm={confirmRemoveTxn}
+        onClose={() => setPendingDelete(null)}
+      />
     </>
   );
 }

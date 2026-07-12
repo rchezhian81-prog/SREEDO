@@ -18,6 +18,14 @@
   --c-faint: 151 161 184; /* tertiary text */
   --c-hover: 241 245 249; /* interactive hover fill */
 
+  /* Semantic status tokens (PX3) — one source of truth for success/warn/danger/
+   * info, mirroring the Badge tones. Used as `text-success`, `bg-warn/10`,
+   * `border-danger/20`, etc. so status colour never gets hand-picked per page. */
+  --c-success: 5 150 105; /* emerald-600 */
+  --c-warn: 217 119 6; /* amber-600 */
+  --c-danger: 220 38 38; /* red-600 */
+  --c-info: 37 99 235; /* brand-600 */
+
   color-scheme: light;
 }
 
@@ -30,6 +38,13 @@
   --c-muted: 133 147 180; /* #8593b4 */
   --c-faint: 102 115 143; /* #66738f */
   --c-hover: 27 39 66; /* #1b2742 */
+
+  /* Brighter status inks for contrast on the dark canvas (mirror the Badge
+   * dark tones). */
+  --c-success: 52 211 153; /* emerald-400 */
+  --c-warn: 251 191 36; /* amber-400 */
+  --c-danger: 248 113 113; /* red-400 */
+  --c-info: 143 180 255; /* brand-300 */
 
   color-scheme: dark;
 }
@@ -61,7 +76,10 @@ body {
      Uses :focus-visible so it shows for keyboard users without adding rings on a
      plain mouse click. */
   :focus-visible {
-    @apply outline-none ring-2 ring-brand-500/60 ring-offset-2 ring-offset-white;
+    @apply outline-none ring-2 ring-brand-500/60 ring-offset-2;
+    /* Offset colour follows the page token so the ring never draws a white halo
+     * in dark mode (WCAG 2.4.7 kept correct on both themes). */
+    --tw-ring-offset-color: rgb(var(--c-app));
     border-radius: 0.375rem;
   }
 }

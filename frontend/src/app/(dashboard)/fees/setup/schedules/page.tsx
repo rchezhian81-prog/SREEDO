@@ -265,9 +265,9 @@ export default function FeeSchedulesPage() {
       ) : schedules.length === 0 ? (
         <EmptyState message="No schedules yet" />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-xl border border-line bg-white">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+            <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
               <tr>
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Category</th>
@@ -277,13 +277,13 @@ export default function FeeSchedulesPage() {
                 {canGenerate && <th className="px-4 py-3" />}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-line">
               {schedules.map((schedule) => (
-                <tr key={schedule.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium text-slate-900">
+                <tr key={schedule.id} className="hover:bg-hover">
+                  <td className="px-4 py-3 font-medium text-ink">
                     {schedule.name}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">
+                  <td className="px-4 py-3 text-muted">
                     {schedule.categoryName ?? "—"}
                   </td>
                   <td className="px-4 py-3 text-right">
@@ -292,12 +292,12 @@ export default function FeeSchedulesPage() {
                   <td className="px-4 py-3">
                     {termTypeLabel(schedule.termType)}
                     {schedule.termLabel ? (
-                      <span className="block text-xs text-slate-400">
+                      <span className="block text-xs text-faint">
                         {schedule.termLabel}
                       </span>
                     ) : null}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">
+                  <td className="px-4 py-3 text-muted">
                     {schedule.dueDate?.slice(0, 10)}
                   </td>
                   {canGenerate && (
@@ -340,32 +340,32 @@ export default function FeeSchedulesPage() {
         ) : preview ? (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-lg border border-slate-200 p-3">
-                <p className="text-xs text-slate-500">Target students</p>
-                <p className="mt-1 text-2xl font-semibold text-slate-900">
+              <div className="rounded-lg border border-line p-3">
+                <p className="text-xs text-muted">Target students</p>
+                <p className="mt-1 text-2xl font-semibold text-ink">
                   {preview.targetCount}
                 </p>
               </div>
-              <div className="rounded-lg border border-slate-200 p-3">
-                <p className="text-xs text-slate-500">To generate</p>
+              <div className="rounded-lg border border-line p-3">
+                <p className="text-xs text-muted">To generate</p>
                 <p className="mt-1 text-2xl font-semibold text-emerald-600">
                   {preview.toGenerate}
                 </p>
               </div>
             </div>
             {preview.students.length > 0 ? (
-              <div className="max-h-72 overflow-y-auto rounded-xl border border-slate-200">
+              <div className="max-h-72 overflow-y-auto rounded-xl border border-line">
                 <table className="w-full text-left text-sm">
-                  <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+                  <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
                     <tr>
                       <th className="px-4 py-2">Student</th>
                       <th className="px-4 py-2 text-right">Status</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-line">
                     {preview.students.map((student) => (
                       <tr key={student.id}>
-                        <td className="px-4 py-2 text-slate-900">
+                        <td className="px-4 py-2 text-ink">
                           {student.name}
                         </td>
                         <td className="px-4 py-2 text-right">
@@ -430,8 +430,8 @@ export default function FeeSchedulesPage() {
               <Input placeholder="e.g. Term 1" {...register("termLabel")} />
             </Field>
           </div>
-          <div className="rounded-lg border border-slate-200 p-3">
-            <p className="mb-2 text-xs font-medium uppercase text-slate-500">
+          <div className="rounded-lg border border-line p-3">
+            <p className="mb-2 text-xs font-medium uppercase text-muted">
               Target (optional)
             </p>
             <div className="grid grid-cols-2 gap-3">

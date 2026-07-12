@@ -201,9 +201,9 @@ export default function FineRulesPage() {
       ) : rules.length === 0 ? (
         <EmptyState message="No fine rules yet" />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-xl border border-line bg-white">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+            <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
               <tr>
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Type</th>
@@ -212,10 +212,10 @@ export default function FineRulesPage() {
                 <th className="px-4 py-3">Category</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-line">
               {rules.map((rule) => (
-                <tr key={rule.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium text-slate-900">
+                <tr key={rule.id} className="hover:bg-hover">
+                  <td className="px-4 py-3 font-medium text-ink">
                     {rule.name}
                   </td>
                   <td className="px-4 py-3">{fineTypeLabel(rule.fineType)}</td>
@@ -226,7 +226,7 @@ export default function FineRulesPage() {
                   <td className="px-4 py-3 text-right">
                     {rule.graceDays ?? 0}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">
+                  <td className="px-4 py-3 text-muted">
                     {rule.categoryName ?? "—"}
                   </td>
                 </tr>

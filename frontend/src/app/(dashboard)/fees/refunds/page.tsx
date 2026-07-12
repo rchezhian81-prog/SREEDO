@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import {
   Button,
+  ConfirmDialog,
   EmptyState,
   ErrorNote,
   Field,
@@ -55,6 +56,8 @@ export default function FeeRefundsPage() {
   const [method, setMethod] = useState<string>("cash");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Refund | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const loadRefunds = useCallback(async () => {
     const result = await api.get<Paginated<Refund>>("/fee-refunds?limit=50");
@@ -102,14 +105,18 @@ export default function FeeRefundsPage() {
     }
   };
 
-  const removeRefund = async (r: Refund) => {
-    if (!confirm(`Delete this refund of ${money(r.amount)}?`)) return;
+  const confirmRemoveRefund = async () => {
+    if (!pendingDelete) return;
     setError(null);
+    setDeleting(true);
     try {
-      await api.delete(`/fee-refunds/${r.id}`);
+      await api.delete(`/fee-refunds/${pendingDelete.id}`);
       await Promise.all([loadPayments(), loadRefunds()]);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to delete");
+    } finally {
+      setDeleting(false);
+      setPendingDelete(null);
     }
   };
 
@@ -204,7 +211,7 @@ export default function FeeRefundsPage() {
                         <td className="px-4 py-3 text-muted">{r.reason ?? "—"}</td>
                         <td className="px-4 py-3 text-right">
                           <button
-                            onClick={() => removeRefund(r)}
+                            onClick={() => setPendingDelete(r)}
                             className="text-xs font-medium text-red-600 hover:text-red-700"
                           >
                             Delete
@@ -261,6 +268,20 @@ export default function FeeRefundsPage() {
           </div>
         ) : null}
       </Modal>
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Delete refund"
+        message={
+          pendingDelete
+            ? `Delete this refund of ${money(pendingDelete.amount)}? This cannot be undone.`
+            : ""
+        }
+        confirmLabel="Delete"
+        busy={deleting}
+        onConfirm={confirmRemoveRefund}
+        onClose={() => setPendingDelete(null)}
+      />
     </>
   );
 }

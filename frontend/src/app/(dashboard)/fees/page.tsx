@@ -471,7 +471,7 @@ export default function FeesPage() {
           <div className="space-y-6">
             {/* --- Adjustments: breakdown, fines & discounts --- */}
             <section className="space-y-3">
-              <h3 className="text-sm font-semibold text-slate-900">
+              <h3 className="text-sm font-semibold text-ink">
                 Adjustments
               </h3>
               {breakdownLoading ? (
@@ -481,27 +481,27 @@ export default function FeesPage() {
               ) : breakdown ? (
                 <>
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    <div className="rounded-lg border border-slate-200 p-3">
-                      <p className="text-xs text-slate-500">Base</p>
-                      <p className="mt-1 text-base font-semibold text-slate-900">
+                    <div className="rounded-lg border border-line p-3">
+                      <p className="text-xs text-muted">Base</p>
+                      <p className="mt-1 text-base font-semibold text-ink">
                         {Number(breakdown.base).toLocaleString()}
                       </p>
                     </div>
-                    <div className="rounded-lg border border-slate-200 p-3">
-                      <p className="text-xs text-slate-500">Fines</p>
+                    <div className="rounded-lg border border-line p-3">
+                      <p className="text-xs text-muted">Fines</p>
                       <p className="mt-1 text-base font-semibold text-red-600">
                         {Number(breakdown.fineTotal).toLocaleString()}
                       </p>
                     </div>
-                    <div className="rounded-lg border border-slate-200 p-3">
-                      <p className="text-xs text-slate-500">Discounts</p>
+                    <div className="rounded-lg border border-line p-3">
+                      <p className="text-xs text-muted">Discounts</p>
                       <p className="mt-1 text-base font-semibold text-emerald-600">
                         {Number(breakdown.discountTotal).toLocaleString()}
                       </p>
                     </div>
-                    <div className="rounded-lg border border-slate-200 p-3">
-                      <p className="text-xs text-slate-500">Outstanding</p>
-                      <p className="mt-1 text-base font-semibold text-slate-900">
+                    <div className="rounded-lg border border-line p-3">
+                      <p className="text-xs text-muted">Outstanding</p>
+                      <p className="mt-1 text-base font-semibold text-ink">
                         {Number(breakdown.outstanding).toLocaleString()}
                       </p>
                     </div>
@@ -511,9 +511,9 @@ export default function FeesPage() {
 
                   {/* Fines list */}
                   {breakdown.fines.length > 0 && (
-                    <div className="overflow-x-auto rounded-xl border border-slate-200">
+                    <div className="overflow-x-auto rounded-xl border border-line">
                       <table className="w-full text-left text-sm">
-                        <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+                        <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
                           <tr>
                             <th className="px-4 py-2">Fine</th>
                             <th className="px-4 py-2 text-right">Amount</th>
@@ -521,19 +521,19 @@ export default function FeesPage() {
                             {canWaiveFine && <th className="px-4 py-2" />}
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100">
+                        <tbody className="divide-y divide-line">
                           {breakdown.fines.map((fine) => (
                             <tr key={fine.id}>
-                              <td className="px-4 py-2 text-slate-700">
+                              <td className="px-4 py-2 text-ink">
                                 {fine.reason ?? "Fine"}
                                 {fine.days != null && (
-                                  <span className="text-xs text-slate-400">
+                                  <span className="text-xs text-faint">
                                     {" "}
                                     ({fine.days}d)
                                   </span>
                                 )}
                               </td>
-                              <td className="px-4 py-2 text-right text-slate-900">
+                              <td className="px-4 py-2 text-right text-ink">
                                 {Number(fine.amount).toLocaleString()}
                               </td>
                               <td className="px-4 py-2">
@@ -565,9 +565,9 @@ export default function FeesPage() {
 
                   {/* Discounts list */}
                   {breakdown.discounts.length > 0 && (
-                    <div className="overflow-x-auto rounded-xl border border-slate-200">
+                    <div className="overflow-x-auto rounded-xl border border-line">
                       <table className="w-full text-left text-sm">
-                        <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+                        <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
                           <tr>
                             <th className="px-4 py-2">Discount</th>
                             <th className="px-4 py-2 text-right">Amount</th>
@@ -575,13 +575,13 @@ export default function FeesPage() {
                             {canApproveDiscount && <th className="px-4 py-2" />}
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100">
+                        <tbody className="divide-y divide-line">
                           {breakdown.discounts.map((discount) => (
                             <tr key={discount.id}>
-                              <td className="px-4 py-2 text-slate-700">
+                              <td className="px-4 py-2 text-ink">
                                 {discount.reason ?? "Discount"}
                               </td>
-                              <td className="px-4 py-2 text-right text-slate-900">
+                              <td className="px-4 py-2 text-right text-ink">
                                 {Number(discount.amount).toLocaleString()}
                               </td>
                               <td className="px-4 py-2">
@@ -690,12 +690,12 @@ export default function FeesPage() {
 
             {/* --- Payments --- */}
             <section className="space-y-3">
-              <h3 className="text-sm font-semibold text-slate-900">Payments</h3>
+              <h3 className="text-sm font-semibold text-ink">Payments</h3>
               <ErrorNote message={receiptError} />
               {paymentsInvoice && paymentsInvoice.payments.length > 0 ? (
-                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                <div className="overflow-x-auto rounded-xl border border-line">
                   <table className="w-full text-left text-sm">
-                    <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+                    <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
                       <tr>
                         <th className="px-4 py-3 text-right">Amount</th>
                         <th className="px-4 py-3">Method</th>
@@ -704,19 +704,19 @@ export default function FeesPage() {
                         <th className="px-4 py-3" />
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
+                    <tbody className="divide-y divide-line">
                       {paymentsInvoice.payments.map((payment) => (
                         <tr key={payment.id}>
-                          <td className="px-4 py-3 text-right text-slate-900">
+                          <td className="px-4 py-3 text-right text-ink">
                             {Number(payment.amount).toLocaleString()}
                           </td>
-                          <td className="px-4 py-3 text-slate-600">
+                          <td className="px-4 py-3 text-muted">
                             {payment.method.replace("_", " ")}
                           </td>
-                          <td className="px-4 py-3 text-slate-500">
+                          <td className="px-4 py-3 text-muted">
                             {payment.reference ?? "—"}
                           </td>
-                          <td className="px-4 py-3 text-slate-500">
+                          <td className="px-4 py-3 text-muted">
                             {new Date(payment.paidAt).toLocaleDateString()}
                           </td>
                           <td className="px-4 py-3 text-right">

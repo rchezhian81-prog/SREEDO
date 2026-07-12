@@ -3,39 +3,40 @@
 import Link from "next/link";
 import { usePermissions } from "@/lib/use-permissions";
 import { Card, EmptyState, PageHeader, Spinner } from "@/components/ui";
+import { Icon, type IconName } from "@/components/icons";
 
 const SUB_PAGES: {
   href: string;
   label: string;
-  icon: string;
+  icon: IconName;
   desc: string;
   perm: string;
 }[] = [
   {
     href: "/fees/setup/categories",
     label: "Categories",
-    icon: "🗂️",
+    icon: "layers",
     desc: "Group fees by category",
     perm: "fee_categories:read",
   },
   {
     href: "/fees/setup/schedules",
     label: "Schedules",
-    icon: "📆",
+    icon: "calendar",
     desc: "Recurring fee plans & invoice generation",
     perm: "fee_schedules:read",
   },
   {
     href: "/fees/setup/fine-rules",
     label: "Fine Rules",
-    icon: "⏰",
+    icon: "clock",
     desc: "Late-payment fines & overdue application",
     perm: "fee_fines:read",
   },
   {
     href: "/fees/setup/discounts",
     label: "Discounts",
-    icon: "🏷️",
+    icon: "tag",
     desc: "Discounts & scholarships",
     perm: "fee_discounts:read",
   },
@@ -82,12 +83,12 @@ export default function FeeSetupHubPage() {
           <Link key={page.href} href={page.href} className="block">
             <Card className="h-full transition hover:border-brand-300 hover:shadow-md">
               <div className="flex items-start gap-3">
-                <span className="text-2xl" aria-hidden>
-                  {page.icon}
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand-500/12 text-brand-600 dark:text-brand-300">
+                  <Icon name={page.icon} className="h-5 w-5" />
                 </span>
                 <div>
-                  <h3 className="font-semibold text-slate-900">{page.label}</h3>
-                  <p className="mt-1 text-sm text-slate-500">{page.desc}</p>
+                  <h3 className="font-semibold text-ink">{page.label}</h3>
+                  <p className="mt-1 text-sm text-muted">{page.desc}</p>
                 </div>
               </div>
             </Card>
