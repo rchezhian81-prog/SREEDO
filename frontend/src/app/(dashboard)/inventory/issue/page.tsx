@@ -157,7 +157,7 @@ export default function IssuePage() {
       <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
         <div>
           <div className="mb-4 w-64">
-            <span className="mb-1 block text-sm font-medium text-slate-700">
+            <span className="mb-1 block text-sm font-medium text-ink">
               Filter by item
             </span>
             <Select
@@ -180,9 +180,9 @@ export default function IssuePage() {
           ) : issues.length === 0 ? (
             <EmptyState message="No issues recorded" />
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+            <div className="overflow-x-auto rounded-xl border border-line bg-surface">
               <table className="w-full text-left text-sm">
-                <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+                <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
                   <tr>
                     <th className="px-4 py-3">Date</th>
                     <th className="px-4 py-3">Item</th>
@@ -192,28 +192,28 @@ export default function IssuePage() {
                     <th className="px-4 py-3">Received by</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-line">
                   {issues.map((issue) => (
-                    <tr key={issue.id} className="hover:bg-slate-50">
-                      <td className="px-4 py-3 text-slate-600">
+                    <tr key={issue.id} className="hover:bg-hover">
+                      <td className="px-4 py-3 text-muted">
                         {fmtDate(issue.issueDate)}
                       </td>
-                      <td className="px-4 py-3 font-medium text-slate-900">
+                      <td className="px-4 py-3 font-medium text-ink">
                         {issue.itemName}
                         {issue.unit ? (
-                          <span className="text-xs text-slate-400">
+                          <span className="text-xs text-faint">
                             {" "}
                             ({issue.unit})
                           </span>
                         ) : null}
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-4 py-3 text-right tabular-nums">
                         {Number(issue.quantity).toLocaleString()}
                       </td>
                       <td className="px-4 py-3">
                         {issue.issuedTo ?? "—"}
                         {issue.issuedToType ? (
-                          <span className="block text-xs text-slate-400">
+                          <span className="block text-xs text-faint">
                             {issue.issuedToType}
                           </span>
                         ) : null}
@@ -230,8 +230,8 @@ export default function IssuePage() {
 
         {canIssue && (
           <Card className="h-fit">
-            <h2 className="text-sm font-semibold text-slate-900">Issue stock</h2>
-            <p className="mt-1 text-sm text-slate-500">
+            <h2 className="text-sm font-semibold text-ink">Issue stock</h2>
+            <p className="mt-1 text-sm text-muted">
               Records stock-out and decreases item stock.
             </p>
             <div className="mt-4 space-y-3">
@@ -250,9 +250,9 @@ export default function IssuePage() {
                 </Select>
               </Field>
               {selectedItem && (
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-muted">
                   Current stock:{" "}
-                  <span className="font-medium text-slate-700">
+                  <span className="font-medium text-ink">
                     {selectedItem.currentStock}
                     {selectedItem.unit ? ` ${selectedItem.unit}` : ""}
                   </span>

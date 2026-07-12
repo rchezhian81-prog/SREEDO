@@ -10,6 +10,7 @@ import { usePermissions } from "@/lib/use-permissions";
 import {
   Badge,
   Button,
+  ConfirmDialog,
   EmptyState,
   ErrorNote,
   Field,
@@ -46,6 +47,9 @@ export default function VendorsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Vendor | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Vendor | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -131,13 +135,20 @@ export default function VendorsPage() {
     }
   };
 
-  const removeVendor = async (vendor: Vendor) => {
-    if (!confirm(`Delete vendor ${vendor.name}?`)) return;
+  const confirmRemove = async () => {
+    if (!pendingDelete) return;
+    setDeleteError(null);
+    setDeleting(true);
     try {
-      await api.delete(`/inventory/vendors/${vendor.id}`);
+      await api.delete(`/inventory/vendors/${pendingDelete.id}`);
+      setPendingDelete(null);
       await load();
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Failed to delete vendor");
+      setDeleteError(
+        err instanceof ApiError ? err.message : "Failed to delete vendor"
+      );
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -187,9 +198,9 @@ export default function VendorsPage() {
       ) : vendors.length === 0 ? (
         <EmptyState message="No vendors yet" />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-xl border border-line bg-surface">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+            <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
               <tr>
                 <th className="px-4 py-3">Vendor</th>
                 <th className="px-4 py-3">Contact</th>
@@ -200,13 +211,13 @@ export default function VendorsPage() {
                 {(canUpdate || canDelete) && <th className="px-4 py-3" />}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-line">
               {vendors.map((vendor) => (
-                <tr key={vendor.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium text-slate-900">
+                <tr key={vendor.id} className="hover:bg-hover">
+                  <td className="px-4 py-3 font-medium text-ink">
                     {vendor.name}
                     {vendor.email ? (
-                      <span className="block text-xs text-slate-400">
+                      <span className="block text-xs text-faint">
                         {vendor.email}
                       </span>
                     ) : null}
@@ -235,7 +246,10 @@ export default function VendorsPage() {
                         )}
                         {canDelete && (
                           <button
-                            onClick={() => removeVendor(vendor)}
+                            onClick={() => {
+                              setDeleteError(null);
+                              setPendingDelete(vendor);
+                            }}
                             className="text-xs font-medium text-red-600 hover:text-red-700"
                           >
                             Delete
@@ -303,6 +317,24 @@ export default function VendorsPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Delete vendor"
+        message={
+          <span className="space-y-2">
+            <span className="block">
+              Delete vendor <strong>{pendingDelete?.name}</strong>? This cannot
+              be undone.
+            </span>
+            {deleteError && <ErrorNote message={deleteError} />}
+          </span>
+        }
+        confirmLabel="Delete"
+        busy={deleting}
+        onConfirm={confirmRemove}
+        onClose={() => setPendingDelete(null)}
+      />
     </>
   );
 }
