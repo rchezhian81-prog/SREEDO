@@ -9,6 +9,7 @@ import {
   Badge,
   Button,
   Card,
+  ConfirmDialog,
   EmptyState,
   ErrorNote,
   Field,
@@ -18,6 +19,7 @@ import {
   Select,
   Spinner,
 } from "@/components/ui";
+import { Icon } from "@/components/icons";
 import type {
   Paginated,
   PayrollCalcType,
@@ -58,6 +60,9 @@ export default function PayrollStructuresPage() {
   const [detail, setDetail] = useState<SalaryStructureDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<SalaryStructure | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const load = useCallback(async (teacherId: string) => {
     setLoading(true);
@@ -218,16 +223,20 @@ export default function PayrollStructuresPage() {
     }
   };
 
-  const remove = async (structure: SalaryStructure) => {
-    if (!confirm(`Delete salary structure for ${structure.teacherName}?`))
-      return;
+  const confirmRemove = async () => {
+    if (!pendingDelete) return;
+    setDeleteError(null);
+    setDeleting(true);
     try {
-      await api.delete(`/payroll/structures/${structure.id}`);
+      await api.delete(`/payroll/structures/${pendingDelete.id}`);
+      setPendingDelete(null);
       await load(teacherFilter);
     } catch (err) {
-      alert(
+      setDeleteError(
         err instanceof ApiError ? err.message : "Failed to delete structure"
       );
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -291,9 +300,9 @@ export default function PayrollStructuresPage() {
       ) : structures.length === 0 ? (
         <EmptyState message="No salary structures yet" />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-xl border border-line bg-white">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+            <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
               <tr>
                 <th className="px-4 py-3">Staff</th>
                 <th className="px-4 py-3">Employee No</th>
@@ -303,16 +312,16 @@ export default function PayrollStructuresPage() {
                 <th className="px-4 py-3" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-line">
               {structures.map((structure) => (
-                <tr key={structure.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium text-slate-900">
+                <tr key={structure.id} className="hover:bg-hover">
+                  <td className="px-4 py-3 font-medium text-ink">
                     {structure.teacherName}
                   </td>
                   <td className="px-4 py-3 font-mono text-xs">
                     {structure.employeeNo}
                   </td>
-                  <td className="px-4 py-3 text-slate-500">
+                  <td className="px-4 py-3 text-muted">
                     {structure.effectiveDate
                       ? new Date(structure.effectiveDate).toLocaleDateString()
                       : "—"}
@@ -335,7 +344,10 @@ export default function PayrollStructuresPage() {
                       </button>
                       {canDelete && (
                         <button
-                          onClick={() => remove(structure)}
+                          onClick={() => {
+                            setDeleteError(null);
+                            setPendingDelete(structure);
+                          }}
                           className="text-xs font-medium text-red-600 hover:text-red-700"
                         >
                           Delete
@@ -382,7 +394,7 @@ export default function PayrollStructuresPage() {
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-slate-700">
+              <span className="text-sm font-medium text-ink">
                 Components
               </span>
               <Button type="button" variant="ghost" onClick={addLine}>
@@ -390,7 +402,7 @@ export default function PayrollStructuresPage() {
               </Button>
             </div>
             {components.length === 0 && (
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted">
                 No active components — create components first.
               </p>
             )}
@@ -438,31 +450,31 @@ export default function PayrollStructuresPage() {
                 <button
                   type="button"
                   onClick={() => removeLine(index)}
-                  className="mb-2 rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-red-600"
+                  className="mb-2 rounded-lg p-1 text-faint hover:bg-hover hover:text-red-600"
                   aria-label="Remove line"
                 >
-                  ✕
+                  <Icon name="x" className="h-4 w-4" />
                 </button>
               </div>
             ))}
           </div>
 
-          <div className="rounded-lg bg-slate-50 p-3 text-sm">
+          <div className="rounded-lg bg-surface-2 p-3 text-sm">
             <div className="flex justify-between">
-              <span className="text-slate-500">Gross</span>
+              <span className="text-muted">Gross</span>
               <span className="font-medium text-emerald-600">
                 {money(preview.gross)}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500">Deductions</span>
+              <span className="text-muted">Deductions</span>
               <span className="font-medium text-red-600">
                 {money(preview.deductions)}
               </span>
             </div>
-            <div className="mt-1 flex justify-between border-t border-slate-200 pt-1">
-              <span className="font-medium text-slate-700">Net</span>
-              <span className="font-semibold text-slate-900">
+            <div className="mt-1 flex justify-between border-t border-line pt-1">
+              <span className="font-medium text-ink">Net</span>
+              <span className="font-semibold text-ink">
                 {money(preview.net)}
               </span>
             </div>
@@ -496,7 +508,7 @@ export default function PayrollStructuresPage() {
           <ErrorNote message={detailError} />
         ) : detail ? (
           <div className="space-y-3">
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-muted">
               Effective:{" "}
               <strong>
                 {detail.effectiveDate
@@ -507,9 +519,9 @@ export default function PayrollStructuresPage() {
             {detail.components.length === 0 ? (
               <EmptyState message="No component lines" />
             ) : (
-              <div className="overflow-x-auto rounded-xl border border-slate-200">
+              <div className="overflow-x-auto rounded-xl border border-line">
                 <table className="w-full text-left text-sm">
-                  <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+                  <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
                     <tr>
                       <th className="px-4 py-3">Component</th>
                       <th className="px-4 py-3">Type</th>
@@ -517,10 +529,10 @@ export default function PayrollStructuresPage() {
                       <th className="px-4 py-3 text-right">Value</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-line">
                     {detail.components.map((line) => (
                       <tr key={line.id}>
-                        <td className="px-4 py-3 font-medium text-slate-900">
+                        <td className="px-4 py-3 font-medium text-ink">
                           {line.name}
                         </td>
                         <td className="px-4 py-3">
@@ -530,10 +542,10 @@ export default function PayrollStructuresPage() {
                             {line.type}
                           </Badge>
                         </td>
-                        <td className="px-4 py-3 text-slate-600">
+                        <td className="px-4 py-3 text-muted">
                           {line.calcType}
                         </td>
-                        <td className="px-4 py-3 text-right text-slate-900">
+                        <td className="px-4 py-3 text-right text-ink">
                           {line.calcType === "percent"
                             ? `${money(line.value)}%`
                             : money(line.value)}
@@ -549,6 +561,25 @@ export default function PayrollStructuresPage() {
           <EmptyState message="Structure not found" />
         )}
       </Modal>
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Delete salary structure"
+        message={
+          <span className="space-y-2">
+            <span className="block">
+              Delete salary structure for{" "}
+              <strong>{pendingDelete?.teacherName}</strong>? This cannot be
+              undone.
+            </span>
+            {deleteError && <ErrorNote message={deleteError} />}
+          </span>
+        }
+        confirmLabel="Delete"
+        busy={deleting}
+        onConfirm={confirmRemove}
+        onClose={() => setPendingDelete(null)}
+      />
     </>
   );
 }

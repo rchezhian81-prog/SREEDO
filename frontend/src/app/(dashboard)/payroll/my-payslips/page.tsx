@@ -106,9 +106,9 @@ export default function MyPayslipsPage() {
       ) : payslips.length === 0 ? (
         <EmptyState message="You have no payslips yet" />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-xl border border-line bg-white">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+            <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
               <tr>
                 <th className="px-4 py-3">Month</th>
                 <th className="px-4 py-3 text-right">Gross</th>
@@ -118,17 +118,19 @@ export default function MyPayslipsPage() {
                 <th className="px-4 py-3" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-line">
               {payslips.map((slip) => (
-                <tr key={slip.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium text-slate-900">
+                <tr key={slip.id} className="hover:bg-hover">
+                  <td className="px-4 py-3 font-medium text-ink">
                     {slip.month}
                   </td>
-                  <td className="px-4 py-3 text-right">{money(slip.gross)}</td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-4 py-3 text-right tabular-nums">
+                    {money(slip.gross)}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums">
                     {money(slip.deductions)}
                   </td>
-                  <td className="px-4 py-3 text-right text-slate-900">
+                  <td className="px-4 py-3 text-right tabular-nums text-ink">
                     {money(slip.net)}
                   </td>
                   <td className="px-4 py-3">

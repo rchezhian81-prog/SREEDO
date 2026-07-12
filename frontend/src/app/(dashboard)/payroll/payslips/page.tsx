@@ -123,7 +123,7 @@ export default function PayslipsPage() {
 
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <div className="w-44">
-          <span className="mb-1 block text-sm font-medium text-slate-700">
+          <span className="mb-1 block text-sm font-medium text-ink">
             Month
           </span>
           <Input
@@ -152,9 +152,9 @@ export default function PayslipsPage() {
       ) : payslips.length === 0 ? (
         <EmptyState message="No payslips for this month" />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-xl border border-line bg-white">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+            <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
               <tr>
                 <th className="px-4 py-3">Staff</th>
                 <th className="px-4 py-3">Employee No</th>
@@ -165,20 +165,22 @@ export default function PayslipsPage() {
                 <th className="px-4 py-3" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-line">
               {payslips.map((slip) => (
-                <tr key={slip.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium text-slate-900">
+                <tr key={slip.id} className="hover:bg-hover">
+                  <td className="px-4 py-3 font-medium text-ink">
                     {slip.teacherName}
                   </td>
                   <td className="px-4 py-3 font-mono text-xs">
                     {slip.employeeNo}
                   </td>
-                  <td className="px-4 py-3 text-right">{money(slip.gross)}</td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-4 py-3 text-right tabular-nums">
+                    {money(slip.gross)}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums">
                     {money(slip.deductions)}
                   </td>
-                  <td className="px-4 py-3 text-right text-slate-900">
+                  <td className="px-4 py-3 text-right tabular-nums text-ink">
                     {money(slip.net)}
                   </td>
                   <td className="px-4 py-3">
@@ -231,37 +233,37 @@ export default function PayslipsPage() {
           <div className="space-y-4">
             <div className="grid grid-cols-3 gap-3 text-sm">
               <div>
-                <p className="text-slate-500">Working</p>
-                <p className="font-medium text-slate-900">
+                <p className="text-muted">Working</p>
+                <p className="font-medium text-ink">
                   {detail.workingDays}
                 </p>
               </div>
               <div>
-                <p className="text-slate-500">Present</p>
-                <p className="font-medium text-slate-900">
+                <p className="text-muted">Present</p>
+                <p className="font-medium text-ink">
                   {detail.presentDays}
                 </p>
               </div>
               <div>
-                <p className="text-slate-500">Unpaid leave</p>
-                <p className="font-medium text-slate-900">
+                <p className="text-muted">Unpaid leave</p>
+                <p className="font-medium text-ink">
                   {detail.unpaidLeave}
                 </p>
               </div>
             </div>
-            <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <div className="overflow-x-auto rounded-xl border border-line">
               <table className="w-full text-left text-sm">
-                <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+                <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
                   <tr>
                     <th className="px-4 py-3">Component</th>
                     <th className="px-4 py-3">Type</th>
                     <th className="px-4 py-3 text-right">Amount</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-line">
                   {detail.lines.map((line, index) => (
                     <tr key={index}>
-                      <td className="px-4 py-3 font-medium text-slate-900">
+                      <td className="px-4 py-3 font-medium text-ink">
                         {line.name}
                       </td>
                       <td className="px-4 py-3">
@@ -271,7 +273,7 @@ export default function PayslipsPage() {
                           {line.type}
                         </Badge>
                       </td>
-                      <td className="px-4 py-3 text-right text-slate-900">
+                      <td className="px-4 py-3 text-right tabular-nums text-ink">
                         {money(line.amount)}
                       </td>
                     </tr>
@@ -279,22 +281,22 @@ export default function PayslipsPage() {
                 </tbody>
               </table>
             </div>
-            <div className="rounded-lg bg-slate-50 p-3 text-sm">
+            <div className="rounded-lg bg-surface-2 p-3 text-sm">
               <div className="flex justify-between">
-                <span className="text-slate-500">Gross</span>
-                <span className="font-medium text-emerald-600">
+                <span className="text-muted">Gross</span>
+                <span className="font-medium tabular-nums text-success">
                   {money(detail.gross)}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Deductions</span>
-                <span className="font-medium text-red-600">
+                <span className="text-muted">Deductions</span>
+                <span className="font-medium tabular-nums text-danger">
                   {money(detail.deductions)}
                 </span>
               </div>
-              <div className="mt-1 flex justify-between border-t border-slate-200 pt-1">
-                <span className="font-medium text-slate-700">Net</span>
-                <span className="font-semibold text-slate-900">
+              <div className="mt-1 flex justify-between border-t border-line pt-1">
+                <span className="font-medium text-ink">Net</span>
+                <span className="font-semibold tabular-nums text-ink">
                   {money(detail.net)}
                 </span>
               </div>
