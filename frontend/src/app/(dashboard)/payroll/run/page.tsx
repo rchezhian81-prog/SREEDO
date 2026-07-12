@@ -9,6 +9,7 @@ import {
   Badge,
   Button,
   Card,
+  ConfirmDialog,
   EmptyState,
   ErrorNote,
   Input,
@@ -42,6 +43,8 @@ export default function PayrollRunPage() {
   const [result, setResult] = useState<RunResult | null>(null);
 
   const [finalizingId, setFinalizingId] = useState<string | null>(null);
+  const [pendingFinalize, setPendingFinalize] = useState<PayrollRun | null>(null);
+  const [finalizeError, setFinalizeError] = useState<string | null>(null);
 
   // Run payslips modal.
   const [payslipsOpen, setPayslipsOpen] = useState(false);
@@ -94,15 +97,19 @@ export default function PayrollRunPage() {
     }
   };
 
-  const finalize = async (run: PayrollRun) => {
-    if (!confirm(`Finalize payroll for ${run.month}? This locks the payslips.`))
-      return;
+  const confirmFinalize = async () => {
+    if (!pendingFinalize) return;
+    const run = pendingFinalize;
+    setFinalizeError(null);
     setFinalizingId(run.id);
     try {
       await api.post(`/payroll/runs/${run.id}/finalize`);
+      setPendingFinalize(null);
       await load();
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Failed to finalize run");
+      setFinalizeError(
+        err instanceof ApiError ? err.message : "Failed to finalize run"
+      );
     } finally {
       setFinalizingId(null);
     }
@@ -165,7 +172,7 @@ export default function PayrollRunPage() {
         <Card>
           <div className="flex flex-wrap items-end gap-3">
             <div className="w-44">
-              <span className="mb-1 block text-sm font-medium text-slate-700">
+              <span className="mb-1 block text-sm font-medium text-ink">
                 Month
               </span>
               <Input
@@ -209,9 +216,9 @@ export default function PayrollRunPage() {
         ) : runs.length === 0 ? (
           <EmptyState message="No payroll runs yet" />
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+          <div className="overflow-x-auto rounded-xl border border-line bg-white">
             <table className="w-full text-left text-sm">
-              <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+              <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
                 <tr>
                   <th className="px-4 py-3">Month</th>
                   <th className="px-4 py-3">Status</th>
@@ -221,10 +228,10 @@ export default function PayrollRunPage() {
                   <th className="px-4 py-3" />
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-line">
                 {runs.map((run) => (
-                  <tr key={run.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 font-medium text-slate-900">
+                  <tr key={run.id} className="hover:bg-hover">
+                    <td className="px-4 py-3 font-medium text-ink">
                       {run.month}
                     </td>
                     <td className="px-4 py-3">
@@ -238,7 +245,7 @@ export default function PayrollRunPage() {
                     <td className="px-4 py-3 text-right">
                       {money(run.netTotal)}
                     </td>
-                    <td className="px-4 py-3 text-slate-500">
+                    <td className="px-4 py-3 text-muted">
                       {run.finalizedAt
                         ? new Date(run.finalizedAt).toLocaleDateString()
                         : "—"}
@@ -253,7 +260,10 @@ export default function PayrollRunPage() {
                         </button>
                         {canFinalize && run.status !== "finalized" && (
                           <button
-                            onClick={() => finalize(run)}
+                            onClick={() => {
+                              setFinalizeError(null);
+                              setPendingFinalize(run);
+                            }}
                             disabled={finalizingId === run.id}
                             className="text-xs font-medium text-emerald-600 hover:text-emerald-700 disabled:opacity-60"
                           >
@@ -284,9 +294,9 @@ export default function PayrollRunPage() {
         ) : payslips.length === 0 ? (
           <EmptyState message="No payslips in this run" />
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-slate-200">
+          <div className="overflow-x-auto rounded-xl border border-line">
             <table className="w-full text-left text-sm">
-              <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+              <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
                 <tr>
                   <th className="px-4 py-3">Staff</th>
                   <th className="px-4 py-3 text-right">Gross</th>
@@ -295,17 +305,17 @@ export default function PayrollRunPage() {
                   <th className="px-4 py-3">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-line">
                 {payslips.map((slip) => (
                   <tr key={slip.id}>
-                    <td className="px-4 py-3 font-medium text-slate-900">
+                    <td className="px-4 py-3 font-medium text-ink">
                       {slip.teacherName}
                     </td>
                     <td className="px-4 py-3 text-right">{money(slip.gross)}</td>
                     <td className="px-4 py-3 text-right">
                       {money(slip.deductions)}
                     </td>
-                    <td className="px-4 py-3 text-right text-slate-900">
+                    <td className="px-4 py-3 text-right text-ink">
                       {money(slip.net)}
                     </td>
                     <td className="px-4 py-3">
@@ -322,6 +332,25 @@ export default function PayrollRunPage() {
           </div>
         )}
       </Modal>
+
+      <ConfirmDialog
+        open={pendingFinalize !== null}
+        title="Finalize payroll"
+        message={
+          <span className="space-y-2">
+            <span className="block">
+              Finalize payroll for <strong>{pendingFinalize?.month}</strong>?
+              This locks the payslips and cannot be undone.
+            </span>
+            {finalizeError && <ErrorNote message={finalizeError} />}
+          </span>
+        }
+        confirmLabel="Finalize"
+        tone="primary"
+        busy={finalizingId !== null}
+        onConfirm={confirmFinalize}
+        onClose={() => setPendingFinalize(null)}
+      />
     </>
   );
 }

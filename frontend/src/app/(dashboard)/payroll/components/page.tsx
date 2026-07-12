@@ -11,6 +11,7 @@ import { money } from "@/lib/payroll";
 import {
   Badge,
   Button,
+  ConfirmDialog,
   EmptyState,
   ErrorNote,
   Field,
@@ -45,6 +46,9 @@ export default function PayrollComponentsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<SalaryComponent | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<SalaryComponent | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -126,15 +130,20 @@ export default function PayrollComponentsPage() {
     }
   };
 
-  const remove = async (component: SalaryComponent) => {
-    if (!confirm(`Delete component ${component.name}?`)) return;
+  const confirmRemove = async () => {
+    if (!pendingDelete) return;
+    setDeleteError(null);
+    setDeleting(true);
     try {
-      await api.delete(`/payroll/components/${component.id}`);
+      await api.delete(`/payroll/components/${pendingDelete.id}`);
+      setPendingDelete(null);
       await load();
     } catch (err) {
-      alert(
+      setDeleteError(
         err instanceof ApiError ? err.message : "Failed to delete component"
       );
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -184,9 +193,9 @@ export default function PayrollComponentsPage() {
       ) : components.length === 0 ? (
         <EmptyState message="No salary components yet" />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-xl border border-line bg-white">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+            <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
               <tr>
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Code</th>
@@ -197,10 +206,10 @@ export default function PayrollComponentsPage() {
                 {(canUpdate || canDelete) && <th className="px-4 py-3" />}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-line">
               {components.map((component) => (
-                <tr key={component.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium text-slate-900">
+                <tr key={component.id} className="hover:bg-hover">
+                  <td className="px-4 py-3 font-medium text-ink">
                     {component.name}
                   </td>
                   <td className="px-4 py-3 font-mono text-xs">
@@ -237,7 +246,10 @@ export default function PayrollComponentsPage() {
                         )}
                         {canDelete && (
                           <button
-                            onClick={() => remove(component)}
+                            onClick={() => {
+                              setDeleteError(null);
+                              setPendingDelete(component);
+                            }}
                             className="text-xs font-medium text-red-600 hover:text-red-700"
                           >
                             Delete
@@ -304,6 +316,24 @@ export default function PayrollComponentsPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Delete component"
+        message={
+          <span className="space-y-2">
+            <span className="block">
+              Delete component <strong>{pendingDelete?.name}</strong>? This
+              cannot be undone.
+            </span>
+            {deleteError && <ErrorNote message={deleteError} />}
+          </span>
+        }
+        confirmLabel="Delete"
+        busy={deleting}
+        onConfirm={confirmRemove}
+        onClose={() => setPendingDelete(null)}
+      />
     </>
   );
 }

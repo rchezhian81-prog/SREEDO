@@ -12,51 +12,55 @@ import {
   PageHeader,
   Spinner,
 } from "@/components/ui";
+import { Icon, type IconName } from "@/components/icons";
 import type { PayrollRun, SalaryComponent, SalaryStructure } from "@/types";
 
 const NAV: {
   href: string;
   label: string;
-  icon: string;
+  icon: IconName;
   desc: string;
   perm: string;
 }[] = [
   {
     href: "/payroll/components",
     label: "Salary components",
-    icon: "🧩",
+    icon: "layers",
     desc: "Earnings & deductions catalogue",
     perm: "payroll:read",
   },
   {
     href: "/payroll/structures",
     label: "Salary structures",
-    icon: "📋",
+    icon: "clipboard",
     desc: "Assign salary structures to staff",
     perm: "payroll:read",
   },
   {
     href: "/payroll/run",
     label: "Run payroll",
-    icon: "▶️",
+    icon: "wallet",
     desc: "Generate & finalize monthly payroll",
     perm: "payroll:run",
   },
   {
     href: "/payroll/payslips",
     label: "Payslips",
-    icon: "🧾",
+    icon: "receipt",
     desc: "Browse, view & download payslips",
     perm: "payroll:read",
   },
   {
     href: "/payroll/reports",
     label: "Reports",
-    icon: "📈",
+    icon: "barChart",
     desc: "Register, deductions & more",
     perm: "payroll:reports",
   },
 ];
+
+const TILE_ICON =
+  "grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand-500/12 text-brand-600 dark:text-brand-300";
 
 export default function PayrollHubPage() {
   const { can, loading: permsLoading } = usePermissions();
@@ -114,12 +118,12 @@ export default function PayrollHubPage() {
           <Link href="/payroll/my-payslips" className="block">
             <Card className="h-full transition hover:border-brand-300 hover:shadow-md">
               <div className="flex items-start gap-3">
-                <span className="text-2xl" aria-hidden>
-                  🧾
+                <span className={TILE_ICON}>
+                  <Icon name="receipt" className="h-5 w-5" />
                 </span>
                 <div>
-                  <h3 className="font-semibold text-slate-900">My Payslips</h3>
-                  <p className="mt-1 text-sm text-slate-500">
+                  <h3 className="font-semibold text-ink">My Payslips</h3>
+                  <p className="mt-1 text-sm text-muted">
                     View and download your monthly payslips
                   </p>
                 </div>
@@ -165,10 +169,10 @@ export default function PayrollHubPage() {
           <div className="grid gap-4 sm:grid-cols-3">
             {stats.map((stat) => (
               <Card key={stat.label}>
-                <p className="text-sm font-medium text-slate-500">
+                <p className="text-sm font-medium text-muted">
                   {stat.label}
                 </p>
-                <p className="mt-2 text-3xl font-semibold text-slate-900">
+                <p className="mt-2 text-3xl font-semibold text-ink">
                   {stat.value}
                 </p>
               </Card>
@@ -180,14 +184,14 @@ export default function PayrollHubPage() {
               <Link key={page.href} href={page.href} className="block">
                 <Card className="h-full transition hover:border-brand-300 hover:shadow-md">
                   <div className="flex items-start gap-3">
-                    <span className="text-2xl" aria-hidden>
-                      {page.icon}
+                    <span className={TILE_ICON}>
+                      <Icon name={page.icon} className="h-5 w-5" />
                     </span>
                     <div>
-                      <h3 className="font-semibold text-slate-900">
+                      <h3 className="font-semibold text-ink">
                         {page.label}
                       </h3>
-                      <p className="mt-1 text-sm text-slate-500">{page.desc}</p>
+                      <p className="mt-1 text-sm text-muted">{page.desc}</p>
                     </div>
                   </div>
                 </Card>
@@ -197,14 +201,14 @@ export default function PayrollHubPage() {
               <Link href="/payroll/my-payslips" className="block">
                 <Card className="h-full transition hover:border-brand-300 hover:shadow-md">
                   <div className="flex items-start gap-3">
-                    <span className="text-2xl" aria-hidden>
-                      🧾
+                    <span className={TILE_ICON}>
+                      <Icon name="receipt" className="h-5 w-5" />
                     </span>
                     <div>
-                      <h3 className="font-semibold text-slate-900">
+                      <h3 className="font-semibold text-ink">
                         My Payslips
                       </h3>
-                      <p className="mt-1 text-sm text-slate-500">
+                      <p className="mt-1 text-sm text-muted">
                         Your own monthly payslips
                       </p>
                     </div>
