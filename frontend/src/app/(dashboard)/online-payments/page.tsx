@@ -8,6 +8,7 @@ import {
   Badge,
   Button,
   Card,
+  ConfirmDialog,
   EmptyState,
   ErrorNote,
   PageHeader,
@@ -77,6 +78,7 @@ export default function OnlinePaymentsPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [togglingSettings, setTogglingSettings] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [pendingRefund, setPendingRefund] = useState<PaymentOrder | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -141,14 +143,9 @@ export default function OnlinePaymentsPage() {
     }
   };
 
-  const refund = async (order: PaymentOrder) => {
-    if (
-      !window.confirm(
-        `Refund payment ${order.orderNo} for ${order.studentName}? This cannot be undone.`
-      )
-    ) {
-      return;
-    }
+  const confirmRefund = async () => {
+    if (!pendingRefund) return;
+    const order = pendingRefund;
     setActionError(null);
     setBusyId(order.id);
     try {
@@ -160,6 +157,7 @@ export default function OnlinePaymentsPage() {
       );
     } finally {
       setBusyId(null);
+      setPendingRefund(null);
     }
   };
 
@@ -198,13 +196,13 @@ export default function OnlinePaymentsPage() {
             <Card>
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="space-y-1">
-                  <p className="text-sm font-medium text-slate-500">
+                  <p className="text-sm font-medium text-muted">
                     Payment gateway
                   </p>
-                  <p className="text-lg font-semibold text-slate-900">
+                  <p className="text-lg font-semibold text-ink">
                     {settings.provider ?? "Not configured"}
                   </p>
-                  <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
+                  <div className="flex flex-wrap items-center gap-2 text-sm text-muted">
                     <Badge tone={settings.enabled ? "green" : "slate"}>
                       {settings.enabled ? "Enabled" : "Disabled"}
                     </Badge>
@@ -227,10 +225,10 @@ export default function OnlinePaymentsPage() {
             </Card>
           ) : (
             <Card className="border-blue-200 bg-blue-50">
-              <p className="text-sm font-medium text-slate-900">
+              <p className="text-sm font-medium text-ink">
                 No payment gateway is configured.
               </p>
-              <p className="mt-1 text-sm text-slate-600">
+              <p className="mt-1 text-sm text-muted">
                 Set PAYMENT_GATEWAY_PROVIDER and PAYMENT_GATEWAY_WEBHOOK_SECRET on
                 the server to enable online payments. Offline fee collection is
                 unaffected.
@@ -241,7 +239,7 @@ export default function OnlinePaymentsPage() {
       )}
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold text-slate-900">Orders</h2>
+        <h2 className="text-lg font-semibold text-ink">Orders</h2>
         <div className="w-48">
           <Select
             value={statusFilter}
@@ -260,9 +258,9 @@ export default function OnlinePaymentsPage() {
       {orders.length === 0 ? (
         <EmptyState message="No online payment orders yet." />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-xl border border-line bg-white">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+            <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
               <tr>
                 <th className="px-4 py-3">Order</th>
                 <th className="px-4 py-3">Invoice</th>
@@ -274,17 +272,17 @@ export default function OnlinePaymentsPage() {
                 <th className="px-4 py-3" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-line">
               {orders.map((order) => (
                 <tr key={order.id}>
-                  <td className="px-4 py-3 font-medium text-slate-900">
+                  <td className="px-4 py-3 font-medium text-ink">
                     {order.orderNo}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">{order.invoiceNo}</td>
-                  <td className="px-4 py-3 text-slate-600">
+                  <td className="px-4 py-3 text-muted">{order.invoiceNo}</td>
+                  <td className="px-4 py-3 text-muted">
                     {order.studentName}
                   </td>
-                  <td className="px-4 py-3 text-right text-slate-900">
+                  <td className="px-4 py-3 text-right text-ink">
                     {Number(order.amount).toLocaleString()} {order.currency}
                   </td>
                   <td className="px-4 py-3">
@@ -292,8 +290,8 @@ export default function OnlinePaymentsPage() {
                       {order.status}
                     </Badge>
                   </td>
-                  <td className="px-4 py-3 text-slate-600">{order.provider}</td>
-                  <td className="px-4 py-3 text-slate-500">
+                  <td className="px-4 py-3 text-muted">{order.provider}</td>
+                  <td className="px-4 py-3 text-muted">
                     {new Date(order.createdAt).toLocaleDateString()}
                   </td>
                   <td className="px-4 py-3 text-right">
@@ -309,7 +307,7 @@ export default function OnlinePaymentsPage() {
                       {order.status === "success" &&
                         can("online_payments:refund") && (
                           <button
-                            onClick={() => refund(order)}
+                            onClick={() => setPendingRefund(order)}
                             disabled={busyId === order.id}
                             className="text-xs font-medium text-red-600 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-60"
                           >
@@ -324,6 +322,20 @@ export default function OnlinePaymentsPage() {
           </table>
         </div>
       )}
+
+      <ConfirmDialog
+        open={pendingRefund !== null}
+        title="Refund payment"
+        message={
+          pendingRefund
+            ? `Refund payment ${pendingRefund.orderNo} for ${pendingRefund.studentName}? This cannot be undone.`
+            : ""
+        }
+        confirmLabel="Refund"
+        busy={busyId !== null && busyId === pendingRefund?.id}
+        onConfirm={confirmRefund}
+        onClose={() => setPendingRefund(null)}
+      />
     </>
   );
 }

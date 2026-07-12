@@ -165,9 +165,9 @@ export default function FeeDiscountsPage() {
       ) : discounts.length === 0 ? (
         <EmptyState message="No discounts yet" />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-xl border border-line bg-white">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+            <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
               <tr>
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Kind</th>
@@ -176,10 +176,10 @@ export default function FeeDiscountsPage() {
                 <th className="px-4 py-3">Category</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-line">
               {discounts.map((discount) => (
-                <tr key={discount.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium text-slate-900">
+                <tr key={discount.id} className="hover:bg-hover">
+                  <td className="px-4 py-3 font-medium text-ink">
                     {discount.name}
                   </td>
                   <td className="px-4 py-3">
@@ -196,7 +196,7 @@ export default function FeeDiscountsPage() {
                     {Number(discount.value).toLocaleString()}
                     {discount.discountType === "percent" ? "%" : ""}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">
+                  <td className="px-4 py-3 text-muted">
                     {discount.categoryName ?? "—"}
                   </td>
                 </tr>

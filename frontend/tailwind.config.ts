@@ -41,6 +41,11 @@ const config: Config = {
         muted: "rgb(var(--c-muted) / <alpha-value>)",
         faint: "rgb(var(--c-faint) / <alpha-value>)",
         hover: "rgb(var(--c-hover) / <alpha-value>)",
+        // Semantic status tokens (PX3) — flip in dark mode, support /alpha.
+        success: "rgb(var(--c-success) / <alpha-value>)",
+        warn: "rgb(var(--c-warn) / <alpha-value>)",
+        danger: "rgb(var(--c-danger) / <alpha-value>)",
+        info: "rgb(var(--c-info) / <alpha-value>)",
       },
       boxShadow: {
         card: "0 1px 2px rgb(20 30 55 / 0.04), 0 6px 20px rgb(20 30 55 / 0.07)",

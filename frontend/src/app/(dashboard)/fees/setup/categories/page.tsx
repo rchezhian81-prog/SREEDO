@@ -10,6 +10,7 @@ import { usePermissions } from "@/lib/use-permissions";
 import {
   Badge,
   Button,
+  ConfirmDialog,
   EmptyState,
   ErrorNote,
   Field,
@@ -42,6 +43,9 @@ export default function FeeCategoriesPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<FeeCategory | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<FeeCategory | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -109,13 +113,20 @@ export default function FeeCategoriesPage() {
     }
   };
 
-  const removeCategory = async (category: FeeCategory) => {
-    if (!confirm(`Delete category ${category.name}?`)) return;
+  const confirmRemoveCategory = async () => {
+    if (!pendingDelete) return;
+    setDeleteError(null);
+    setDeleting(true);
     try {
-      await api.delete(`/fees/categories/${category.id}`);
+      await api.delete(`/fees/categories/${pendingDelete.id}`);
+      setPendingDelete(null);
       await load();
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Failed to delete category");
+      setDeleteError(
+        err instanceof ApiError ? err.message : "Failed to delete category"
+      );
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -156,9 +167,9 @@ export default function FeeCategoriesPage() {
       ) : categories.length === 0 ? (
         <EmptyState message="No categories yet" />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-xl border border-line bg-white">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+            <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
               <tr>
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Code</th>
@@ -166,10 +177,10 @@ export default function FeeCategoriesPage() {
                 {(canUpdate || canDelete) && <th className="px-4 py-3" />}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-line">
               {categories.map((category) => (
-                <tr key={category.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium text-slate-900">
+                <tr key={category.id} className="hover:bg-hover">
+                  <td className="px-4 py-3 font-medium text-ink">
                     {category.name}
                   </td>
                   <td className="px-4 py-3 font-mono text-xs">
@@ -193,7 +204,10 @@ export default function FeeCategoriesPage() {
                         )}
                         {canDelete && (
                           <button
-                            onClick={() => removeCategory(category)}
+                            onClick={() => {
+                              setDeleteError(null);
+                              setPendingDelete(category);
+                            }}
                             className="text-xs font-medium text-red-600 hover:text-red-700"
                           >
                             Delete
@@ -242,6 +256,24 @@ export default function FeeCategoriesPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Delete category"
+        message={
+          <span className="space-y-2">
+            <span className="block">
+              Delete category <strong>{pendingDelete?.name}</strong>? This cannot
+              be undone.
+            </span>
+            {deleteError && <ErrorNote message={deleteError} />}
+          </span>
+        }
+        confirmLabel="Delete"
+        busy={deleting}
+        onConfirm={confirmRemoveCategory}
+        onClose={() => setPendingDelete(null)}
+      />
     </>
   );
 }
