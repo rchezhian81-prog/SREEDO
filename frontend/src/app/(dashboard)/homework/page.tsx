@@ -441,7 +441,7 @@ export default function HomeworkPage() {
                     onChange={(event) => setFilterSection(event.target.value)}
                   >
                     <option value="">{`All ${term.sectionPlural.toLowerCase()}`}</option>
-                    {sections.map((section) => (
+                    {visibleSections.map((section) => (
                       <option key={section.id} value={section.id}>
                         {section.label}
                       </option>
