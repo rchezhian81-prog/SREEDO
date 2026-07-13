@@ -21,8 +21,7 @@ import type {
   TransportFee,
   TransportRoute,
 } from "@/types";
-
-const FREQUENCIES = ["monthly", "quarterly", "annual", "one_time"] as const;
+import { FEE_FREQUENCIES } from "@/lib/fees";
 
 export default function TransportFeesPage() {
   const { can, loading: permsLoading } = usePermissions();
@@ -343,9 +342,9 @@ export default function TransportFeesPage() {
                     value={frequency}
                     onChange={(event) => setFrequency(event.target.value)}
                   >
-                    {FREQUENCIES.map((value) => (
+                    {FEE_FREQUENCIES.map(({ value, label }) => (
                       <option key={value} value={value}>
-                        {value}
+                        {label}
                       </option>
                     ))}
                   </Select>
