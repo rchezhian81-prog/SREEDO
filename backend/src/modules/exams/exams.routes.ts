@@ -9,6 +9,12 @@ import {
   assertStudentAccess,
   requireStaff,
 } from "../../utils/scope";
+import {
+  assertSectionInTeacherScope,
+  assertStudentsInTeacherScope,
+  resolveTeacherScope,
+  scopedSectionIds,
+} from "../../utils/teacher-scope";
 import { createExamSchema, upsertResultsSchema } from "./exams.schema";
 import * as examsService from "./exams.service";
 
@@ -99,8 +105,17 @@ examsRouter.get("/:id/results", async (req, res) => {
   const { sectionId } = z
     .object({ sectionId: z.string().uuid().optional() })
     .parse(req.query);
+  // A scoped teacher sees only their own sections' results: a foreign section is
+  // a 403; an unfiltered request is narrowed to the sections they own.
+  const scope = await resolveTeacherScope(req);
+  await assertSectionInTeacherScope(req, scope, sectionId, "exams:results");
   res.json(
-    await examsService.examResults(uuidParam(req), sectionId, tenantId(req))
+    await examsService.examResults(
+      uuidParam(req),
+      sectionId,
+      tenantId(req),
+      scopedSectionIds(scope)
+    )
   );
 });
 
@@ -109,6 +124,14 @@ examsRouter.post(
   requirePermission("exams:enter_marks"),
   async (req, res) => {
     const input = upsertResultsSchema.parse(req.body);
+    const scope = await resolveTeacherScope(req);
+    await assertStudentsInTeacherScope(
+      req,
+      scope,
+      input.results.map((r) => r.studentId),
+      "exams:enter_marks",
+      tenantId(req)
+    );
     res.json(
       await examsService.upsertResults(uuidParam(req), input, tenantId(req))
     );

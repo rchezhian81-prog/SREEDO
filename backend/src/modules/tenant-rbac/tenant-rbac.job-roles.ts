@@ -115,18 +115,20 @@ const RAW_JOB_ROLES: JobRole[] = [
   {
     key: "exam_controller",
     name: "Exam Controller",
-    description: "Exams, marks, results and report cards. No fees or RBAC by default.",
+    description: "Exams, marks, results and report cards across the institution. No fees or RBAC by default.",
     baseRole: "teacher",
     appliesTo: "both",
-    permissions: uniq(g("exams"), ["timetable:read"]),
+    // Institution-wide operational role: bypasses teacher own-class scoping.
+    permissions: uniq(g("exams"), ["timetable:read", "academics:all_sections"]),
   },
   {
     key: "attendance_officer",
     name: "Attendance Officer",
-    description: "Attendance marking, editing and reports.",
+    description: "Attendance marking, editing and reports across the institution.",
     baseRole: "teacher",
     appliesTo: "both",
-    permissions: uniq(g("student_leave"), ["attendance:mark", "reports:read"]),
+    // Institution-wide operational role: bypasses teacher own-class scoping.
+    permissions: uniq(g("student_leave"), ["attendance:mark", "reports:read", "academics:all_sections"]),
   },
   {
     key: "timetable_coordinator",

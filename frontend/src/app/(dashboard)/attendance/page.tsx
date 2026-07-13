@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import {
   Button,
@@ -15,6 +15,7 @@ import {
 import type { AttendanceRow, SchoolClass } from "@/types";
 import { useI18n } from "@/i18n/I18nProvider";
 import { useTerms } from "@/lib/terms";
+import { filterToScope, useTeachingScope } from "@/lib/use-teaching-scope";
 
 const STATUSES = ["present", "absent", "late", "excused"] as const;
 type Status = (typeof STATUSES)[number];
@@ -34,6 +35,7 @@ interface SectionOption {
 export default function AttendancePage() {
   const term = useTerms();
   const { t } = useI18n();
+  const scope = useTeachingScope();
   const [sections, setSections] = useState<SectionOption[]>([]);
   const [sectionId, setSectionId] = useState("");
   const [date, setDate] = useState(() =>
@@ -49,17 +51,31 @@ export default function AttendancePage() {
     api
       .get<SchoolClass[]>("/classes")
       .then((classes) => {
-        const options = classes.flatMap((schoolClass) =>
-          schoolClass.sections.map((section) => ({
-            id: section.id,
-            label: `${schoolClass.name} — ${section.name}`,
-          }))
+        setSections(
+          classes.flatMap((schoolClass) =>
+            schoolClass.sections.map((section) => ({
+              id: section.id,
+              label: `${schoolClass.name} — ${section.name}`,
+            }))
+          )
         );
-        setSections(options);
-        if (options[0]) setSectionId(options[0].id);
       })
       .catch(() => undefined);
   }, []);
+
+  // A scoped teacher only sees the sections they own; keep the selection valid.
+  const visibleSections = useMemo(
+    () => filterToScope(sections, scope),
+    [sections, scope.unrestricted, scope.sectionIds]
+  );
+  useEffect(() => {
+    if (!visibleSections.some((section) => section.id === sectionId)) {
+      setSectionId(visibleSections[0]?.id ?? "");
+    }
+  }, [visibleSections, sectionId]);
+
+  const noOwnedSections =
+    !scope.loading && !scope.unrestricted && visibleSections.length === 0;
 
   const load = useCallback(async () => {
     if (!sectionId) return;
@@ -121,6 +137,12 @@ export default function AttendancePage() {
         subtitle={t("pages.attendance.subtitle")}
       />
 
+      {noOwnedSections ? (
+        <EmptyState
+          message={`You aren't assigned to any ${term.section.toLowerCase()} yet. Ask an administrator to make you a class teacher, or to assign your subjects or timetable.`}
+        />
+      ) : (
+        <>
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <div className="w-56">
           <span className="mb-1 block text-sm font-medium text-ink">
@@ -130,7 +152,7 @@ export default function AttendancePage() {
             value={sectionId}
             onChange={(event) => setSectionId(event.target.value)}
           >
-            {sections.map((section) => (
+            {visibleSections.map((section) => (
               <option key={section.id} value={section.id}>
                 {section.label}
               </option>
@@ -208,6 +230,8 @@ export default function AttendancePage() {
             </tbody>
           </table>
         </div>
+      )}
+        </>
       )}
     </>
   );

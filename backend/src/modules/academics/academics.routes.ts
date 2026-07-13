@@ -4,6 +4,7 @@ import { authenticate } from "../../middleware/auth";
 import { requireTenant, tenantId } from "../../middleware/tenant";
 import { requireInstitutionType } from "../../middleware/institution-type";
 import { requirePermission } from "../../middleware/permissions";
+import { resolveTeacherScope } from "../../utils/teacher-scope";
 import {
   assignSectionSubjectSchema,
   createAcademicYearSchema,
@@ -21,6 +22,26 @@ export const academicsRouter = Router();
 // router-level .use() would run for every /api/v1 request — including sibling
 // routers' paths like /institutions — and wrongly reject them.
 const guard = [authenticate, requireTenant];
+
+/**
+ * @openapi
+ * /teaching-scope:
+ *   get:
+ *     tags: [Academics]
+ *     summary: The caller's own-class teaching scope (drives section-scoped UIs)
+ *     description: >
+ *       Returns `{ unrestricted, sectionIds }`. `unrestricted: true` means the
+ *       caller sees every section (admin/broad-view staff, or the
+ *       ENFORCE_TEACHER_SCOPE kill-switch is off); otherwise `sectionIds` is the
+ *       exhaustive set of sections the teacher owns (may be empty).
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ unrestricted: boolean, sectionIds: string[] }" }
+ */
+academicsRouter.get("/teaching-scope", ...guard, async (req, res) => {
+  const scope = await resolveTeacherScope(req);
+  res.json({ unrestricted: scope.unrestricted, sectionIds: scope.sectionIds });
+});
 
 /**
  * @openapi

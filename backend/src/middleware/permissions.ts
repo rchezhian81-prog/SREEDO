@@ -242,7 +242,7 @@ export async function permissionsForRole(role: UserRole): Promise<string[]> {
   return [...(map.get(role) ?? [])];
 }
 
-async function userHasPermission(user: AuthenticatedUser, key: string): Promise<boolean> {
+export async function userHasPermission(user: AuthenticatedUser, key: string): Promise<boolean> {
   if (user.role !== "super_admin") {
     // Finer job-role (jr_…) replaces the coarse role for resolution when set.
     const resolutionRole = (await jobRoleOf(user.id)) ?? user.role;

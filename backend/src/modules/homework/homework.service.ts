@@ -4,6 +4,10 @@ import { query } from "../../db/postgres";
 import { ApiError } from "../../utils/api-error";
 import { storage } from "../../utils/storage";
 import { accessibleStudentIds } from "../../utils/scope";
+import {
+  assertSectionInTeacherScope,
+  resolveTeacherScope,
+} from "../../utils/teacher-scope";
 import { assertValidFile } from "../documents/documents.service";
 import { sendMessage } from "../communication/communication.service";
 import type { z } from "zod";
@@ -195,6 +199,14 @@ export async function listHomework(
       params.push(filters.batchId);
       conditions.push(`h.batch_id = $${params.length}`);
     }
+    // Teacher own-class scoping: a scoped teacher only lists homework for the
+    // sections they own (unrestricted for admins/broad-view staff and always a
+    // no-op while the ENFORCE_TEACHER_SCOPE kill-switch is off).
+    const teacherScope = await resolveTeacherScope(req);
+    if (!teacherScope.unrestricted) {
+      params.push(teacherScope.sectionIds);
+      conditions.push(`h.section_id = ANY($${params.length}::uuid[])`);
+    }
   }
   if (filters.subjectId) {
     params.push(filters.subjectId);
@@ -291,6 +303,33 @@ async function getHomeworkRow(id: string, institutionId: string) {
   };
 }
 
+/** The section a homework targets (null for college/semester targets), or null
+ *  when the homework is not in this tenant. Used for teacher scope checks. */
+export async function sectionOfHomework(
+  id: string,
+  institutionId: string
+): Promise<string | null> {
+  const { rows } = await query<{ section_id: string | null }>(
+    "SELECT section_id FROM homework WHERE id = $1 AND institution_id = $2",
+    [id, institutionId]
+  );
+  return rows[0]?.section_id ?? null;
+}
+
+/** The section behind a submission (via its homework), or null. */
+export async function sectionOfSubmission(
+  submissionId: string,
+  institutionId: string
+): Promise<string | null> {
+  const { rows } = await query<{ section_id: string | null }>(
+    `SELECT h.section_id FROM homework_submissions hs
+     JOIN homework h ON h.id = hs.homework_id
+     WHERE hs.id = $1 AND hs.institution_id = $2`,
+    [submissionId, institutionId]
+  );
+  return rows[0]?.section_id ?? null;
+}
+
 export async function getHomework(
   req: Request,
   id: string,
@@ -301,6 +340,10 @@ export async function getHomework(
   if (scope !== null && !scopeAllows(scope, homework)) {
     throw ApiError.forbidden("You cannot access this homework");
   }
+  // Staff teacher own-class scoping (no-op for students/parents and broad-view
+  // staff). Section-targeted (school) homework only; college targets are exempt.
+  const teacherScope = await resolveTeacherScope(req);
+  await assertSectionInTeacherScope(req, teacherScope, homework.sectionId, "homework:read");
   const attachments = await attachmentsFor("homework", id, institutionId);
 
   // A student also gets their own submission inline.

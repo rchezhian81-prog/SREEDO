@@ -1,6 +1,11 @@
 import { Router } from "express";
 import { authenticate, authorize } from "../../middleware/auth";
 import { requireTenant, tenantId } from "../../middleware/tenant";
+import {
+  assertSectionInTeacherScope,
+  assertStudentsInTeacherScope,
+  resolveTeacherScope,
+} from "../../utils/teacher-scope";
 import { rosterQuerySchema, markSchema } from "./periodattendance.schema";
 import * as service from "./periodattendance.service";
 
@@ -24,6 +29,9 @@ periodAttendanceRouter.use(authenticate, requireTenant, authorize("admin", "teac
  */
 periodAttendanceRouter.get("/roster", async (req, res) => {
   const filters = rosterQuerySchema.parse(req.query);
+  // A scoped teacher may only open rosters for sections they own.
+  const scope = await resolveTeacherScope(req);
+  await assertSectionInTeacherScope(req, scope, filters.sectionId, "period_attendance:roster");
   res.json(await service.getRoster(filters, tenantId(req)));
 });
 
@@ -58,5 +66,13 @@ periodAttendanceRouter.get("/roster", async (req, res) => {
  */
 periodAttendanceRouter.post("/", async (req, res) => {
   const input = markSchema.parse(req.body);
+  const scope = await resolveTeacherScope(req);
+  await assertStudentsInTeacherScope(
+    req,
+    scope,
+    input.entries.map((e) => e.studentId),
+    "period_attendance:mark",
+    tenantId(req)
+  );
   res.json(await service.markAttendance(input, tenantId(req), req.user!.id));
 });
