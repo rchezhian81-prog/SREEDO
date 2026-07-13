@@ -31,8 +31,14 @@ const DASHBOARD = join(SRC, "app", "(dashboard)");
 
 // Module path-prefixes (relative to (dashboard)) that have been swept to the
 // design-system bar and are now locked clean. Add the next group here when its
-// PX3 PR lands. PX3-A: Fees & Accounts. PX3-B: Payroll.
-export const SWEPT = ["fees", "accounting", "online-payments", "payroll"];
+// PX3 PR lands. PX3-A: Fees & Accounts. PX3-B: Payroll. PX3-C: Inventory.
+export const SWEPT = [
+  "fees",
+  "accounting",
+  "online-payments",
+  "payroll",
+  "inventory",
+];
 
 const superAdminDir = `(dashboard)${sep}super-admin${sep}`;
 

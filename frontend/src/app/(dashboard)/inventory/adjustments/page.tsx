@@ -159,7 +159,7 @@ export default function AdjustmentsPage() {
       <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
         <div>
           <div className="mb-4 w-64">
-            <span className="mb-1 block text-sm font-medium text-slate-700">
+            <span className="mb-1 block text-sm font-medium text-ink">
               Filter by item
             </span>
             <Select
@@ -182,9 +182,9 @@ export default function AdjustmentsPage() {
           ) : adjustments.length === 0 ? (
             <EmptyState message="No adjustments recorded" />
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+            <div className="overflow-x-auto rounded-xl border border-line bg-surface">
               <table className="w-full text-left text-sm">
-                <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+                <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
                   <tr>
                     <th className="px-4 py-3">Date</th>
                     <th className="px-4 py-3">Item</th>
@@ -194,22 +194,22 @@ export default function AdjustmentsPage() {
                     <th className="px-4 py-3">Approved by</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-line">
                   {adjustments.map((adjustment) => {
                     const qty = Number(adjustment.quantity);
                     return (
-                      <tr key={adjustment.id} className="hover:bg-slate-50">
-                        <td className="px-4 py-3 text-slate-600">
+                      <tr key={adjustment.id} className="hover:bg-hover">
+                        <td className="px-4 py-3 text-muted">
                           {fmtDateTime(adjustment.createdAt)}
                         </td>
-                        <td className="px-4 py-3 font-medium text-slate-900">
+                        <td className="px-4 py-3 font-medium text-ink">
                           {adjustment.itemName}
                         </td>
                         <td
                           className={
                             qty < 0
-                              ? "px-4 py-3 text-right font-medium text-red-600"
-                              : "px-4 py-3 text-right font-medium text-emerald-600"
+                              ? "px-4 py-3 text-right font-medium tabular-nums text-danger"
+                              : "px-4 py-3 text-right font-medium tabular-nums text-success"
                           }
                         >
                           {signed(qty)}
@@ -229,7 +229,7 @@ export default function AdjustmentsPage() {
                             "—"
                           )}
                         </td>
-                        <td className="px-4 py-3 text-slate-500">
+                        <td className="px-4 py-3 text-muted">
                           {adjustment.note ?? "—"}
                         </td>
                         <td className="px-4 py-3">
@@ -246,10 +246,10 @@ export default function AdjustmentsPage() {
 
         {canAdjust && (
           <Card className="h-fit">
-            <h2 className="text-sm font-semibold text-slate-900">
+            <h2 className="text-sm font-semibold text-ink">
               New adjustment
             </h2>
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-sm text-muted">
               Use a negative quantity to reduce stock.
             </p>
             <div className="mt-4 space-y-3">
@@ -268,9 +268,9 @@ export default function AdjustmentsPage() {
                 </Select>
               </Field>
               {selectedItem && (
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-muted">
                   Current stock:{" "}
-                  <span className="font-medium text-slate-700">
+                  <span className="font-medium text-ink">
                     {selectedItem.currentStock}
                     {selectedItem.unit ? ` ${selectedItem.unit}` : ""}
                   </span>

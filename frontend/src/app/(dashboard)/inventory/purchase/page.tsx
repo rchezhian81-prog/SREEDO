@@ -212,7 +212,7 @@ export default function PurchasePage() {
       <div className="grid gap-6 lg:grid-cols-[1fr_24rem]">
         <div>
           <div className="mb-4 w-64">
-            <span className="mb-1 block text-sm font-medium text-slate-700">
+            <span className="mb-1 block text-sm font-medium text-ink">
               Filter by vendor
             </span>
             <Select
@@ -235,9 +235,9 @@ export default function PurchasePage() {
           ) : purchases.length === 0 ? (
             <EmptyState message="No purchases recorded" />
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+            <div className="overflow-x-auto rounded-xl border border-line bg-surface">
               <table className="w-full text-left text-sm">
-                <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+                <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
                   <tr>
                     <th className="px-4 py-3">Date</th>
                     <th className="px-4 py-3">Vendor</th>
@@ -247,22 +247,22 @@ export default function PurchasePage() {
                     <th className="px-4 py-3" />
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-line">
                   {purchases.map((purchase) => (
-                    <tr key={purchase.id} className="hover:bg-slate-50">
-                      <td className="px-4 py-3 text-slate-600">
+                    <tr key={purchase.id} className="hover:bg-hover">
+                      <td className="px-4 py-3 text-muted">
                         {fmtDate(purchase.purchaseDate)}
                       </td>
-                      <td className="px-4 py-3 font-medium text-slate-900">
+                      <td className="px-4 py-3 font-medium text-ink">
                         {purchase.vendorName ?? "—"}
                       </td>
                       <td className="px-4 py-3 font-mono text-xs">
                         {purchase.billNo ?? "—"}
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-4 py-3 text-right tabular-nums">
                         {purchase.lineCount}
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-4 py-3 text-right tabular-nums">
                         {Number(purchase.totalAmount).toLocaleString()}
                       </td>
                       <td className="px-4 py-3 text-right">
@@ -283,10 +283,10 @@ export default function PurchasePage() {
 
         {canPurchase && (
           <Card className="h-fit">
-            <h2 className="text-sm font-semibold text-slate-900">
+            <h2 className="text-sm font-semibold text-ink">
               New purchase
             </h2>
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-sm text-muted">
               Records stock-in and increases item stock.
             </p>
             <div className="mt-4 space-y-3">
@@ -320,13 +320,13 @@ export default function PurchasePage() {
               </div>
 
               <div className="space-y-2">
-                <span className="block text-sm font-medium text-slate-700">
+                <span className="block text-sm font-medium text-ink">
                   Items
                 </span>
                 {lines.map((line, index) => (
                   <div
                     key={index}
-                    className="space-y-2 rounded-lg border border-slate-200 p-3"
+                    className="space-y-2 rounded-lg border border-line p-3"
                   >
                     <Select
                       value={line.itemId}
@@ -363,7 +363,7 @@ export default function PurchasePage() {
                         }
                       />
                     </div>
-                    <div className="flex items-center justify-between text-xs text-slate-500">
+                    <div className="flex items-center justify-between text-xs text-muted">
                       <span>
                         Amount: {lineAmount(line).toLocaleString()}
                       </span>
@@ -396,9 +396,9 @@ export default function PurchasePage() {
                 />
               </Field>
 
-              <div className="flex items-center justify-between border-t border-slate-200 pt-3 text-sm">
-                <span className="font-medium text-slate-700">Total</span>
-                <span className="text-lg font-semibold text-slate-900">
+              <div className="flex items-center justify-between border-t border-line pt-3 text-sm">
+                <span className="font-medium text-ink">Total</span>
+                <span className="text-lg font-semibold text-ink">
                   {total.toLocaleString()}
                 </span>
               </div>
@@ -428,33 +428,33 @@ export default function PurchasePage() {
           <ErrorNote message={detailError} />
         ) : detail ? (
           <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-2 text-sm text-slate-600">
+            <div className="grid grid-cols-2 gap-2 text-sm text-muted">
               <p>
-                <span className="text-slate-400">Vendor: </span>
+                <span className="text-faint">Vendor: </span>
                 {detail.vendorName ?? "—"}
               </p>
               <p>
-                <span className="text-slate-400">Date: </span>
+                <span className="text-faint">Date: </span>
                 {fmtDate(detail.purchaseDate)}
               </p>
               <p>
-                <span className="text-slate-400">Bill no: </span>
+                <span className="text-faint">Bill no: </span>
                 {detail.billNo ?? "—"}
               </p>
               <p>
-                <span className="text-slate-400">Total: </span>
+                <span className="text-faint">Total: </span>
                 {Number(detail.totalAmount).toLocaleString()}
               </p>
             </div>
             {detail.notes ? (
-              <p className="text-sm text-slate-500">{detail.notes}</p>
+              <p className="text-sm text-muted">{detail.notes}</p>
             ) : null}
             {detail.items.length === 0 ? (
               <EmptyState message="No lines on this purchase" />
             ) : (
-              <div className="overflow-x-auto rounded-xl border border-slate-200">
+              <div className="overflow-x-auto rounded-xl border border-line">
                 <table className="w-full text-left text-sm">
-                  <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+                  <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
                     <tr>
                       <th className="px-4 py-3">Item</th>
                       <th className="px-4 py-3 text-right">Qty</th>
@@ -462,27 +462,27 @@ export default function PurchasePage() {
                       <th className="px-4 py-3 text-right">Amount</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-line">
                     {detail.items.map((line) => (
                       <tr key={line.id}>
-                        <td className="px-4 py-3 text-slate-900">
+                        <td className="px-4 py-3 text-ink">
                           {line.itemName}
                           {line.unit ? (
-                            <span className="text-xs text-slate-400">
+                            <span className="text-xs text-faint">
                               {" "}
                               ({line.unit})
                             </span>
                           ) : null}
                         </td>
-                        <td className="px-4 py-3 text-right">
+                        <td className="px-4 py-3 text-right tabular-nums">
                           {Number(line.quantity).toLocaleString()}
                         </td>
-                        <td className="px-4 py-3 text-right">
+                        <td className="px-4 py-3 text-right tabular-nums">
                           {line.rate === null
                             ? "—"
                             : Number(line.rate).toLocaleString()}
                         </td>
-                        <td className="px-4 py-3 text-right">
+                        <td className="px-4 py-3 text-right tabular-nums">
                           {Number(line.amount).toLocaleString()}
                         </td>
                       </tr>

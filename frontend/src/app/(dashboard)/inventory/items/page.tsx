@@ -7,6 +7,7 @@ import { usePermissions } from "@/lib/use-permissions";
 import {
   Badge,
   Button,
+  ConfirmDialog,
   EmptyState,
   ErrorNote,
   Field,
@@ -61,6 +62,11 @@ export default function ItemsPage() {
   const [movements, setMovements] = useState<StockMovement[]>([]);
   const [movementsLoading, setMovementsLoading] = useState(false);
   const [movementsError, setMovementsError] = useState<string | null>(null);
+
+  // Delete confirmation.
+  const [pendingDelete, setPendingDelete] = useState<InventoryItem | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -166,13 +172,20 @@ export default function ItemsPage() {
     }
   };
 
-  const removeItem = async (item: InventoryItem) => {
-    if (!confirm(`Delete item ${item.name}?`)) return;
+  const confirmRemove = async () => {
+    if (!pendingDelete) return;
+    setDeleteError(null);
+    setDeleting(true);
     try {
-      await api.delete(`/inventory/items/${item.id}`);
+      await api.delete(`/inventory/items/${pendingDelete.id}`);
+      setPendingDelete(null);
       await load();
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Failed to delete item");
+      setDeleteError(
+        err instanceof ApiError ? err.message : "Failed to delete item"
+      );
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -233,7 +246,7 @@ export default function ItemsPage() {
 
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <div className="w-64">
-          <span className="mb-1 block text-sm font-medium text-slate-700">
+          <span className="mb-1 block text-sm font-medium text-ink">
             Search
           </span>
           <Input
@@ -243,7 +256,7 @@ export default function ItemsPage() {
           />
         </div>
         <div className="w-56">
-          <span className="mb-1 block text-sm font-medium text-slate-700">
+          <span className="mb-1 block text-sm font-medium text-ink">
             Category
           </span>
           <Select
@@ -258,10 +271,10 @@ export default function ItemsPage() {
             ))}
           </Select>
         </div>
-        <label className="flex items-center gap-2 pb-2 text-sm font-medium text-slate-700">
+        <label className="flex items-center gap-2 pb-2 text-sm font-medium text-ink">
           <input
             type="checkbox"
-            className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+            className="h-4 w-4 rounded border-line text-brand-600 focus:ring-brand-500"
             checked={lowStockOnly}
             onChange={(event) => setLowStockOnly(event.target.checked)}
           />
@@ -276,9 +289,9 @@ export default function ItemsPage() {
       ) : items.length === 0 ? (
         <EmptyState message="No items found" />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-xl border border-line bg-surface">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+            <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
               <tr>
                 <th className="px-4 py-3">Code</th>
                 <th className="px-4 py-3">Name</th>
@@ -290,22 +303,24 @@ export default function ItemsPage() {
                 <th className="px-4 py-3" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-line">
               {items.map((item) => (
-                <tr key={item.id} className="hover:bg-slate-50">
+                <tr key={item.id} className="hover:bg-hover">
                   <td className="px-4 py-3 font-mono text-xs">{item.code}</td>
-                  <td className="px-4 py-3 font-medium text-slate-900">
+                  <td className="px-4 py-3 font-medium text-ink">
                     {item.name}
                   </td>
                   <td className="px-4 py-3">{item.categoryName ?? "—"}</td>
                   <td className="px-4 py-3">{item.unit ?? "—"}</td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-4 py-3 text-right tabular-nums">
                     <span className="inline-flex items-center gap-2">
                       {item.currentStock}
                       {item.lowStock && <Badge tone="red">low</Badge>}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right">{item.minStockLevel}</td>
+                  <td className="px-4 py-3 text-right tabular-nums">
+                    {item.minStockLevel}
+                  </td>
                   <td className="px-4 py-3">{item.location ?? "—"}</td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex justify-end gap-3">
@@ -325,7 +340,10 @@ export default function ItemsPage() {
                       )}
                       {canDelete && (
                         <button
-                          onClick={() => removeItem(item)}
+                          onClick={() => {
+                            setDeleteError(null);
+                            setPendingDelete(item);
+                          }}
                           className="text-xs font-medium text-red-600 hover:text-red-700"
                         >
                           Delete
@@ -388,7 +406,7 @@ export default function ItemsPage() {
                 <Input
                   value={openingStock}
                   disabled
-                  className="bg-slate-50 text-slate-500"
+                  className="bg-surface-2 text-muted"
                 />
               </Field>
             ) : (
@@ -418,7 +436,7 @@ export default function ItemsPage() {
             />
           </Field>
           {editing && (
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-faint">
               Opening stock is fixed after creation. Use Purchase, Issue and
               Adjustment to change current stock.
             </p>
@@ -451,9 +469,9 @@ export default function ItemsPage() {
         ) : movements.length === 0 ? (
           <EmptyState message="No movements recorded" />
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-slate-200">
+          <div className="overflow-x-auto rounded-xl border border-line">
             <table className="w-full text-left text-sm">
-              <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+              <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
                 <tr>
                   <th className="px-4 py-3">Date</th>
                   <th className="px-4 py-3">Type</th>
@@ -462,26 +480,26 @@ export default function ItemsPage() {
                   <th className="px-4 py-3">Note</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-line">
                 {movements.map((movement) => (
                   <tr key={movement.id}>
-                    <td className="px-4 py-3 text-slate-500">
+                    <td className="px-4 py-3 text-muted">
                       {fmtDateTime(movement.createdAt)}
                     </td>
                     <td className="px-4 py-3">{movement.type}</td>
                     <td
                       className={
                         movement.change < 0
-                          ? "px-4 py-3 text-right font-medium text-red-600"
-                          : "px-4 py-3 text-right font-medium text-emerald-600"
+                          ? "px-4 py-3 text-right font-medium tabular-nums text-danger"
+                          : "px-4 py-3 text-right font-medium tabular-nums text-success"
                       }
                     >
                       {signed(movement.change)}
                     </td>
-                    <td className="px-4 py-3 text-right text-slate-900">
+                    <td className="px-4 py-3 text-right tabular-nums text-ink">
                       {movement.balanceAfter}
                     </td>
-                    <td className="px-4 py-3 text-slate-500">
+                    <td className="px-4 py-3 text-muted">
                       {movement.note ?? "—"}
                     </td>
                   </tr>
@@ -491,6 +509,24 @@ export default function ItemsPage() {
           </div>
         )}
       </Modal>
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Delete item"
+        message={
+          <span className="space-y-2">
+            <span className="block">
+              Delete item <strong>{pendingDelete?.name}</strong>? This cannot be
+              undone.
+            </span>
+            {deleteError && <ErrorNote message={deleteError} />}
+          </span>
+        }
+        confirmLabel="Delete"
+        busy={deleting}
+        onConfirm={confirmRemove}
+        onClose={() => setPendingDelete(null)}
+      />
     </>
   );
 }
