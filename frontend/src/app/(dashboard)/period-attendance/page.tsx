@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useTerms } from "@/lib/terms";
+import { filterToScope, useTeachingScope } from "@/lib/use-teaching-scope";
 import {
   Button,
   cx,
@@ -31,6 +32,7 @@ interface RosterRow { studentId: string; name: string; admissionNo: string | nul
 
 export default function PeriodAttendancePage() {
   const term = useTerms();
+  const scope = useTeachingScope();
   const [sections, setSections] = useState<SectionOption[]>([]);
   const [periods, setPeriods] = useState<Period[]>([]);
   const [sectionId, setSectionId] = useState("");
@@ -47,11 +49,11 @@ export default function PeriodAttendancePage() {
     api
       .get<SchoolClass[]>("/classes")
       .then((classes) => {
-        const opts = classes.flatMap((c) =>
-          c.sections.map((s) => ({ id: s.id, label: `${c.name} — ${s.name}` }))
+        setSections(
+          classes.flatMap((c) =>
+            c.sections.map((s) => ({ id: s.id, label: `${c.name} — ${s.name}` }))
+          )
         );
-        setSections(opts);
-        if (opts[0]) setSectionId(opts[0].id);
       })
       .catch(() => undefined);
     api
@@ -62,6 +64,20 @@ export default function PeriodAttendancePage() {
       })
       .catch(() => undefined);
   }, []);
+
+  // A scoped teacher only sees the sections they own; keep the selection valid.
+  const visibleSections = useMemo(
+    () => filterToScope(sections, scope),
+    [sections, scope.unrestricted, scope.sectionIds]
+  );
+  useEffect(() => {
+    if (!visibleSections.some((s) => s.id === sectionId)) {
+      setSectionId(visibleSections[0]?.id ?? "");
+    }
+  }, [visibleSections, sectionId]);
+
+  const noOwnedSections =
+    !scope.loading && !scope.unrestricted && visibleSections.length === 0;
 
   const load = useCallback(async () => {
     if (!sectionId || !periodId) return;
@@ -107,10 +123,16 @@ export default function PeriodAttendancePage() {
     <>
       <PageHeader title="Period Attendance" subtitle="Mark attendance per class period" />
 
+      {noOwnedSections ? (
+        <EmptyState
+          message={`You aren't assigned to any ${term.section.toLowerCase()} yet. Ask an administrator to make you a class teacher, or to assign your subjects or timetable.`}
+        />
+      ) : (
+        <>
       <div className="mb-4 flex flex-wrap gap-3">
         <div className="w-56">
           <Select value={sectionId} onChange={(e) => setSectionId(e.target.value)}>
-            {sections.map((s) => (
+            {visibleSections.map((s) => (
               <option key={s.id} value={s.id}>{s.label}</option>
             ))}
           </Select>
@@ -183,6 +205,8 @@ export default function PeriodAttendancePage() {
               {saving ? "Saving…" : "Save attendance"}
             </Button>
           </div>
+        </>
+      )}
         </>
       )}
     </>

@@ -53,7 +53,10 @@ export async function listByDate(
     sectionId?: string;
     date?: string;
   },
-  institutionId: string
+  institutionId: string,
+  // When non-null, narrows the roster to these sections (teacher own-class
+  // scoping). An empty array yields no rows — the caller owns no sections.
+  allowedSectionIds: string[] | null = null
 ) {
   const date = filters.date ?? new Date().toISOString().slice(0, 10);
   const params: unknown[] = [date, institutionId];
@@ -61,6 +64,10 @@ export async function listByDate(
   if (filters.sectionId) {
     params.push(filters.sectionId);
     sectionFilter = `AND s.section_id = $${params.length}`;
+  }
+  if (allowedSectionIds !== null) {
+    params.push(allowedSectionIds);
+    sectionFilter += ` AND s.section_id = ANY($${params.length}::uuid[])`;
   }
   const { rows } = await query(
     `SELECT s.id AS "studentId",

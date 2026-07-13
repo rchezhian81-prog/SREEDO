@@ -102,13 +102,20 @@ export async function upsertResults(
 export async function examResults(
   examId: string,
   sectionId: string | undefined,
-  institutionId: string
+  institutionId: string,
+  // When non-null, narrows results to these sections (teacher own-class
+  // scoping). An empty array yields no rows — the caller owns no sections.
+  allowedSectionIds: string[] | null = null
 ) {
   const params: unknown[] = [examId, institutionId];
   let sectionFilter = "";
   if (sectionId) {
     params.push(sectionId);
     sectionFilter = `AND s.section_id = $${params.length}`;
+  }
+  if (allowedSectionIds !== null) {
+    params.push(allowedSectionIds);
+    sectionFilter += ` AND s.section_id = ANY($${params.length}::uuid[])`;
   }
   const { rows } = await query(
     `SELECT er.student_id AS "studentId",

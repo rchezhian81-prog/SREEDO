@@ -1,10 +1,14 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { uuidParam } from "../../utils/params";
 import { authenticate } from "../../middleware/auth";
 import { requireTenant, tenantId } from "../../middleware/tenant";
 import { requirePermission } from "../../middleware/permissions";
 import { ApiError } from "../../utils/api-error";
 import { uploadSingle } from "../../utils/upload";
+import {
+  assertSectionInTeacherScope,
+  resolveTeacherScope,
+} from "../../utils/teacher-scope";
 import {
   createHomeworkSchema,
   listHomeworkQuerySchema,
@@ -19,6 +23,19 @@ export const homeworkRouter = Router();
 homeworkRouter.use(authenticate, requireTenant);
 
 const sanitize = (name: string) => name.replace(/[^\w.\- ]+/g, "_").slice(0, 120);
+
+// Teacher own-class scoping: a scoped teacher may only act on homework whose
+// section they own. A no-op for broad-view staff and while the kill-switch is
+// off; college/semester-targeted homework has no section and is exempt here
+// (documented fast-follow).
+async function assertHomeworkInScope(
+  req: Request,
+  sectionId: string | null,
+  action: string
+): Promise<void> {
+  const scope = await resolveTeacherScope(req);
+  await assertSectionInTeacherScope(req, scope, sectionId, action);
+}
 
 /**
  * @openapi
@@ -65,6 +82,7 @@ homeworkRouter.get("/", requirePermission("homework:read"), async (req, res) => 
 
 homeworkRouter.post("/", requirePermission("homework:create"), async (req, res) => {
   const input = createHomeworkSchema.parse(req.body);
+  await assertHomeworkInScope(req, input.sectionId ?? null, "homework:create");
   res.status(201).json(await service.createHomework(input, req.user!.id, tenantId(req)));
 });
 
@@ -102,12 +120,16 @@ homeworkRouter.get("/:id", requirePermission("homework:read"), async (req, res) 
 });
 
 homeworkRouter.patch("/:id", requirePermission("homework:update"), async (req, res) => {
+  const id = uuidParam(req);
   const input = updateHomeworkSchema.parse(req.body);
-  res.json(await service.updateHomework(uuidParam(req), input, tenantId(req)));
+  await assertHomeworkInScope(req, await service.sectionOfHomework(id, tenantId(req)), "homework:update");
+  res.json(await service.updateHomework(id, input, tenantId(req)));
 });
 
 homeworkRouter.delete("/:id", requirePermission("homework:delete"), async (req, res) => {
-  await service.deleteHomework(uuidParam(req), tenantId(req));
+  const id = uuidParam(req);
+  await assertHomeworkInScope(req, await service.sectionOfHomework(id, tenantId(req)), "homework:delete");
+  await service.deleteHomework(id, tenantId(req));
   res.status(204).end();
 });
 
@@ -129,9 +151,11 @@ homeworkRouter.post(
   uploadSingle("file"),
   async (req, res) => {
     if (!req.file) throw ApiError.badRequest("A file is required");
+    const id = uuidParam(req);
+    await assertHomeworkInScope(req, await service.sectionOfHomework(id, tenantId(req)), "homework:attach");
     res
       .status(201)
-      .json(await service.addHomeworkAttachment(uuidParam(req), req.file, tenantId(req), req.user!.id));
+      .json(await service.addHomeworkAttachment(id, req.file, tenantId(req), req.user!.id));
   }
 );
 
@@ -176,7 +200,9 @@ homeworkRouter.get(
   "/:id/submissions",
   requirePermission("homework:review"),
   async (req, res) => {
-    res.json(await service.listSubmissions(uuidParam(req), tenantId(req)));
+    const id = uuidParam(req);
+    await assertHomeworkInScope(req, await service.sectionOfHomework(id, tenantId(req)), "homework:submissions");
+    res.json(await service.listSubmissions(id, tenantId(req)));
   }
 );
 
@@ -207,9 +233,11 @@ homeworkRouter.post(
   "/submissions/:sid/review",
   requirePermission("homework:review"),
   async (req, res) => {
+    const sid = uuidParam(req, "sid");
     const input = reviewSchema.parse(req.body);
+    await assertHomeworkInScope(req, await service.sectionOfSubmission(sid, tenantId(req)), "homework:review");
     res.json(
-      await service.reviewSubmission(uuidParam(req, "sid"), input, req.user!.id, tenantId(req))
+      await service.reviewSubmission(sid, input, req.user!.id, tenantId(req))
     );
   }
 );

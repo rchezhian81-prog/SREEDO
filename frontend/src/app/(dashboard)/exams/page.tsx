@@ -29,6 +29,7 @@ import type {
   Subject,
 } from "@/types";
 import { useTerms } from "@/lib/terms";
+import { filterToScope, useTeachingScope } from "@/lib/use-teaching-scope";
 
 const examSchema = z.object({
   name: z.string().min(1, "Required"),
@@ -46,6 +47,7 @@ interface SectionOption {
 
 export default function ExamsPage() {
   const term = useTerms();
+  const scope = useTeachingScope();
   const role = useAuthStore((state) => state.user?.role);
   const canCreate = role === "admin";
   const canEnter = role === "admin" || role === "teacher";
@@ -101,17 +103,31 @@ export default function ExamsPage() {
     api
       .get<SchoolClass[]>("/classes")
       .then((classes) => {
-        const options = classes.flatMap((schoolClass) =>
-          schoolClass.sections.map((section) => ({
-            id: section.id,
-            label: `${schoolClass.name} — ${section.name}`,
-          }))
+        setSections(
+          classes.flatMap((schoolClass) =>
+            schoolClass.sections.map((section) => ({
+              id: section.id,
+              label: `${schoolClass.name} — ${section.name}`,
+            }))
+          )
         );
-        setSections(options);
-        if (options[0]) setSectionId(options[0].id);
       })
       .catch(() => undefined);
   }, []);
+
+  // A scoped teacher only enters marks for the sections they own.
+  const visibleSections = useMemo(
+    () => filterToScope(sections, scope),
+    [sections, scope.unrestricted, scope.sectionIds]
+  );
+  useEffect(() => {
+    if (!visibleSections.some((section) => section.id === sectionId)) {
+      setSectionId(visibleSections[0]?.id ?? "");
+    }
+  }, [visibleSections, sectionId]);
+
+  const noOwnedSections =
+    !scope.loading && !scope.unrestricted && visibleSections.length === 0;
 
   // Load the section roster and any existing results for the selected exam.
   const loadGrid = useCallback(async () => {
@@ -300,7 +316,9 @@ export default function ExamsPage() {
             </Badge>
           </div>
 
-          {sections.length === 0 || subjects.length === 0 ? (
+          {noOwnedSections ? (
+            <EmptyState message={`You aren't assigned to any ${term.section.toLowerCase()} yet. Ask an administrator to make you a class teacher, or to assign your subjects or timetable.`} />
+          ) : sections.length === 0 || subjects.length === 0 ? (
             <EmptyState message={`Add ${term.klassPlural.toLowerCase()}/${term.sectionPlural.toLowerCase()} and ${term.subjectPlural.toLowerCase()} first (${term.klassPlural} page).`} />
           ) : (
             <>
@@ -313,7 +331,7 @@ export default function ExamsPage() {
                     value={sectionId}
                     onChange={(event) => setSectionId(event.target.value)}
                   >
-                    {sections.map((section) => (
+                    {visibleSections.map((section) => (
                       <option key={section.id} value={section.id}>
                         {section.label}
                       </option>

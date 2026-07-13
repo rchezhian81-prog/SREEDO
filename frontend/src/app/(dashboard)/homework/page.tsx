@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth-store";
+import { filterToScope, useTeachingScope } from "@/lib/use-teaching-scope";
 import {
   Badge,
   Button,
@@ -152,6 +153,9 @@ export default function HomeworkPage() {
   // of a class section; the school flow is unchanged.
   const mode = useModeStore((state) => state.mode);
   const isCollege = mode === "college";
+  // School-mode teacher own-class scoping (a no-op for college and broad-view
+  // staff — the backend returns `unrestricted` for them).
+  const scope = useTeachingScope();
 
   const [sections, setSections] = useState<SectionOption[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -209,6 +213,14 @@ export default function HomeworkPage() {
     }
     return Promise.all(tasks);
   }, [isCollege]);
+
+  // Narrow the school section pickers to the caller's own sections when scoped.
+  const visibleSections = useMemo(
+    () => filterToScope(sections, scope),
+    [sections, scope.unrestricted, scope.sectionIds]
+  );
+  const noOwnedSections =
+    !isCollege && !scope.loading && !scope.unrestricted && visibleSections.length === 0;
 
   const loadList = useCallback(async () => {
     setListError(null);
@@ -429,7 +441,7 @@ export default function HomeworkPage() {
                     onChange={(event) => setFilterSection(event.target.value)}
                   >
                     <option value="">{`All ${term.sectionPlural.toLowerCase()}`}</option>
-                    {sections.map((section) => (
+                    {visibleSections.map((section) => (
                       <option key={section.id} value={section.id}>
                         {section.label}
                       </option>
@@ -621,12 +633,17 @@ export default function HomeworkPage() {
                   }
                 >
                   <option value="">{`Select ${term.section.toLowerCase()}…`}</option>
-                  {sections.map((section) => (
+                  {visibleSections.map((section) => (
                     <option key={section.id} value={section.id}>
                       {section.label}
                     </option>
                   ))}
                 </Select>
+                {noOwnedSections && (
+                  <p className="mt-1 text-xs text-muted">
+                    {`You aren't assigned to any ${term.section.toLowerCase()} yet. Ask an administrator to make you a class teacher or assign your subjects.`}
+                  </p>
+                )}
               </Field>
             ))}
           <Field label={term.subject}>

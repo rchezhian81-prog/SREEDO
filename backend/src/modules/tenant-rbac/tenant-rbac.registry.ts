@@ -387,6 +387,16 @@ export const TENANT_PERMISSION_GROUPS: TenantPermissionGroup[] = [
       { key: "classes:manage", label: "Manage classes", appliesTo: "school" },
       { key: "sections:manage", label: "Manage sections", appliesTo: "school" },
       { key: "subjects:manage", label: "Manage subjects" },
+      // PR-SEC1 — broad-view bypass for teacher own-class row scoping. A holder
+      // sees/writes attendance, exam marks and homework across every section; a
+      // teacher without it is limited to sections they own. Enforced only when
+      // ENFORCE_TEACHER_SCOPE is on (school mode). Granted by default to admin
+      // and the oversight job-roles that include this group.
+      {
+        key: "academics:all_sections",
+        label: "Access all classes/sections (bypass own-class limit)",
+        appliesTo: "school",
+      },
     ],
   },
   {

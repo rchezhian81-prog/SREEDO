@@ -9,6 +9,12 @@ import {
   requireStaff,
 } from "../../utils/scope";
 import {
+  assertSectionInTeacherScope,
+  assertStudentsInTeacherScope,
+  resolveTeacherScope,
+  scopedSectionIds,
+} from "../../utils/teacher-scope";
+import {
   attendanceQuerySchema,
   bulkMarkAttendanceSchema,
   studentAttendanceQuerySchema,
@@ -59,11 +65,25 @@ attendanceRouter.use(authenticate, requireTenant);
 attendanceRouter.get("/", async (req, res) => {
   requireStaff(req); // section roster is staff-only
   const filters = attendanceQuerySchema.parse(req.query);
-  res.json(await attendanceService.listByDate(filters, tenantId(req)));
+  // A scoped teacher may only pull their own sections' rosters: an explicitly
+  // requested foreign section is a 403; an unfiltered list is narrowed to owned.
+  const scope = await resolveTeacherScope(req);
+  await assertSectionInTeacherScope(req, scope, filters.sectionId, "attendance:list");
+  res.json(
+    await attendanceService.listByDate(filters, tenantId(req), scopedSectionIds(scope))
+  );
 });
 
 attendanceRouter.post("/", requirePermission("attendance:mark"), async (req, res) => {
   const input = bulkMarkAttendanceSchema.parse(req.body);
+  const scope = await resolveTeacherScope(req);
+  await assertStudentsInTeacherScope(
+    req,
+    scope,
+    input.records.map((r) => r.studentId),
+    "attendance:mark",
+    tenantId(req)
+  );
   res.json(await attendanceService.bulkMark(input, req.user!.id, tenantId(req)));
 });
 

@@ -115,6 +115,15 @@ export const env = {
 
   seedOnStart: process.env.SEED_ON_START === "true",
 
+  // Teacher own-class row scoping (PR-SEC1) — kill-switch, OFF by default so a
+  // deploy is a behavioural no-op until an operator explicitly turns it on for a
+  // tenant whose teacher→section data (homeroom / class_subjects / timetable) is
+  // confirmed populated. When true, a staff member holding neither the
+  // `academics:all_sections` broad-view permission nor super_admin is limited to
+  // students/sections they own for attendance, period attendance, exam marks and
+  // homework. School-mode only in this release (college scoping is a fast-follow).
+  enforceTeacherScope: process.env.ENFORCE_TEACHER_SCOPE === "true",
+
   // Background job worker (Postgres-backed; no external broker). Off by default
   // so tests/CI stay deterministic; enable in self-hosted deployments to run the
   // scheduler tick + drain the queue on an interval.
