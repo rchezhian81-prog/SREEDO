@@ -12,6 +12,7 @@ import {
 } from "../../utils/jwt";
 import { generateBase32Secret, otpauthUrl, verifyTotp } from "../../utils/totp";
 import { hashPassword, verifyPassword } from "../../utils/password";
+import { assertInstitutionActiveForLogin } from "../../middleware/institution-status";
 import type { UserRole } from "../../types";
 
 interface UserRow {
@@ -212,6 +213,14 @@ export async function login(
   }
   // Password is correct — clear any prior failed-attempt counter / stale lock.
   await clearFailedLogins(user);
+  // Tenant suspension (PR-SEC2): block a suspended institution's users AFTER their
+  // credentials are verified (so suspension never leaks to a wrong-password probe)
+  // and before any token is issued. super_admin (no institution) is exempt; the
+  // kill-switch (OFF by default) makes this a no-op until an operator enables it.
+  await assertInstitutionActiveForLogin(
+    { id: user.id, email: user.email, role: user.role, institution_id: user.institution_id ?? null },
+    meta?.ip ?? null
+  );
   // Second factor: only for users who have enrolled. A missing code is a soft
   // signal (not an error) so the client can prompt for it; a wrong code is 401.
   if (user.totp_enabled) {

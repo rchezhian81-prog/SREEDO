@@ -8,6 +8,7 @@ import { storage } from "../../utils/storage";
 import { mailerConfigured } from "../../utils/mailer";
 import { assertValidFile } from "../documents/documents.service";
 import { requestPasswordReset } from "../auth/auth.service";
+import { invalidateInstitutionStatusCache } from "../../middleware/institution-status";
 import { recordAudit, type Actor } from "./platform.service";
 import type {
   brandingSchema,
@@ -412,6 +413,9 @@ export async function setLifecycle(id: string, status: string, reason: string | 
     [id, status, isActive]
   );
   if (!rows[0]) throw ApiError.notFound("Institution not found");
+  // PR-SEC2: bust the suspension guard's cache so a manual suspend/reactivate
+  // takes effect on the very next request (rather than after the 60s TTL).
+  invalidateInstitutionStatusCache(id);
   await recordAudit(actor, {
     action: `tenant.${status}`, targetType: "institution", targetId: id, institutionId: id,
     detail: reason ? { reason } : {},

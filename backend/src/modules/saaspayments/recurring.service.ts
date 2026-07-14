@@ -394,7 +394,9 @@ async function runDunningStep(
     let suspended = false;
     if (cfg.suspendOnDunningExhausted) {
       const susp = await client.query(
-        `UPDATE institutions SET is_active = false WHERE id = $1 AND is_active = true`,
+        // PR-SEC2 status alignment: keep status in sync with is_active so a
+        // billing auto-suspend reads as 'suspended' everywhere, not just inactive.
+        `UPDATE institutions SET is_active = false, status = 'suspended' WHERE id = $1 AND is_active = true`,
         [institutionId]
       );
       suspended = (susp.rowCount ?? 0) > 0;

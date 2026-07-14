@@ -463,7 +463,8 @@ export async function suspend(id: string, input: z.infer<typeof suspendSchema>, 
   const institutionId = sub.institutionId as string;
   await query(`UPDATE institution_subscriptions SET status = 'suspended' WHERE id = $1`, [id]);
   if (input.suspendTenant) {
-    await query(`UPDATE institutions SET is_active = false WHERE id = $1`, [institutionId]);
+    // PR-SEC2 status alignment: suspending the tenant also marks status.
+    await query(`UPDATE institutions SET is_active = false, status = 'suspended' WHERE id = $1`, [institutionId]);
   }
   await afterMutation(institutionId, {
     id, fromStatus: sub.status as string, toStatus: "suspended", event: "suspended",
