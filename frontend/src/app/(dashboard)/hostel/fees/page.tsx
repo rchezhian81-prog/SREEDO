@@ -17,8 +17,7 @@ import {
   Spinner,
 } from "@/components/ui";
 import type { Hostel, HostelFee } from "@/types";
-
-const FREQUENCIES = ["monthly", "quarterly", "annual", "one_time"] as const;
+import { FEE_FREQUENCIES } from "@/lib/fees";
 
 export default function HostelFeesPage() {
   const { can, loading: permsLoading } = usePermissions();
@@ -308,9 +307,9 @@ export default function HostelFeesPage() {
                     value={frequency}
                     onChange={(event) => setFrequency(event.target.value)}
                   >
-                    {FREQUENCIES.map((value) => (
+                    {FEE_FREQUENCIES.map(({ value, label }) => (
                       <option key={value} value={value}>
-                        {value}
+                        {label}
                       </option>
                     ))}
                   </Select>

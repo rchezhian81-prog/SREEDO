@@ -175,6 +175,23 @@ describe("hostel management", () => {
     expect(dues.body.rows).toHaveLength(2);
   });
 
+  // PR-FIX1 — the fee-frequency dropdown must only offer values the schema
+  // accepts. Locks the hostel fee contract to monthly/term/annual so the UI
+  // (which used to also offer quarterly/one_time → 400) cannot drift again.
+  it("accepts monthly/term/annual fee frequencies and rejects unsupported ones", async () => {
+    const hostel = await makeHostel("HF");
+    for (const frequency of ["monthly", "term", "annual"]) {
+      expect(
+        (await post("/api/v1/hostel/fees", tok.accountant, { hostelId: hostel, amount: 100, frequency })).status
+      ).toBe(200);
+    }
+    for (const frequency of ["quarterly", "one_time"]) {
+      expect(
+        (await post("/api/v1/hostel/fees", tok.accountant, { hostelId: hostel, amount: 100, frequency })).status
+      ).toBe(400);
+    }
+  });
+
   it("produces occupancy and room reports", async () => {
     const hostel = await makeHostel("H1");
     const room = await makeRoom(hostel, "101", 3);

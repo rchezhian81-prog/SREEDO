@@ -160,6 +160,23 @@ describe("transport management", () => {
     expect(dues.body.rows).toHaveLength(2);
   });
 
+  // PR-FIX1 — the fee-frequency dropdown must only offer values the schema
+  // accepts. Locks the transport fee contract to monthly/term/annual so the UI
+  // (which used to also offer quarterly/one_time → 400) cannot drift again.
+  it("accepts monthly/term/annual fee frequencies and rejects unsupported ones", async () => {
+    const route = await makeRoute("RF");
+    for (const frequency of ["monthly", "term", "annual"]) {
+      expect(
+        (await post("/api/v1/transport/fees", tok.accountant, { routeId: route, amount: 100, frequency })).status
+      ).toBe(200);
+    }
+    for (const frequency of ["quarterly", "one_time"]) {
+      expect(
+        (await post("/api/v1/transport/fees", tok.accountant, { routeId: route, amount: 100, frequency })).status
+      ).toBe(400);
+    }
+  });
+
   it("produces transport reports", async () => {
     const v = await post("/api/v1/transport/vehicles", tok.admin, { registrationNo: "KA-9", capacity: 2, insuranceExpiry: "2020-01-01" });
     const route = await makeRoute("R1", v.body.id);
