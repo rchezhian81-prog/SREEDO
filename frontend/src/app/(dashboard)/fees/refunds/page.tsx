@@ -4,8 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import {
+  Badge,
   Button,
-  ConfirmDialog,
   EmptyState,
   ErrorNote,
   Field,
@@ -36,6 +36,7 @@ interface Refund {
   reason: string | null;
   method: string;
   refundedAt: string;
+  voidedAt: string | null;
   invoiceNo: string;
   studentName: string;
   paymentAmount: string;
@@ -56,8 +57,9 @@ export default function FeeRefundsPage() {
   const [method, setMethod] = useState<string>("cash");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<Refund | null>(null);
-  const [deleting, setDeleting] = useState(false);
+  const [pendingVoid, setPendingVoid] = useState<Refund | null>(null);
+  const [voidReason, setVoidReason] = useState("");
+  const [voiding, setVoiding] = useState(false);
 
   const loadRefunds = useCallback(async () => {
     const result = await api.get<Paginated<Refund>>("/fee-refunds?limit=50");
@@ -105,18 +107,19 @@ export default function FeeRefundsPage() {
     }
   };
 
-  const confirmRemoveRefund = async () => {
-    if (!pendingDelete) return;
+  const confirmVoidRefund = async () => {
+    if (!pendingVoid) return;
     setError(null);
-    setDeleting(true);
+    setVoiding(true);
     try {
-      await api.delete(`/fee-refunds/${pendingDelete.id}`);
+      await api.post(`/fee-refunds/${pendingVoid.id}/void`, { reason: voidReason });
+      setPendingVoid(null);
+      setVoidReason("");
       await Promise.all([loadPayments(), loadRefunds()]);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to delete");
+      setError(err instanceof ApiError ? err.message : "Failed to void refund");
     } finally {
-      setDeleting(false);
-      setPendingDelete(null);
+      setVoiding(false);
     }
   };
 
@@ -210,12 +213,19 @@ export default function FeeRefundsPage() {
                         <td className="px-4 py-3 font-medium text-ink">{money(r.amount)}</td>
                         <td className="px-4 py-3 text-muted">{r.reason ?? "—"}</td>
                         <td className="px-4 py-3 text-right">
-                          <button
-                            onClick={() => setPendingDelete(r)}
-                            className="text-xs font-medium text-red-600 hover:text-red-700"
-                          >
-                            Delete
-                          </button>
+                          {r.voidedAt ? (
+                            <Badge tone="slate">Voided</Badge>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setPendingVoid(r);
+                                setVoidReason("");
+                              }}
+                              className="text-xs font-medium text-red-600 hover:text-red-700"
+                            >
+                              Void
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -269,19 +279,33 @@ export default function FeeRefundsPage() {
         ) : null}
       </Modal>
 
-      <ConfirmDialog
-        open={pendingDelete !== null}
-        title="Delete refund"
-        message={
-          pendingDelete
-            ? `Delete this refund of ${money(pendingDelete.amount)}? This cannot be undone.`
-            : ""
-        }
-        confirmLabel="Delete"
-        busy={deleting}
-        onConfirm={confirmRemoveRefund}
-        onClose={() => setPendingDelete(null)}
-      />
+      <Modal title="Void refund" open={pendingVoid !== null} onClose={() => setPendingVoid(null)}>
+        {pendingVoid ? (
+          <div className="space-y-4">
+            <p className="text-sm text-muted">
+              Void this refund of{" "}
+              <span className="font-medium text-ink">{money(pendingVoid.amount)}</span> for{" "}
+              {pendingVoid.invoiceNo}? This preserves the refund record and restores the
+              invoice balance.
+            </p>
+            <Field label="Reason">
+              <Input
+                value={voidReason}
+                onChange={(e) => setVoidReason(e.target.value)}
+                placeholder="Why is this refund being voided?"
+              />
+            </Field>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="secondary" onClick={() => setPendingVoid(null)}>
+                Cancel
+              </Button>
+              <Button onClick={confirmVoidRefund} disabled={voiding || !voidReason.trim()}>
+                {voiding ? "Voiding…" : "Void refund"}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
     </>
   );
 }
