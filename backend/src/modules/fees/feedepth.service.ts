@@ -14,7 +14,7 @@ import type {
 } from "./feedepth.schema";
 
 /** Recompute an invoice's lifecycle status after its amount_due changes. */
-function statusFor(amountDue: number, amountPaid: number, current: string): string {
+export function statusFor(amountDue: number, amountPaid: number, current: string): string {
   if (current === "cancelled") return "cancelled";
   if (amountPaid >= amountDue) return "paid";
   if (amountPaid > 0) return "partially_paid";

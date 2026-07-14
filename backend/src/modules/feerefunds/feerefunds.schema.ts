@@ -10,6 +10,11 @@ export const createRefundSchema = z.object({
   method: z.enum(REFUND_METHODS).optional(),
 });
 
+// Voiding a refund reverses a money event, so a reason is mandatory (audited).
+export const voidRefundSchema = z.object({
+  reason: z.string().trim().min(1, "A reason is required to void a refund").max(500),
+});
+
 export const listRefundsQuerySchema = z.object({
   page: z.coerce.number().int().positive().optional(),
   limit: z.coerce.number().int().positive().optional(),

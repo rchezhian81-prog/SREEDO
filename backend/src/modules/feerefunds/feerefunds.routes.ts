@@ -1,20 +1,27 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { uuidParam } from "../../utils/params";
 import { authenticate } from "../../middleware/auth";
 import { requirePermission } from "../../middleware/permissions";
 import { requireTenant, tenantId } from "../../middleware/tenant";
 import { parsePagination } from "../../utils/pagination";
+import { recordAudit } from "../observability/audit";
 import {
   createRefundSchema,
   listRefundsQuerySchema,
   listPaymentsQuerySchema,
+  voidRefundSchema,
 } from "./feerefunds.schema";
 import * as service from "./feerefunds.service";
 
 // Fee refunds — tenant-scoped. Reads need fees:manage; the money-reversal writes
-// need the high-risk fees:reverse permission (reason-required at the schema).
+// (create / void / reconcile) need the high-risk fees:reverse permission
+// (reason-required at the schema). Every reversal is audited.
 export const feeRefundsRouter = Router();
 feeRefundsRouter.use(authenticate, requireTenant);
+
+const actorOf = (req: Request) => ({
+  id: req.user!.id, email: req.user!.email, role: req.user!.role, ip: req.ip ?? null,
+});
 
 /**
  * @openapi
@@ -48,7 +55,7 @@ feeRefundsRouter.get("/payments", requirePermission("fees:manage"), async (req, 
  *       200: { description: Paginated refunds }
  *   post:
  *     tags: [Fee Refunds]
- *     summary: Record a refund against a payment
+ *     summary: Record a refund against a payment (reconciles the invoice ledger)
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true
@@ -56,7 +63,7 @@ feeRefundsRouter.get("/payments", requirePermission("fees:manage"), async (req, 
  *         application/json:
  *           schema:
  *             type: object
- *             required: [paymentId, amount]
+ *             required: [paymentId, amount, reason]
  *             properties:
  *               paymentId: { type: string, format: uuid }
  *               amount: { type: number }
@@ -74,22 +81,85 @@ feeRefundsRouter.get("/", requirePermission("fees:manage"), async (req, res) => 
 
 feeRefundsRouter.post("/", requirePermission("fees:reverse"), async (req, res) => {
   const input = createRefundSchema.parse(req.body);
-  res.status(201).json(await service.createRefund(input, tenantId(req), req.user!.id));
+  const refund = await service.createRefund(input, tenantId(req), req.user!.id);
+  await recordAudit(actorOf(req), {
+    action: "fee_refund.created",
+    targetType: "payment_refund",
+    targetId: refund.id as string,
+    institutionId: tenantId(req),
+    detail: { paymentId: input.paymentId, amount: input.amount, invoiceNo: refund.invoiceNo },
+  });
+  res.status(201).json(refund);
 });
 
 /**
  * @openapi
- * /fee-refunds/{id}:
- *   delete:
+ * /fee-refunds/reconcile:
+ *   post:
  *     tags: [Fee Refunds]
- *     summary: Delete a refund record
+ *     summary: Idempotently reconcile every invoice that has refunds (backfill)
+ *     description: >
+ *       Recomputes each affected invoice's net paid amount and status from the
+ *       payments/refunds ledger. Non-destructive (no refund rows change) and
+ *       idempotent (re-running adjusts nothing). Returns a report of changes.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ scanned, adjusted: [...] }" }
+ */
+feeRefundsRouter.post("/reconcile", requirePermission("fees:reverse"), async (req, res) => {
+  const report = await service.reconcileAll(tenantId(req));
+  await recordAudit(actorOf(req), {
+    action: "fee_refund.reconcile",
+    targetType: "fee_ledger",
+    targetId: null,
+    institutionId: tenantId(req),
+    detail: { scanned: report.scanned, adjusted: report.adjusted.length },
+  });
+  for (const change of report.adjusted) {
+    await recordAudit(actorOf(req), {
+      action: "fee_refund.reconcile_invoice",
+      targetType: "invoice",
+      targetId: change.invoiceId,
+      institutionId: tenantId(req),
+      detail: {
+        invoiceNo: change.invoiceNo,
+        oldPaid: change.oldPaid, newPaid: change.newPaid,
+        oldStatus: change.oldStatus, newStatus: change.newStatus,
+      },
+    });
+  }
+  res.json(report);
+});
+
+/**
+ * @openapi
+ * /fee-refunds/{id}/void:
+ *   post:
+ *     tags: [Fee Refunds]
+ *     summary: Void a refund (soft — preserves the record, restores the ledger)
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { type: object, required: [reason], properties: { reason: { type: string } } }
  *     responses:
- *       204: { description: Deleted }
+ *       200: { description: Voided refund }
+ *       400: { description: Already voided }
+ *       404: { description: Refund not found }
  */
-feeRefundsRouter.delete("/:id", requirePermission("fees:reverse"), async (req, res) => {
-  await service.deleteRefund(uuidParam(req), tenantId(req));
-  res.status(204).end();
+feeRefundsRouter.post("/:id/void", requirePermission("fees:reverse"), async (req, res) => {
+  const id = uuidParam(req);
+  const { reason } = voidRefundSchema.parse(req.body);
+  const refund = await service.voidRefund(id, reason, tenantId(req), req.user!.id);
+  await recordAudit(actorOf(req), {
+    action: "fee_refund.voided",
+    targetType: "payment_refund",
+    targetId: id,
+    institutionId: tenantId(req),
+    detail: { reason, invoiceNo: refund.invoiceNo, amount: refund.amount },
+  });
+  res.json(refund);
 });
