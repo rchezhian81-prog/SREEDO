@@ -3,6 +3,7 @@ import { query } from "../db/postgres";
 import { ApiError } from "../utils/api-error";
 import { ACCESS_COOKIE, getCookie } from "../utils/cookies";
 import { verifyAccessToken, type AccessTokenPayload } from "../utils/jwt";
+import { assertInstitutionActive } from "./institution-status";
 import type { UserRole } from "../types";
 
 /** Bearer header (staff) takes precedence; falls back to the portal's httpOnly cookie. */
@@ -96,6 +97,9 @@ export async function authenticate(
   if (payload.sid) {
     await assertSessionLive(payload.sid);
   }
+  // Tenant suspension: block a suspended institution's users on every request
+  // (kill-switch OFF by default; super_admin + audited support sessions exempt).
+  await assertInstitutionActive(req);
   next();
 }
 
@@ -116,6 +120,8 @@ export async function authenticateSetup(
   if (payload.scope !== "2fa_setup" && payload.sid) {
     await assertSessionLive(payload.sid);
   }
+  // A suspended tenant is blocked even from the 2FA-enrollment surface.
+  await assertInstitutionActive(req);
   next();
 }
 

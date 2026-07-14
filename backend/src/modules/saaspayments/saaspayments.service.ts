@@ -576,7 +576,9 @@ async function settleRenewalOnPaid(
   let reactivated = false;
   if (sub.dunningState === "exhausted") {
     const react = await client.query(
-      `UPDATE institutions SET is_active = true WHERE id = $1 AND is_active = false`,
+      // PR-SEC2 status alignment: renewal-reactivation clears the suspended status
+      // it set on dunning-exhaust, so status never lags is_active (no new trigger).
+      `UPDATE institutions SET is_active = true, status = 'active' WHERE id = $1 AND is_active = false`,
       [institutionId]
     );
     reactivated = (react.rowCount ?? 0) > 0;

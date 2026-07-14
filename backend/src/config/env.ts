@@ -124,6 +124,17 @@ export const env = {
   // homework. School-mode only in this release (college scoping is a fast-follow).
   enforceTeacherScope: process.env.ENFORCE_TEACHER_SCOPE === "true",
 
+  // Tenant suspension enforcement (PR-SEC2) — kill-switch, OFF by default so a
+  // deploy is a behavioural no-op until an operator turns it on (mirrors
+  // ENFORCE_TEACHER_SCOPE). When true, an authenticated user whose institution is
+  // not active (is_active = false — i.e. suspended / expired / archived / closed,
+  // whether set manually by a super-admin or automatically by billing dunning /
+  // expiry) is blocked at login and on every request with a clear
+  // INSTITUTION_SUSPENDED message. super_admin (no institution) and audited
+  // platform-support impersonation sessions are exempt. The guard fails OPEN on a
+  // transient DB error so a database hiccup cannot lock every tenant out at once.
+  enforceTenantSuspension: process.env.ENFORCE_TENANT_SUSPENSION === "true",
+
   // Background job worker (Postgres-backed; no external broker). Off by default
   // so tests/CI stay deterministic; enable in self-hosted deployments to run the
   // scheduler tick + drain the queue on an interval.

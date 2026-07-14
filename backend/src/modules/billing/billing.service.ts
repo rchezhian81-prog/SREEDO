@@ -269,7 +269,8 @@ export async function sweepSubscriptionLifecycle(
     const justExpired = [...trial.rows, ...expired.rows];
     for (const r of justExpired) {
       const res = await query<{ id: string }>(
-        `UPDATE institutions SET is_active = false
+        // PR-SEC2 status alignment: an expiry auto-suspend also marks status.
+        `UPDATE institutions SET is_active = false, status = 'suspended'
          WHERE id = $1 AND is_active = true RETURNING id`,
         [r.institution_id]
       );

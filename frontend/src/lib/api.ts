@@ -7,7 +7,9 @@ const API_URL =
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
-    message: string
+    message: string,
+    /** Machine-readable code from the server (e.g. INSTITUTION_SUSPENDED). */
+    public readonly code?: string
   ) {
     super(message);
     this.name = "ApiError";
@@ -72,18 +74,39 @@ async function request<T>(
 
   if (!res.ok) {
     let message = res.statusText;
+    let code: string | undefined;
     try {
       const data = await res.json();
       if (typeof data.error === "string") message = data.error;
+      if (data.details && typeof data.details.code === "string") code = data.details.code;
     } catch {
       // non-JSON error body — keep statusText
+    }
+    // Tenant suspension (PR-SEC2): the institution was suspended/deactivated. End
+    // the session and route to the dedicated screen — except on the login request
+    // itself, where the login page shows the message inline. Never hijack a
+    // support session (the operator's scope is handled below).
+    if (
+      code === "INSTITUTION_SUSPENDED" &&
+      path !== "/auth/login" &&
+      !useAuthStore.getState().support &&
+      typeof window !== "undefined"
+    ) {
+      try {
+        useAuthStore.getState().logout();
+      } catch {
+        // best-effort — still redirect below
+      }
+      if (!window.location.pathname.startsWith("/suspended")) {
+        window.location.href = "/suspended";
+      }
     }
     // Support mode only: a 403 means the server's scope enforcement blocked this
     // action for the impersonated user — surface it gracefully. Inert otherwise.
     if (res.status === 403 && useAuthStore.getState().support) {
       toast.error(message || "This action is outside the support session's scope.");
     }
-    throw new ApiError(res.status, message);
+    throw new ApiError(res.status, message, code);
   }
 
   if (res.status === 204) return undefined as T;

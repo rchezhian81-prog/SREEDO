@@ -231,8 +231,10 @@ describe("billing B4: recurring billing + dunning", () => {
     expect(sub.rows[0].dunning_attempts).toBe(3);
     expect(sub.rows[0].next_retry_at).toBeNull();
 
-    const instRow = await query<{ is_active: boolean }>("SELECT is_active FROM institutions WHERE id = $1", [inst]);
+    const instRow = await query<{ is_active: boolean; status: string }>("SELECT is_active, status FROM institutions WHERE id = $1", [inst]);
     expect(instRow.rows[0].is_active).toBe(false);
+    // PR-SEC2 status alignment: a dunning auto-suspend also marks status.
+    expect(instRow.rows[0].status).toBe("suspended");
 
     // Exhausted subscription is a no-op on further ticks (never re-suspends / re-tries).
     const r4 = await request(app).post("/api/v1/platform/subscriptions/run-recurring").set(auth(superToken));
@@ -306,8 +308,10 @@ describe("billing B4: recurring billing + dunning", () => {
     );
 
     // Tenant reactivated (was suspended by dunning).
-    const instRow = await query<{ is_active: boolean }>("SELECT is_active FROM institutions WHERE id = $1", [inst]);
+    const instRow = await query<{ is_active: boolean; status: string }>("SELECT is_active, status FROM institutions WHERE id = $1", [inst]);
     expect(instRow.rows[0].is_active).toBe(true);
+    // PR-SEC2 status alignment: renewal-reactivation clears the suspended status too.
+    expect(instRow.rows[0].status).toBe("active");
 
     // Renewal recorded.
     const events = await request(app)
