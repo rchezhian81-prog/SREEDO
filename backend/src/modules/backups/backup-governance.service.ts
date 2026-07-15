@@ -28,23 +28,30 @@ export async function offsiteStatus() {
     lastOffsiteTestOk: boolean | null;
     lastOffsiteTestDetail: string | null;
   };
-  const configured = storageConfigured();
-  const syncStatus = !configured ? "not_configured" : settings.lastOffsiteTestOk === false ? "failed" : "synced";
+  // Offsite backups are ACTIVE only when explicitly enabled AND S3 is configured.
+  // S3 may be configured purely for document uploads while DB backups stay local —
+  // this reports the true backup destination, not just S3 availability.
+  const s3Available = storageConfigured();
+  const offsiteActive = Boolean(settings.offsiteEnabled) && s3Available;
+  const syncStatus = !offsiteActive ? "not_configured" : settings.lastOffsiteTestOk === false ? "failed" : "synced";
   return {
-    mode: storageMode, // 's3' | 'local'
-    target: configured ? "s3" : "local_disk",
-    configured,
+    mode: offsiteActive ? "s3" : "local", // 's3' | 'local'
+    target: offsiteActive ? "s3" : "local_disk",
+    configured: offsiteActive,
+    s3Available, // S3 reachable/configured (may be used only for documents)
     // Masked/safe values only.
     endpointHost: offsiteHost(),
-    bucket: configured ? env.storageBucket : null,
+    bucket: offsiteActive ? env.storageBucket : null,
     syncStatus,
     lastTestAt: settings.lastOffsiteTestAt,
     lastTestOk: settings.lastOffsiteTestOk,
     lastTestDetail: settings.lastOffsiteTestDetail,
-    // Honest limitation when only local disk is available.
-    note: configured
-      ? "Backups are copied to S3-compatible object storage."
-      : "Offsite storage is not configured — configure STORAGE_* env to enable S3 offsite copies. Backups currently live on the application server disk only.",
+    // Honest note that distinguishes S3-for-documents from offsite DB backups.
+    note: offsiteActive
+      ? "Database backups are copied to S3-compatible object storage."
+      : s3Available
+        ? "S3 is configured (used for document uploads) but offsite BACKUPS are disabled — database backups live on the application-server disk only. Enable offsite backups in settings to also copy them to S3."
+        : "Offsite storage is not configured — configure STORAGE_* env and enable offsite backups to copy database dumps to S3. Backups currently live on the application-server disk only.",
   };
 }
 

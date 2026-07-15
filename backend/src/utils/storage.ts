@@ -128,3 +128,23 @@ export const storage: Storage = storageConfigured()
   : new LocalDiskStorage();
 
 export const storageMode: StorageMode = storage.mode;
+
+// --- DB-backup storage target (decoupled from the document store) ---
+// Database backups must NOT follow the document-storage singleton: enabling S3 for
+// *documents* (STORAGE_*) must never silently start writing DB dumps offsite. Backups
+// therefore default to a dedicated local-disk backend and only use S3 when offsite is
+// EXPLICITLY enabled (backup_settings.offsite_enabled) AND S3 is configured — so
+// offsite backups stay a deliberate DR-hardening decision, not a side effect.
+const backupLocalStorage: Storage = new LocalDiskStorage();
+
+/** Where a DB backup is WRITTEN: S3 only when offsite is explicitly enabled AND S3 is
+ *  configured; otherwise the application-server disk. */
+export function backupWriteStorage(offsiteEnabled: boolean): Storage {
+  return offsiteEnabled && storageConfigured() ? storage : backupLocalStorage;
+}
+
+/** Where a stored DB backup is READ/removed, resolved by its recorded storage_mode so
+ *  local and s3 artifacts each use the right backend regardless of the document store. */
+export function backupStorageFor(mode: StorageMode | null | undefined): Storage {
+  return mode === "s3" && storageConfigured() ? storage : backupLocalStorage;
+}
