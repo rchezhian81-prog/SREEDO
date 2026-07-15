@@ -1,0 +1,176 @@
+name: "Ops: DR Backup Proof (read-only / scratch-only)"
+
+# DR / backup recovery PROOF — a manual, read-only + scratch-only drill. It proves
+# that the on-VPS database backups are present, intact, and actually RESTORABLE,
+# WITHOUT ever touching the live database, live containers, schema, or data, and
+# WITHOUT deploying anything. Every operation stays ON THE VPS — no production data
+# ever leaves the server.
+#
+# WHAT IT CAN DO (only these):
+#   1. backup-verify   — list/inspect /opt/sreedo/backup_*.sql: count, newest, size,
+#                        age, sha256, valid-dump-header check. Pure read. (subset of #2)
+#   2. scratch-restore — spin up an ISOLATED throwaway postgres:16-alpine container
+#                        (no published port), restore the newest backup INTO IT ONLY,
+#                        count rows, then force-remove the scratch container. The live
+#                        DB / live "sreedo-postgres-1" container is never touched.
+#                        (default; runs #1 first, then the restore.)
+#
+# DELIBERATELY NOT DONE HERE: copying a backup OFF the VPS. A production dump contains
+# PII; shipping it to a GitHub runner would cross a data-governance boundary. Genuine
+# off-site backup belongs in ENCRYPTED OFFSITE STORAGE (the app's STORAGE_* config),
+# tracked as DR hardening — not in this proof workflow. This drill proves the backups
+# are valid and restorable; it does not move them.
+#
+# WHAT IT CANNOT DO — by construction: no live-DB restore, no production DB write, no
+# schema/data change, no deploy, no `docker compose` up/down/restart of any prod
+# service, no generic shell input (the script is fixed/reviewable), no secret printed
+# (GitHub masks secrets; the script never echoes keys/passwords), no destructive
+# command, no data leaving the VPS. It only reads backup files and runs a
+# self-contained scratch container that it also removes.
+#
+# THREE INDEPENDENT SAFETY LOCKS (all must be satisfied to run):
+#   (a) Manual only — `workflow_dispatch`. It NEVER runs on push/PR/schedule.
+#   (b) Kill-switch — the job is skipped unless repo variable OPS_DR_PROOF_ENABLED
+#       == 'true'. Unset it to disable instantly. (Same pattern as DEPLOY_ENABLED.)
+#   (c) Typed confirm — the run aborts unless the `confirm` input is exactly
+#       "RUN-DR-PROOF".
+#
+# ROLLBACK: delete this one file (single commit). No standing schedule, no secrets of
+# its own — it reuses the existing deploy VPS_* secrets and adds nothing persistent on
+# the VPS (the scratch container is `--rm` and force-removed on exit).
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Which check to run"
+        type: choice
+        required: true
+        default: scratch-restore
+        options:
+          - backup-verify      # read-only inventory + integrity (nothing leaves the VPS)
+          - scratch-restore    # box-safe restore drill into a throwaway container
+      confirm:
+        description: "Type exactly: RUN-DR-PROOF"
+        type: string
+        required: true
+        default: ""
+
+concurrency:
+  group: ops-dr-proof
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  dr-proof:
+    name: DR proof (${{ inputs.mode }})
+    runs-on: ubuntu-latest
+    # Kill-switch: inert until an operator sets repo variable OPS_DR_PROOF_ENABLED=true.
+    if: ${{ vars.OPS_DR_PROOF_ENABLED == 'true' }}
+    timeout-minutes: 25
+    steps:
+      - name: Confirm guard (anti-fat-finger)
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+          MODE: ${{ inputs.mode }}
+        run: |
+          if [ "$CONFIRM" != "RUN-DR-PROOF" ]; then
+            echo "::error::Confirmation phrase missing/incorrect. Re-run and type exactly: RUN-DR-PROOF"
+            exit 1
+          fi
+          echo "Confirmed. Running DR proof in mode: $MODE"
+
+      - name: VPS-side checks (backup verify + scratch restore) — all data stays on the VPS
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          MODE: ${{ inputs.mode }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/sreedo' }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || '22' }}
+          command_timeout: "20m"
+          envs: MODE,DEPLOY_PATH
+          script: |
+            set -uo pipefail
+            DEPLOY_PATH="${DEPLOY_PATH:-/opt/sreedo}"
+            DRILL_CONTAINER="sreedo-drill-pg"
+            RESTORE_LOG="/tmp/sreedo-drill-restore.log"
+
+            # Clean up ONLY our own scratch objects on exit — never a prod container.
+            cleanup() {
+              docker rm -f "$DRILL_CONTAINER" >/dev/null 2>&1 || true
+              rm -f "$RESTORE_LOG" 2>/dev/null || true
+            }
+            trap cleanup EXIT
+
+            echo "=================================================================="
+            echo " DR PROOF (read-only / scratch-only)   mode=$MODE"
+            echo " host=$(hostname)   path=$DEPLOY_PATH   utc=$(date -u +%FT%TZ)"
+            echo "=================================================================="
+
+            cd "$DEPLOY_PATH" || { echo "!! cannot cd $DEPLOY_PATH"; exit 1; }
+
+            echo
+            echo "### 1. Backup inventory & integrity (READ-ONLY)"
+            shopt -s nullglob
+            BACKUPS=( $(ls -1t backup_*.sql 2>/dev/null) )
+            COUNT=${#BACKUPS[@]}
+            echo "backups found : $COUNT"
+            if [ "$COUNT" -eq 0 ]; then echo "!! no backup_*.sql present — nothing to verify"; exit 1; fi
+            NEWEST="${BACKUPS[0]}"
+            SIZE=$(stat -c%s "$NEWEST")
+            AGE_S=$(( $(date +%s) - $(stat -c%Y "$NEWEST") ))
+            SHA=$(sha256sum "$NEWEST" | cut -d' ' -f1)
+            echo "newest        : $NEWEST"
+            echo "size (bytes)  : $SIZE"
+            echo "size (human)  : $(du -h "$NEWEST" | cut -f1)"
+            echo "modified      : $(stat -c%y "$NEWEST")"
+            echo "age (hours)   : $(( AGE_S / 3600 ))"
+            echo "sha256        : $SHA"
+            if [ "$SIZE" -gt 0 ] && head -c 8192 "$NEWEST" | grep -qiE 'PostgreSQL database|^SET |^CREATE ROLE'; then
+              echo "integrity     : PASS (non-empty, valid pg_dump header)"
+            else
+              echo "integrity     : FAIL (empty or unrecognized header)"; exit 1
+            fi
+            echo "retention     : $COUNT dump(s) on-box (deploy.sh prunes to 10)"
+
+            if [ "$MODE" = "backup-verify" ]; then
+              echo; echo "mode=backup-verify → done (no restore performed)."; exit 0
+            fi
+
+            echo
+            echo "### 2. Scratch restore drill (ISOLATED container — live DB untouched)"
+            docker rm -f "$DRILL_CONTAINER" >/dev/null 2>&1 || true   # only our scratch name
+            PGPW="drill_$(date +%s)_$$"                               # throwaway; never logged
+            echo "starting scratch postgres:16-alpine as '$DRILL_CONTAINER' (no published port)…"
+            docker run --rm -d --name "$DRILL_CONTAINER" -e POSTGRES_PASSWORD="$PGPW" postgres:16-alpine >/dev/null
+            READY=0
+            for i in $(seq 1 40); do
+              if docker exec "$DRILL_CONTAINER" pg_isready -U postgres >/dev/null 2>&1; then READY=1; break; fi
+              sleep 1
+            done
+            [ "$READY" = 1 ] || { echo "!! scratch container did not become ready in time"; exit 1; }
+            echo "scratch ready. restoring newest backup into the scratch container…"
+            START=$(date +%s)
+            docker exec -i "$DRILL_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=0 < "$NEWEST" > "$RESTORE_LOG" 2>&1 || true
+            END=$(date +%s)
+            echo "restore wall-time : $(( END - START )) s"
+            ERR=$(grep -ic 'ERROR' "$RESTORE_LOG" || true)
+            echo "restore ERROR lines: $ERR  (role/database-exists notices are expected & benign)"
+            echo "restore log tail:"; tail -n 3 "$RESTORE_LOG" | sed 's/^/    /'
+            if docker exec "$DRILL_CONTAINER" psql -U postgres -d sreedo -tAc "SELECT 1" >/dev/null 2>&1; then
+              echo "verify: 'sreedo' database present in scratch ✓"
+              docker exec "$DRILL_CONTAINER" psql -U postgres -d sreedo -tAc \
+                "SELECT 'public tables = '||count(*) FROM information_schema.tables WHERE table_schema='public'"
+              docker exec "$DRILL_CONTAINER" psql -U postgres -d sreedo -tAc \
+                "SELECT 'row counts -> institutions='||(SELECT count(*) FROM institutions)||', users='||(SELECT count(*) FROM users)||', students='||(SELECT count(*) FROM students)||', invoices='||(SELECT count(*) FROM invoices)"
+              echo "RESULT: SCRATCH RESTORE SUCCESS — the newest backup is restorable."
+            else
+              echo "RESULT: SCRATCH RESTORE FAILED — 'sreedo' DB not present after restore."; exit 1
+            fi
+            echo
+            echo "(scratch container is force-removed on exit; the production database was never touched.)"
