@@ -6,7 +6,12 @@ import { query, withTransaction } from "../../db/postgres";
 import { ApiError } from "../../utils/api-error";
 import { env } from "../../config/env";
 import { deliverMail } from "../../utils/mailer";
-import { storage, storageMode } from "../../utils/storage";
+import {
+  backupWriteStorage,
+  backupStorageFor,
+  storageConfigured,
+  type StorageMode,
+} from "../../utils/storage";
 import { recordBackup, recordRestore } from "../../observability/metrics";
 import { enqueue } from "../jobs/jobs.service";
 import type {
@@ -215,11 +220,16 @@ export async function performBackup(input: PerformBackupInput) {
     const dump = await buildDump(input.scope, input.institutionId);
     const checksum = sha256(dump.buffer);
     const storageKey = `backups/${id}.json.gz`;
-    await storage.put(storageKey, dump.buffer, "application/gzip");
+    // Backups go to local disk unless offsite is EXPLICITLY enabled (default off) —
+    // configuring S3 for documents must never silently send DB dumps offsite.
+    const settings = (await getSettings()) as { offsiteEnabled?: boolean };
+    const backend = backupWriteStorage(Boolean(settings.offsiteEnabled));
+    const mode = backend.mode;
+    await backend.put(storageKey, dump.buffer, "application/gzip");
     const sizeKb = (dump.buffer.length / 1024).toFixed(1);
     const logsSummary =
       `${input.scope} backup via ${input.trigger}: ${dump.tableCount} tables, ` +
-      `${dump.rowCount} rows, ${sizeKb} KB, sha256 computed, stored to ${storageMode}.`;
+      `${dump.rowCount} rows, ${sizeKb} KB, sha256 computed, stored to ${mode}.`;
 
     await query(
       `UPDATE backups SET status='success', storage_mode=$2, storage_key=$3, size_bytes=$4,
@@ -227,7 +237,7 @@ export async function performBackup(input: PerformBackupInput) {
          checksum_status='verified', checksum_verified_at=now(), checksum_verified_by=$9,
          logs_summary=$10, completed_at=now()
        WHERE id=$1`,
-      [id, storageMode, storageKey, dump.buffer.length, dump.tableCount, dump.rowCount,
+      [id, mode, storageKey, dump.buffer.length, dump.tableCount, dump.rowCount,
        dump.schemaVersion, checksum, input.actor.id, logsSummary]
     );
     recordBackup("success");
@@ -241,7 +251,7 @@ export async function performBackup(input: PerformBackupInput) {
         sizeBytes: dump.buffer.length,
         tableCount: dump.tableCount,
         rowCount: dump.rowCount,
-        storageMode,
+        storageMode: mode,
         checksumAlgo: "sha256",
       },
     });
@@ -374,12 +384,14 @@ async function getBackupInternal(id: string) {
     status: string;
     trigger: string;
     storageKey: string | null;
+    storageMode: StorageMode;
     checksum: string | null;
     checksumStatus: string;
     schemaVersion: number | null;
     institutionId: string | null;
   }>(
-    `SELECT id, scope, status, trigger, storage_key AS "storageKey", checksum,
+    `SELECT id, scope, status, trigger, storage_key AS "storageKey",
+            storage_mode AS "storageMode", checksum,
             checksum_status AS "checksumStatus", schema_version AS "schemaVersion",
             institution_id AS "institutionId"
      FROM backups WHERE id = $1`,
@@ -403,7 +415,7 @@ export async function verifyBackupChecksum(id: string, actor: Actor) {
   let actual = "";
   let detail = "";
   try {
-    const buffer = await storage.get(backup.storageKey);
+    const buffer = await backupStorageFor(backup.storageMode).get(backup.storageKey);
     actual = sha256(buffer);
     ok = Boolean(backup.checksum) && actual === backup.checksum;
     detail = ok ? "checksum matches" : "checksum MISMATCH — artifact may be corrupted";
@@ -429,7 +441,7 @@ export async function downloadBackup(id: string, reason: string, actor: Actor) {
   if (backup.status !== "success" || !backup.storageKey) {
     throw ApiError.badRequest("This backup has no downloadable artifact");
   }
-  const buffer = await storage.get(backup.storageKey);
+  const buffer = await backupStorageFor(backup.storageMode).get(backup.storageKey);
   await recordAudit(actor, {
     action: "backup.download",
     targetId: id,
@@ -481,7 +493,7 @@ export async function archiveBackup(
     }
   }
 
-  if (backup.storageKey) await storage.remove(backup.storageKey).catch(() => undefined);
+  if (backup.storageKey) await backupStorageFor(backup.storageMode).remove(backup.storageKey).catch(() => undefined);
   await query(
     `UPDATE backups SET status='archived', storage_key=NULL, archived_at=now(),
        archived_by=$2, archive_reason=$3 WHERE id=$1`,
@@ -499,8 +511,8 @@ export async function archiveBackup(
 // --- restore ---
 
 /** Read + decode a backup artifact into its DumpFile. */
-async function loadDump(storageKey: string): Promise<DumpFile> {
-  const buffer = await storage.get(storageKey);
+async function loadDump(storageKey: string, mode: StorageMode): Promise<DumpFile> {
+  const buffer = await backupStorageFor(mode).get(storageKey);
   return JSON.parse(gunzipSync(buffer).toString("utf8")) as DumpFile;
 }
 
@@ -510,7 +522,7 @@ export async function restorePreview(id: string) {
   if (backup.status !== "success" || !backup.storageKey) {
     throw ApiError.badRequest("This backup has no artifact to preview");
   }
-  const dump = await loadDump(backup.storageKey);
+  const dump = await loadDump(backup.storageKey, backup.storageMode);
   const currentVersion = Number(
     (await query<{ n: number }>("SELECT count(*)::int AS n FROM schema_migrations")).rows[0].n
   );
@@ -571,7 +583,7 @@ export async function applyRestoreDump(
 
   // Pre-flight validation (client errors ⇒ 400, surfaced BEFORE any destructive
   // work so a corrupt/incompatible backup never truncates data).
-  const buffer = await storage.get(backup.storageKey);
+  const buffer = await backupStorageFor(backup.storageMode).get(backup.storageKey);
   const actual = sha256(buffer);
   const checksumOk = Boolean(backup.checksum) && actual === backup.checksum;
   if (!checksumOk) {
@@ -757,14 +769,14 @@ export async function applyRetention(scope: "global" | "institution", actor: Act
   if (settings.retentionCount == null) return { archived: 0 };
   const keep = Math.max(settings.retentionCount, settings.retentionMinKeep ?? 1);
 
-  const { rows } = await query<{ id: string; storageKey: string | null }>(
-    `SELECT id, storage_key AS "storageKey" FROM backups
+  const { rows } = await query<{ id: string; storageKey: string | null; storageMode: StorageMode }>(
+    `SELECT id, storage_key AS "storageKey", storage_mode AS "storageMode" FROM backups
      WHERE status = 'success' AND scope = $1
      ORDER BY created_at DESC OFFSET $2`,
     [scope, keep]
   );
   for (const row of rows) {
-    if (row.storageKey) await storage.remove(row.storageKey).catch(() => undefined);
+    if (row.storageKey) await backupStorageFor(row.storageMode).remove(row.storageKey).catch(() => undefined);
     await query(
       `UPDATE backups SET status='archived', storage_key=NULL, archived_at=now(),
          archive_reason='retention policy' WHERE id=$1`,
@@ -834,6 +846,9 @@ export async function summary() {
 
   // Health warnings — surfaced on the dashboard.
   const warnings: string[] = [];
+  // Offsite backups are ACTIVE only when explicitly enabled AND S3 is configured —
+  // S3 configured for document uploads alone does NOT send DB backups offsite.
+  const offsiteActive = Boolean(settings.offsiteEnabled) && storageConfigured();
   const lastSuccessAt = counts.last_success_at ? new Date(counts.last_success_at) : null;
   const staleDays = lastSuccessAt
     ? (Date.now() - lastSuccessAt.getTime()) / 86_400_000
@@ -843,7 +858,7 @@ export async function summary() {
   if (counts.failed > 0) warnings.push(`${counts.failed} failed backup(s) recorded.`);
   if (counts.checksum_failed > 0) warnings.push(`${counts.checksum_failed} backup(s) failed checksum verification.`);
   if (!settings.encryptionEnabled) warnings.push("Backup-level encryption is not enabled (relies on storage at-rest encryption).");
-  if (storageMode !== "s3") warnings.push("Offsite (S3) storage is not configured — backups are on the app server disk only.");
+  if (!offsiteActive) warnings.push("Offsite (S3) backups are not enabled — database backups are on the app-server disk only.");
   if (!settings.scheduleEnabled) warnings.push("Automatic scheduled backups are disabled.");
 
   return {
@@ -871,8 +886,8 @@ export async function summary() {
       checksumFailed: counts.checksum_failed,
     },
     offsite: {
-      mode: storageMode,
-      configured: storageMode === "s3",
+      mode: offsiteActive ? "s3" : "local",
+      configured: offsiteActive,
       copies: counts.offsite,
       lastTestAt: settings.lastOffsiteTestAt,
       lastTestOk: settings.lastOffsiteTestOk,
