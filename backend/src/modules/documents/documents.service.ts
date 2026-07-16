@@ -4,6 +4,11 @@ import { query } from "../../db/postgres";
 import { env } from "../../config/env";
 import { ApiError } from "../../utils/api-error";
 import { storage, documentStorageFor, type StorageMode } from "../../utils/storage";
+import {
+  documentEncryptionEnabled,
+  encryptDocument,
+  decryptDocument,
+} from "../../utils/document-crypto";
 import { assertStorageWithinLimit } from "../../utils/plan-limits";
 import { accessibleStudentIds, isStaff } from "../../utils/scope";
 import type { z } from "zod";
@@ -127,8 +132,18 @@ export async function createDocument(
   const safeName = `${randomUUID()}.${ext}`;
   const storageKey = `${institutionId}/${fields.ownerType}/${safeName}`;
 
+  // Encrypt at rest when a document key is configured; otherwise store the file as-is.
+  // The key id is recorded per file (enc_key_id) so downloads decrypt with the right key.
+  let body = file.buffer;
+  let encKeyId: string | null = null;
+  if (documentEncryptionEnabled()) {
+    const enc = encryptDocument(file.buffer);
+    body = enc.blob;
+    encKeyId = enc.keyId;
+  }
+
   try {
-    await storage.put(storageKey, file.buffer, file.mimetype);
+    await storage.put(storageKey, body, file.mimetype);
   } catch (err) {
     console.error("storage.put failed:", err);
     throw ApiError.serviceUnavailable("File storage is unavailable");
@@ -137,8 +152,8 @@ export async function createDocument(
   const { rows } = await query(
     `INSERT INTO documents
        (institution_id, owner_type, owner_id, category, original_name, safe_name,
-        mime_type, size_bytes, storage_key, storage_mode, uploaded_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        mime_type, size_bytes, storage_key, storage_mode, enc_key_id, uploaded_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      RETURNING ${SELECT}`,
     [
       institutionId,
@@ -151,6 +166,7 @@ export async function createDocument(
       file.size,
       storageKey,
       storage.mode,
+      encKeyId,
       req.user!.id,
     ]
   );
@@ -220,6 +236,7 @@ export async function listDocuments(
 interface DownloadRow {
   storage_key: string;
   storage_mode: StorageMode | null;
+  enc_key_id: string | null;
   mime_type: string;
   original_name: string;
   owner_type: string;
@@ -234,7 +251,7 @@ export async function downloadDocument(
   institutionId: string
 ): Promise<{ buffer: Buffer; mimeType: string; originalName: string }> {
   const { rows } = await query<DownloadRow>(
-    `SELECT storage_key, storage_mode, mime_type, original_name, owner_type, owner_id, category
+    `SELECT storage_key, storage_mode, enc_key_id, mime_type, original_name, owner_type, owner_id, category
      FROM documents WHERE id = $1 AND institution_id = $2`,
     [id, institutionId]
   );
@@ -247,7 +264,11 @@ export async function downloadDocument(
     // Route by the file's recorded storage_mode so files written to local disk stay
     // readable after S3 is enabled for new uploads (and vice-versa). Never falls back
     // to the "wrong" backend, so an S3 permission/outage surfaces here as a 503.
-    const buffer = await documentStorageFor(doc.storage_mode).get(doc.storage_key);
+    const raw = await documentStorageFor(doc.storage_mode).get(doc.storage_key);
+    // Decrypt when the file was stored encrypted (enc_key_id set); legacy plaintext
+    // files (enc_key_id null) pass through unchanged. A missing key or tampering throws
+    // here and surfaces as a 503 — we never return unreadable/undecryptable bytes.
+    const buffer = doc.enc_key_id ? decryptDocument(raw, doc.enc_key_id) : raw;
     return { buffer, mimeType: doc.mime_type, originalName: doc.original_name };
   } catch (err) {
     console.error("storage.get failed:", err);

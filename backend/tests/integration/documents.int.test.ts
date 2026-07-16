@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { randomBytes } from "node:crypto";
 import request from "supertest";
 import {
   app,
@@ -8,9 +9,13 @@ import {
   resetDb,
   tokenFor,
 } from "./helpers";
+import { storage } from "../../src/utils/storage";
+import { __setDocumentCryptoForTests } from "../../src/utils/document-crypto";
 
 const PW = "Passw0rd!";
 const PDF = Buffer.from("%PDF-1.4\nfake report\n%%EOF");
+const KEY1 = randomBytes(32).toString("base64");
+const KEY2 = randomBytes(32).toString("base64");
 
 async function insertId(sql: string, params: unknown[]): Promise<string> {
   const { rows } = await query<{ id: string }>(sql, params);
@@ -48,6 +53,10 @@ describe("document management", () => {
   };
   const get = (path: string, token: string) =>
     request(app).get(path).set("Authorization", `Bearer ${token}`);
+
+  // Reset document encryption to the env-derived keyring (disabled in tests) after each
+  // case, so plaintext cases run unencrypted and encryption cases opt in explicitly.
+  afterEach(() => __setDocumentCryptoForTests(null));
 
   beforeEach(async () => {
     await resetDb();
@@ -302,5 +311,93 @@ describe("document management", () => {
     await query(`UPDATE documents SET storage_mode = 's3' WHERE id = $1`, [bDoc.body.id]);
     // Tenant isolation is enforced before storage is touched → 404 (not 503).
     expect((await get(`/api/v1/documents/${bDoc.body.id}/download`, tok.admin)).status).toBe(404);
+  });
+
+  // --- Phase 1: application-layer document encryption at rest ---
+
+  it("encrypts uploaded documents at rest and round-trips an authorised download", async () => {
+    __setDocumentCryptoForTests([{ id: "k1", keyB64: KEY1, active: true }]);
+    const up = await uploadAs(
+      tok.admin,
+      { ownerType: "student", ownerId: st1, category: "id_card" },
+      { buffer: PDF, filename: "id.pdf", contentType: "application/pdf" }
+    );
+    expect(up.status).toBe(201);
+    const { rows } = await query<{ storage_key: string; enc_key_id: string | null }>(
+      `SELECT storage_key, enc_key_id FROM documents WHERE id = $1`,
+      [up.body.id]
+    );
+    expect(rows[0].enc_key_id).toBe("k1"); // recorded as encrypted with the active key
+    // The bytes actually on disk are ciphertext — not the original file.
+    const stored = await storage.get(rows[0].storage_key);
+    expect(stored.equals(PDF)).toBe(false);
+    expect(stored.subarray(0, 4).toString()).not.toBe("%PDF");
+    // ...but an authorised download returns the exact original bytes.
+    const dl = await get(`/api/v1/documents/${up.body.id}/download`, tok.admin)
+      .buffer(true)
+      .parse(binaryParser);
+    expect(dl.status).toBe(200);
+    expect(Buffer.compare(dl.body, PDF)).toBe(0);
+  });
+
+  it("still downloads a legacy plaintext document while encryption is enabled", async () => {
+    __setDocumentCryptoForTests([{ id: "k1", keyB64: KEY1, active: true }]);
+    // Simulate a pre-encryption file: plaintext bytes on disk + a row with enc_key_id NULL.
+    const key = `${instA}/student/legacy-plain.pdf`;
+    await storage.put(key, PDF, "application/pdf");
+    const id = await insertId(
+      `INSERT INTO documents
+         (institution_id, owner_type, owner_id, category, original_name, safe_name,
+          mime_type, size_bytes, storage_key, storage_mode, enc_key_id, uploaded_by)
+       VALUES ($1,'student',$2,'certificate','legacy.pdf','legacy-plain.pdf','application/pdf',$3,$4,'local',NULL,NULL)
+       RETURNING id`,
+      [instA, st1, PDF.length, key]
+    );
+    const dl = await get(`/api/v1/documents/${id}/download`, tok.admin)
+      .buffer(true)
+      .parse(binaryParser);
+    expect(dl.status).toBe(200);
+    expect(Buffer.compare(dl.body, PDF)).toBe(0); // passthrough — not an attempted decrypt
+  });
+
+  it("fails safe (503) when the key that encrypted a document is unavailable", async () => {
+    __setDocumentCryptoForTests([{ id: "k1", keyB64: KEY1, active: true }]);
+    const up = await uploadAs(
+      tok.admin,
+      { ownerType: "student", ownerId: st1 },
+      { buffer: PDF, filename: "sealed.pdf", contentType: "application/pdf" }
+    );
+    expect(up.status).toBe(201);
+    // Key rotated away / removed: the keyring no longer holds k1.
+    __setDocumentCryptoForTests([{ id: "k2", keyB64: KEY2, active: true }]);
+    const dl = await get(`/api/v1/documents/${up.body.id}/download`, tok.admin);
+    expect(dl.status).toBe(503); // cannot decrypt → surfaced, never returns ciphertext
+  });
+
+  it("uploads, downloads and deletes an encrypted document end-to-end", async () => {
+    __setDocumentCryptoForTests([{ id: "k1", keyB64: KEY1, active: true }]);
+    const up = await uploadAs(
+      tok.admin,
+      { ownerType: "student", ownerId: st1, category: "tc" },
+      { buffer: PDF, filename: "enc-lifecycle.pdf", contentType: "application/pdf" }
+    );
+    expect(up.status).toBe(201);
+    // download decrypts to the original bytes
+    const dl = await get(`/api/v1/documents/${up.body.id}/download`, tok.admin)
+      .buffer(true)
+      .parse(binaryParser);
+    expect(dl.status).toBe(200);
+    expect(Buffer.compare(dl.body, PDF)).toBe(0);
+    // delete removes the stored (encrypted) object and the row
+    const { rows } = await query<{ storage_key: string }>(
+      `SELECT storage_key FROM documents WHERE id = $1`,
+      [up.body.id]
+    );
+    const del = await request(app)
+      .delete(`/api/v1/documents/${up.body.id}`)
+      .set("Authorization", `Bearer ${tok.admin}`);
+    expect(del.status).toBe(204);
+    expect((await get(`/api/v1/documents/${up.body.id}/download`, tok.admin)).status).toBe(404);
+    await expect(storage.get(rows[0].storage_key)).rejects.toThrow(); // ciphertext file gone
   });
 });
