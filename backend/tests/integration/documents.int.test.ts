@@ -373,4 +373,31 @@ describe("document management", () => {
     const dl = await get(`/api/v1/documents/${up.body.id}/download`, tok.admin);
     expect(dl.status).toBe(503); // cannot decrypt → surfaced, never returns ciphertext
   });
+
+  it("uploads, downloads and deletes an encrypted document end-to-end", async () => {
+    __setDocumentCryptoForTests([{ id: "k1", keyB64: KEY1, active: true }]);
+    const up = await uploadAs(
+      tok.admin,
+      { ownerType: "student", ownerId: st1, category: "tc" },
+      { buffer: PDF, filename: "enc-lifecycle.pdf", contentType: "application/pdf" }
+    );
+    expect(up.status).toBe(201);
+    // download decrypts to the original bytes
+    const dl = await get(`/api/v1/documents/${up.body.id}/download`, tok.admin)
+      .buffer(true)
+      .parse(binaryParser);
+    expect(dl.status).toBe(200);
+    expect(Buffer.compare(dl.body, PDF)).toBe(0);
+    // delete removes the stored (encrypted) object and the row
+    const { rows } = await query<{ storage_key: string }>(
+      `SELECT storage_key FROM documents WHERE id = $1`,
+      [up.body.id]
+    );
+    const del = await request(app)
+      .delete(`/api/v1/documents/${up.body.id}`)
+      .set("Authorization", `Bearer ${tok.admin}`);
+    expect(del.status).toBe(204);
+    expect((await get(`/api/v1/documents/${up.body.id}/download`, tok.admin)).status).toBe(404);
+    await expect(storage.get(rows[0].storage_key)).rejects.toThrow(); // ciphertext file gone
+  });
 });
