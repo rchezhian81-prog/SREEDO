@@ -51,4 +51,11 @@ describe("document storage routing follows each file's recorded storage_mode", (
     if (!storageConfigured()) return; // only meaningful when env provides S3
     expect(documentStorageFor("s3").mode).toBe("s3");
   });
+
+  it("an unrecognised storage mode THROWS (never silently served from local disk)", () => {
+    // documents.storage_mode is TEXT with no CHECK constraint, so a row could hold an
+    // unexpected value — it must fail loudly (→ 503), not fall through to local.
+    expect(() => documentStorageFor("gcs")).toThrow(/unsupported storage mode/i);
+    expect(() => documentStorageFor("")).toThrow(/unsupported storage mode/i);
+  });
 });

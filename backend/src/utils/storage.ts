@@ -162,7 +162,7 @@ export function backupStorageFor(mode: StorageMode | null | undefined): Storage 
 // always resolve to the app-server disk, regardless of whether S3 is configured.
 const documentLocalStorage: Storage = new LocalDiskStorage();
 
-export function documentStorageFor(mode: StorageMode | null | undefined): Storage {
+export function documentStorageFor(mode: string | null | undefined): Storage {
   if (mode === "s3") {
     if (!storageConfigured()) {
       throw new Error(
@@ -171,5 +171,12 @@ export function documentStorageFor(mode: StorageMode | null | undefined): Storag
     }
     return storage; // the S3 singleton (an S3Storage whenever storageConfigured())
   }
-  return documentLocalStorage; // 'local' or null → always the application-server disk
+  if (mode === "local" || mode === null || mode === undefined) {
+    return documentLocalStorage; // 'local'/legacy rows → the application-server disk
+  }
+  // documents.storage_mode is TEXT with no CHECK constraint (migration 0019_documents),
+  // so a row could hold an unexpected value. An unrecognised mode must NEVER be silently
+  // served from local disk — that could hand back the wrong bytes (or a miss) for data
+  // written to some other/newer backend. Surface it so the caller returns a 503.
+  throw new Error(`Unsupported storage mode: ${String(mode)}`);
 }
