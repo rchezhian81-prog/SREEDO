@@ -3,7 +3,7 @@ import type { Request } from "express";
 import { query } from "../../db/postgres";
 import { env } from "../../config/env";
 import { ApiError } from "../../utils/api-error";
-import { storage } from "../../utils/storage";
+import { storage, documentStorageFor, type StorageMode } from "../../utils/storage";
 import { assertStorageWithinLimit } from "../../utils/plan-limits";
 import { accessibleStudentIds, isStaff } from "../../utils/scope";
 import type { z } from "zod";
@@ -219,6 +219,7 @@ export async function listDocuments(
 
 interface DownloadRow {
   storage_key: string;
+  storage_mode: StorageMode | null;
   mime_type: string;
   original_name: string;
   owner_type: string;
@@ -233,7 +234,7 @@ export async function downloadDocument(
   institutionId: string
 ): Promise<{ buffer: Buffer; mimeType: string; originalName: string }> {
   const { rows } = await query<DownloadRow>(
-    `SELECT storage_key, mime_type, original_name, owner_type, owner_id, category
+    `SELECT storage_key, storage_mode, mime_type, original_name, owner_type, owner_id, category
      FROM documents WHERE id = $1 AND institution_id = $2`,
     [id, institutionId]
   );
@@ -243,7 +244,10 @@ export async function downloadDocument(
   await assertCanAccess(req, doc);
 
   try {
-    const buffer = await storage.get(doc.storage_key);
+    // Route by the file's recorded storage_mode so files written to local disk stay
+    // readable after S3 is enabled for new uploads (and vice-versa). Never falls back
+    // to the "wrong" backend, so an S3 permission/outage surfaces here as a 503.
+    const buffer = await documentStorageFor(doc.storage_mode).get(doc.storage_key);
     return { buffer, mimeType: doc.mime_type, originalName: doc.original_name };
   } catch (err) {
     console.error("storage.get failed:", err);
@@ -270,12 +274,20 @@ export async function deleteDocument(
   id: string,
   institutionId: string
 ): Promise<void> {
-  const { rows } = await query<{ storage_key: string }>(
-    "SELECT storage_key FROM documents WHERE id = $1 AND institution_id = $2",
+  const { rows } = await query<{ storage_key: string; storage_mode: StorageMode | null }>(
+    "SELECT storage_key, storage_mode FROM documents WHERE id = $1 AND institution_id = $2",
     [id, institutionId]
   );
   if (!rows[0]) throw ApiError.notFound("Document not found");
-  await storage.remove(rows[0].storage_key);
+  try {
+    // Remove the object from the SAME backend it was written to. If that backend is
+    // unavailable (e.g. an 's3' file while S3 is misconfigured) surface the error and
+    // keep the metadata row rather than silently orphaning the stored object.
+    await documentStorageFor(rows[0].storage_mode).remove(rows[0].storage_key);
+  } catch (err) {
+    console.error("storage.remove failed:", err);
+    throw ApiError.serviceUnavailable("File storage is unavailable");
+  }
   await query("DELETE FROM documents WHERE id = $1 AND institution_id = $2", [
     id,
     institutionId,

@@ -148,3 +148,35 @@ export function backupWriteStorage(offsiteEnabled: boolean): Storage {
 export function backupStorageFor(mode: StorageMode | null | undefined): Storage {
   return mode === "s3" && storageConfigured() ? storage : backupLocalStorage;
 }
+
+// --- Document storage read/remove routing (per-file storage_mode) ---
+// Reading or removing a stored document MUST follow the backend each file was WRITTEN
+// to (recorded in documents.storage_mode), NOT the currently-active singleton. That
+// way, enabling S3 for new uploads never orphans documents already written to local
+// disk, and a later rollback never makes the app hunt for local files inside S3.
+//
+// Deliberately UNLIKE backupStorageFor: an 's3' document does NOT silently fall back to
+// local disk. If S3 is unavailable/misconfigured we THROW so the caller surfaces a 503,
+// rather than masquerading an S3 permission/outage error as a missing local file (which
+// would hide the real fault and could even serve a stale local copy). 'local'/null files
+// always resolve to the app-server disk, regardless of whether S3 is configured.
+const documentLocalStorage: Storage = new LocalDiskStorage();
+
+export function documentStorageFor(mode: string | null | undefined): Storage {
+  if (mode === "s3") {
+    if (!storageConfigured()) {
+      throw new Error(
+        "Document is recorded as S3-stored but S3 object storage is not configured"
+      );
+    }
+    return storage; // the S3 singleton (an S3Storage whenever storageConfigured())
+  }
+  if (mode === "local" || mode === null || mode === undefined) {
+    return documentLocalStorage; // 'local'/legacy rows → the application-server disk
+  }
+  // documents.storage_mode is TEXT with no CHECK constraint (migration 0019_documents),
+  // so a row could hold an unexpected value. An unrecognised mode must NEVER be silently
+  // served from local disk — that could hand back the wrong bytes (or a miss) for data
+  // written to some other/newer backend. Surface it so the caller returns a 503.
+  throw new Error(`Unsupported storage mode: ${String(mode)}`);
+}

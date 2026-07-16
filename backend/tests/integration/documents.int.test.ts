@@ -244,4 +244,63 @@ describe("document management", () => {
       .attach("file", png, { filename: "logo.png", contentType: "image/png" });
     expect(denied.status).toBe(403);
   });
+
+  // --- PR-OPS3: per-file storage_mode routing (S3 flip is backward-compatible) ---
+
+  it("keeps a local-recorded document downloadable (legacy files survive an S3 flip)", async () => {
+    const up = await uploadAs(
+      tok.admin,
+      { ownerType: "student", ownerId: st1, category: "certificate" },
+      { buffer: PDF, filename: "legacy.pdf", contentType: "application/pdf" }
+    );
+    expect(up.body.storageMode).toBe("local");
+    const dl = await get(`/api/v1/documents/${up.body.id}/download`, tok.admin)
+      .buffer(true)
+      .parse(binaryParser);
+    expect(dl.status).toBe(200);
+    expect(Buffer.compare(dl.body, PDF)).toBe(0); // still read from local disk
+  });
+
+  it("routes an S3-recorded document to S3 and never silently falls back to a lingering local copy", async () => {
+    // Uploaded while S3 is unconfigured → written to local disk, mode 'local'.
+    const up = await uploadAs(
+      tok.admin,
+      { ownerType: "student", ownerId: st1, category: "tc" },
+      { buffer: PDF, filename: "s3doc.pdf", contentType: "application/pdf" }
+    );
+    expect(up.body.storageMode).toBe("local");
+    // Simulate the row having been written during the S3 window.
+    await query(`UPDATE documents SET storage_mode = 's3' WHERE id = $1`, [up.body.id]);
+    // A local copy still exists on disk, but an 's3' record must resolve to S3. S3 is not
+    // configured here → the router throws → surfaced as 503, NOT a 200 from the local file
+    // (which would mask a real S3 outage/misconfiguration).
+    const dl = await get(`/api/v1/documents/${up.body.id}/download`, tok.admin);
+    expect(dl.status).toBe(503);
+  });
+
+  it("surfaces a storage failure when deleting an S3-recorded document and keeps the metadata row", async () => {
+    const up = await uploadAs(
+      tok.admin,
+      { ownerType: "student", ownerId: st1 },
+      { buffer: PDF, filename: "del-s3.pdf", contentType: "application/pdf" }
+    );
+    await query(`UPDATE documents SET storage_mode = 's3' WHERE id = $1`, [up.body.id]);
+    const del = await request(app)
+      .delete(`/api/v1/documents/${up.body.id}`)
+      .set("Authorization", `Bearer ${tok.admin}`);
+    expect(del.status).toBe(503); // S3 unavailable → surfaced, not a silent success
+    const still = await query(`SELECT 1 FROM documents WHERE id = $1`, [up.body.id]);
+    expect(still.rows.length).toBe(1); // row retained → stored object is never orphaned
+  });
+
+  it("still denies cross-institution download for an S3-recorded document", async () => {
+    const bDoc = await uploadAs(
+      tok.badmin,
+      { ownerType: "user" },
+      { buffer: PDF, filename: "b-s3.pdf", contentType: "application/pdf" }
+    );
+    await query(`UPDATE documents SET storage_mode = 's3' WHERE id = $1`, [bDoc.body.id]);
+    // Tenant isolation is enforced before storage is touched → 404 (not 503).
+    expect((await get(`/api/v1/documents/${bDoc.body.id}/download`, tok.admin)).status).toBe(404);
+  });
 });
