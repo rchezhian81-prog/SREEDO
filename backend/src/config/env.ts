@@ -113,6 +113,18 @@ export const env = {
   storageLocalDir: process.env.STORAGE_LOCAL_DIR ?? "uploads",
   storageMaxMb: Number(process.env.STORAGE_MAX_MB ?? 10),
 
+  // Application-layer encryption for uploaded documents at rest (optional). When
+  // DOCUMENT_ENCRYPTION_KEY is set (base64 of exactly 32 bytes) new document uploads are
+  // encrypted with AES-256-GCM before being written to storage and decrypted on
+  // download; existing plaintext files stay readable. Unset => documents are stored
+  // as-is (unchanged behaviour). DOCUMENT_ENCRYPTION_KEY_ID labels the active key
+  // (recorded per file) so keys can be rotated; retired keys still needed to read old
+  // files may be supplied via DOCUMENT_ENCRYPTION_RETIRED_KEYS as a JSON map
+  // { "<id>": "<base64 key>" }. A malformed key fails fast at boot (never fails open).
+  documentEncryptionKey: optional("DOCUMENT_ENCRYPTION_KEY"),
+  documentEncryptionKeyId: process.env.DOCUMENT_ENCRYPTION_KEY_ID ?? "k1",
+  documentEncryptionRetiredKeys: optional("DOCUMENT_ENCRYPTION_RETIRED_KEYS"),
+
   seedOnStart: process.env.SEED_ON_START === "true",
 
   // Teacher own-class row scoping (PR-SEC1) — kill-switch, OFF by default so a
