@@ -96,3 +96,253 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+/* ============================================================================
+ * PR-UI1 — GoCampus semantic design-token foundation  (DORMANT)
+ * ----------------------------------------------------------------------------
+ * Two visual skins live here but are switched on ONLY when an ancestor carries
+ * the `.ui-v2` class. Nothing in this PR ever adds that class (the theme engine
+ * is a later PR), so with `.ui-v2` absent every value below resolves to the
+ * exact pre-PR-UI1 colour and the app renders byte-for-byte identically.
+ *
+ *   Light skin  → "Modern Soft Premium"  (.ui-v2:not(.dark))
+ *   Dark skin   → "Intelligent Glass"    (.ui-v2.dark)
+ *
+ * Brand + chart palettes are made variable-backed at their EXACT current hex so
+ * existing `brand-*` / chart usages retheme under `.ui-v2` with zero class
+ * changes and zero off-flag drift.
+ * ========================================================================== */
+
+:root {
+  /* Brand ramp — values identical to the previous static Tailwind hex. */
+  --brand-50: 238 244 255;
+  --brand-100: 219 231 255;
+  --brand-200: 188 211 255;
+  --brand-300: 143 180 255;
+  --brand-400: 91 141 239;
+  --brand-500: 59 110 240;
+  --brand-600: 37 99 235;
+  --brand-700: 29 78 216;
+  --brand-800: 30 64 175;
+  --brand-900: 30 58 138;
+
+  /* Primary action accent (= brand-600/700) + secondary hues (inert off-flag). */
+  --c-accent: 37 99 235;
+  --c-accent-strong: 29 78 216;
+  --c-gold: 176 137 43;
+  --c-indigo: 79 70 229;
+
+  /* Chart series — identical to the previous DONUT_COLORS hex. */
+  --chart-1: 37 99 235;
+  --chart-2: 22 163 74;
+  --chart-3: 245 158 11;
+  --chart-4: 219 39 119;
+  --chart-5: 124 58 237;
+  --chart-6: 8 145 178;
+
+  /* Action shadows + elevation — defaults identical to pre-PR-UI1 literals. */
+  --shadow-accent: 0 8px 18px rgb(37 99 235 / 0.32);
+  --shadow-danger: 0 8px 18px rgb(239 68 68 / 0.3);
+  --elevation-1: 0 1px 2px rgb(20 30 55 / 0.04), 0 6px 20px rgb(20 30 55 / 0.07);
+  --elevation-2: 0 10px 30px rgb(20 30 55 / 0.12);
+  --elevation-3: 0 24px 60px -12px rgb(20 30 55 / 0.18);
+
+  /* New token families — theme-independent; inert until `.ui-v2` uses them. */
+  --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem; --space-4: 1rem;
+  --space-5: 1.25rem; --space-6: 1.5rem; --space-8: 2rem;
+  --radius-sm: 0.5rem; --radius-md: 0.75rem; --radius-lg: 1rem;
+  --radius-xl: 1.25rem; --radius-2xl: 1.5rem; --radius-pill: 9999px;
+  --border-thin: 1px; --border-med: 1.5px;
+  --motion-fast: 120ms; --motion-base: 200ms; --motion-slow: 320ms;
+  --motion-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --density-row: 2.75rem; --density-control: 2.5rem;
+  --focus-ring: 2px; --focus-offset: 2px;
+  /* Glass + glow default to inert/transparent so nothing frosts off-flag. */
+  --glass-bg: 255 255 255; --glass-border: 255 255 255;
+  --glass-blur: 0px; --glass-saturate: 100%;
+  --glow-accent: 0 0 0 transparent;
+  --font-tamil: "Noto Sans Tamil", "Latha", "Nirmala UI", sans-serif;
+}
+
+/* ---- Light skin: Modern Soft Premium ------------------------------------- */
+.ui-v2:not(.dark) {
+  --c-app: 245 244 250;
+  --c-surface: 255 255 255;
+  --c-surface-2: 248 247 253;
+  --c-line: 231 228 242;
+  --c-ink: 26 23 44;
+  --c-muted: 92 88 118;
+  --c-faint: 140 136 164;
+  --c-hover: 244 242 251;
+
+  --brand-50: 245 243 255;
+  --brand-100: 237 233 254;
+  --brand-200: 221 214 254;
+  --brand-300: 196 181 253;
+  --brand-400: 167 139 250;
+  --brand-500: 139 92 246;
+  --brand-600: 124 58 237;
+  --brand-700: 109 40 217;
+  --brand-800: 91 33 182;
+  --brand-900: 76 29 149;
+  --c-accent: 124 58 237;
+  --c-accent-strong: 109 40 217;
+  --c-gold: 161 124 33;
+  --c-indigo: 79 70 229;
+
+  --c-success: 5 150 105;
+  --c-warn: 180 121 5;
+  --c-danger: 220 38 38;
+  --c-info: 79 70 229;
+
+  --chart-1: 124 58 237;
+  --chart-2: 79 70 229;
+  --chart-3: 161 124 33;
+  --chart-4: 13 148 136;
+  --chart-5: 219 39 119;
+  --chart-6: 2 132 199;
+
+  --shadow-accent: 0 10px 26px -6px rgb(124 58 237 / 0.35);
+  --elevation-1: 0 1px 2px rgb(41 30 71 / 0.05), 0 8px 24px -8px rgb(41 30 71 / 0.1);
+  --elevation-2: 0 16px 40px -12px rgb(41 30 71 / 0.18);
+  --elevation-3: 0 28px 70px -16px rgb(41 30 71 / 0.22);
+
+  --glass-bg: 255 255 255;
+  --glass-border: 231 228 242;
+  --glass-blur: 14px;
+  --glass-saturate: 140%;
+  --glow-accent: 0 0 0 1px rgb(124 58 237 / 0.1), 0 12px 30px -10px rgb(124 58 237 / 0.28);
+}
+
+/* ---- Dark skin: Intelligent Glass ---------------------------------------- */
+.ui-v2.dark {
+  --c-app: 8 10 24;
+  --c-surface: 17 20 40;
+  --c-surface-2: 13 16 33;
+  --c-line: 36 42 74;
+  --c-ink: 233 234 247;
+  --c-muted: 156 160 192;
+  --c-faint: 112 116 148;
+  --c-hover: 28 33 60;
+
+  --brand-50: 245 243 255;
+  --brand-100: 237 233 254;
+  --brand-200: 221 214 254;
+  --brand-300: 196 181 253;
+  --brand-400: 167 139 250;
+  --brand-500: 139 92 246;
+  --brand-600: 124 58 237;
+  --brand-700: 109 40 217;
+  --brand-800: 91 33 182;
+  --brand-900: 76 29 149;
+  --c-accent: 124 58 237;
+  --c-accent-strong: 109 40 217;
+  --c-gold: 214 179 94;
+  --c-indigo: 129 140 248;
+
+  --c-success: 52 211 153;
+  --c-warn: 251 191 36;
+  --c-danger: 248 113 113;
+  --c-info: 129 140 248;
+
+  --chart-1: 167 139 250;
+  --chart-2: 129 140 248;
+  --chart-3: 214 179 94;
+  --chart-4: 45 212 191;
+  --chart-5: 244 114 182;
+  --chart-6: 56 189 248;
+
+  --shadow-accent: 0 10px 30px -6px rgb(0 0 0 / 0.55);
+  --elevation-1: 0 1px 2px rgb(0 0 0 / 0.4), 0 10px 30px -12px rgb(0 0 0 / 0.55);
+  --elevation-2: 0 20px 50px -16px rgb(0 0 0 / 0.65);
+  --elevation-3: 0 30px 80px -20px rgb(0 0 0 / 0.7);
+
+  --glass-bg: 17 20 40;
+  --glass-border: 78 88 140;
+  --glass-blur: 18px;
+  --glass-saturate: 150%;
+  --glow-accent: 0 0 0 1px rgb(139 92 246 / 0.25), 0 16px 40px -12px rgb(139 92 246 / 0.45);
+}
+
+/* ---- Typography (self-hosted; only applied under `.ui-v2`) ---------------- *
+ * Manrope (UI/Latin) + Noto Sans Tamil (Tamil), both SIL OFL 1.1. The woff2
+ * files live in /public/fonts (see public/fonts/README.md). `font-display:swap`
+ * keeps text visible during load; the fallback stack preserves Tamil + Latin if
+ * a file is missing. No @import / no external host is ever requested. */
+@font-face {
+  font-family: "Manrope";
+  font-style: normal;
+  font-weight: 300 800;
+  font-display: swap;
+  src: url("/fonts/manrope-variable.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Noto Sans Tamil";
+  font-style: normal;
+  font-weight: 300 800;
+  font-display: swap;
+  src: url("/fonts/noto-sans-tamil-variable.woff2") format("woff2");
+  unicode-range: U+0964-0965, U+0B82-0BFA, U+200C-200D, U+20B9, U+25CC;
+}
+
+.ui-v2 {
+  font-family: "Manrope", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, "Noto Sans Tamil", sans-serif;
+}
+/* Tamil content renders with the Tamil face + Latin fallback preserved. */
+.ui-v2 :lang(ta) {
+  font-family: var(--font-tamil);
+}
+/* Financial figures: tabular, lining numerals (correct ₹ alignment). */
+.ui-v2 .tabular-nums,
+.ui-v2 [data-numeric] {
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+}
+
+/* ---- Glass utility — ALLOW-LISTED to nav / dashboards / AI / analytics ---- *
+ * Deliberately opt-in via `.glass-panel`; tables and forms must NEVER frost —
+ * they keep the solid `--c-surface`. Inert unless a `.ui-v2` ancestor exists. */
+.ui-v2 .glass-panel {
+  background: rgb(var(--glass-bg) / 0.72);
+  border: var(--border-thin) solid rgb(var(--glass-border) / 0.6);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+}
+/* Solid, non-glass surfaces even inside a glass region (forms/tables opt out). */
+.ui-v2 .glass-solid {
+  background: rgb(var(--c-surface));
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+@media (prefers-reduced-transparency: reduce) {
+  .ui-v2 .glass-panel {
+    background: rgb(var(--c-surface));
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+/* ---- Print / receipts forced light (only under `.ui-v2`; off-flag print is
+ * unchanged). Receipts and printed reports must never carry the dark/glass skin. */
+@media print {
+  :root.ui-v2,
+  :root.ui-v2.dark {
+    --c-app: 255 255 255;
+    --c-surface: 255 255 255;
+    --c-surface-2: 255 255 255;
+    --c-line: 226 232 240;
+    --c-ink: 15 23 42;
+    --c-muted: 51 65 85;
+    --c-faint: 100 116 139;
+    --c-hover: 241 245 249;
+    --c-accent: 37 99 235;
+    color-scheme: light;
+  }
+  .ui-v2 .glass-panel {
+    background: #fff !important;
+    border-color: #e2e8f0 !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}

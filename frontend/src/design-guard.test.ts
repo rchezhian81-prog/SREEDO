@@ -8,7 +8,7 @@ import { scan, SWEPT } from "../scripts/design-guard.mjs";
 type Finding = { rule: string; file: string; line: number };
 
 describe("design guard (icon + colour rules)", () => {
-  const { hard, lock, warnings } = scan();
+  const { hard, lock, warnings, glass, dormancy } = scan();
 
   it("has zero hard violations (icon-facade, no-hex-class) across tenant pages", () => {
     if (hard.length) {
@@ -32,5 +32,25 @@ describe("design guard (icon + colour rules)", () => {
 
   it("exposes a sweep worklist for the next groups (informational)", () => {
     expect(Array.isArray(warnings)).toBe(true);
+  });
+
+  it("keeps the PR-UI1 `.ui-v2` token scope fully dormant (never applied in the DOM)", () => {
+    if (dormancy.length) {
+      throw new Error(
+        "ui-v2 must stay dormant (theme engine is a later PR):\n" +
+          dormancy.map((v: Finding) => `[${v.rule}] ${v.file}:${v.line}`).join("\n")
+      );
+    }
+    expect(dormancy.length).toBe(0);
+  });
+
+  it("keeps the glass utility allow-listed (never on forms/tables)", () => {
+    if (glass.length) {
+      throw new Error(
+        "glass-panel used outside the nav/dashboard/AI/analytics allow-list:\n" +
+          glass.map((v: Finding) => `[${v.rule}] ${v.file}:${v.line}`).join("\n")
+      );
+    }
+    expect(glass.length).toBe(0);
   });
 });

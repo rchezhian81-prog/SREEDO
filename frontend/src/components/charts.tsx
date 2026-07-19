@@ -1,9 +1,20 @@
 /*
  * Lightweight, dependency-free charts (no chart library). Themed with the
  * `brand` palette / semantic tokens; crisp at any size.
+ *
+ * Series colours are CSS-variable-backed (PR-UI1): each `--chart-N` defaults to
+ * the exact previous hex, so charts render identically with the modern skin off
+ * and retheme to the violet/indigo/gold premium series when it is on.
  */
 
-const DONUT_COLORS = ["#2563eb", "#16a34a", "#f59e0b", "#db2777", "#7c3aed", "#0891b2"];
+const DONUT_COLORS = [
+  "rgb(var(--chart-1))",
+  "rgb(var(--chart-2))",
+  "rgb(var(--chart-3))",
+  "rgb(var(--chart-4))",
+  "rgb(var(--chart-5))",
+  "rgb(var(--chart-6))",
+];
 
 export function EmptyChart({ message = "No data yet" }: { message?: string }) {
   return (
