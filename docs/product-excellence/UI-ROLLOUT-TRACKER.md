@@ -6,8 +6,9 @@ Single source of truth for the phased GoCampus UI/UX modernization.
 
 | PR | Scope | State |
 |----|-------|-------|
-| **PR-UI1** | Design tokens + shared foundations (dormant `.ui-v2`, self-hosted fonts, Tailwind mapping, 4 primitives, guard, tests, docs) | **This PR** |
-| PR-UI2+ | Theme engine, runtime switch, page adoption, StatCard/Table/Tabs consolidation, mobile nav | Deferred |
+| PR-UI1 | Design tokens + shared foundations (dormant `.ui-v2`, self-hosted fonts, Tailwind mapping, 4 primitives, guard, tests, docs) | Merged #175 · prod-dormant |
+| **PR-UI2** | Theme engine (two-gate activation, audited Layer-2 tenant flag, `/auth/me.uiV2Enabled`, no-flash render gate, eligible-only light default) — **still ships OFF** | **This PR** |
+| PR-UI3+ | Runtime switch UI, page adoption, StatCard/Table/Tabs consolidation, mobile nav | Deferred |
 
 ## Dormancy / safety posture (PR-UI1)
 
@@ -16,6 +17,38 @@ Single source of truth for the phased GoCampus UI/UX modernization.
 - No backend/API/DB/migration/RBAC/business-logic change. No `layout.tsx` change.
   No production activation.
 - Reserved flag `NEXT_PUBLIC_UI_V2` (default off), not wired to any toggle.
+
+## Theme-engine safety posture (PR-UI2)
+
+PR-UI2 wires the engine that *can* apply `.ui-v2`, but it **still ships OFF** — the
+build master switch `NEXT_PUBLIC_UI_V2` is absent in every environment and PR-UI2
+does **not** create or target the `ui_v2` platform flag. Effective activation needs
+**both** gates to agree:
+
+1. **Build master** — `NEXT_PUBLIC_UI_V2 === "true"` (`isModernSkinRequested()`), and
+2. **Tenant flag** — the caller's own institution is `enabled` **and** explicitly
+   allow-listed in the **audited** `platform_feature_flags` registry (Layer 2),
+   surfaced as the single derived boolean `uiV2Enabled` on `/auth/me`.
+
+- **Resolver** (`backend/.../platform/feature-flag-runtime.ts`) is READ-ONLY and
+  derives the tenant from the authenticated context only (`req.user.institutionId`);
+  a client-supplied id is never read. Missing row / `disabled` / `rollout` /
+  not-allow-listed / any DB error ⇒ **false** (fail-safe). It never mutates the
+  registry — the audited super-admin setter / history / rollback are untouched.
+- **/auth/me contract** adds exactly one field: `uiV2Enabled: boolean`. No raw flag,
+  `allowed_tenants`, or settings is ever exposed (tenant-isolation test asserts no
+  leak of another tenant's id).
+- **No flash**: the dashboard holds its existing spinner until the skin decision
+  latches (`useSkinStore.resolved`), so the first paint is already correct. Master
+  OFF ⇒ the gate is inert and the fetch never runs — the legacy path is unchanged.
+- **Light default** applies **only** to modern-eligible sessions and only when the
+  user has no explicit saved theme; it reads (never writes) the theme key, so
+  legacy / off-flag light↔dark resolution and the boot script are untouched.
+- **Dormancy still enforced**: only the three sanctioned engine files
+  (`lib/ui-flag.ts`, `stores/skin-store.ts`, `(dashboard)/layout.tsx`) may apply the
+  scope class — the guard's `ui-v2-dormant` rule now also catches the `UI_V2_CLASS`
+  constant, so no other file can bypass it.
+- No migration, no RBAC change, no business-logic change, no production activation.
 
 ## Dark-override baseline
 

@@ -118,11 +118,18 @@ export function scan() {
   //    dashboards, AI and analytics; it must never land on a form or table page.
   //    (Modal/Drawer overlays use `backdrop-blur-sm`, not `.glass-panel`, so they
   //    are unaffected.)
-  //  ui-v2-dormant: nothing may write the `ui-v2` class into the DOM — the token
-  //    scope stays completely inert until the (later) theme-engine PR ships.
+  //  ui-v2-dormant: the `ui-v2` token scope may be written to the DOM ONLY by the
+  //    sanctioned PR-UI2 skin engine (the three files in UI_V2_ENGINE). Everywhere
+  //    else it must stay inert — including via the `UI_V2_CLASS` constant, so the
+  //    engine cannot be bypassed by importing the token elsewhere.
   const glass = [];
   const dormancy = [];
   const GLASS_ALLOW = /(layout\.tsx|sidebar|dashboard|_overview|\/overview|copilot|analytics|command)/i;
+  // The ONE sanctioned place that applies the `.ui-v2` scope class: the flag
+  // helper that defines the token, the store that toggles it on <html>, and the
+  // dashboard layout that drives the engine. The dormancy rule still forbids the
+  // class everywhere else.
+  const UI_V2_ENGINE = /(stores[\\/]skin-store\.ts|lib[\\/]ui-flag\.ts|\(dashboard\)[\\/]layout\.tsx)$/;
   for (const abs of walk(
     SRC,
     (f) => (f.endsWith(".ts") || f.endsWith(".tsx")) && !f.includes(".test.")
@@ -134,9 +141,15 @@ export function scan() {
         const at = { file: rel, line: i + 1, snippet: ln.trim() };
         if (/\bglass-panel\b/.test(ln) && !GLASS_ALLOW.test(rel))
           glass.push({ rule: "glass-allowlist", ...at });
-        // Only DOM application counts — `ui-v2` carried by a className / classList /
-        // class= attribute. Prose mentions (comments, docstrings) are fine.
-        if (/\bui-v2\b/.test(ln) && /(className|classList|class\s*=)/.test(ln))
+        // Only DOM application counts — `ui-v2` (or the `UI_V2_CLASS` token)
+        // carried by a className / classList / class= attribute. Prose mentions
+        // (comments, docstrings) are fine, and the sanctioned engine files are
+        // exempt — the scope must stay dormant everywhere else.
+        if (
+          /(className|classList|class\s*=)/.test(ln) &&
+          /(\bui-v2\b|\bUI_V2_CLASS\b)/.test(ln) &&
+          !UI_V2_ENGINE.test(rel)
+        )
           dormancy.push({ rule: "ui-v2-dormant", ...at });
       });
   }

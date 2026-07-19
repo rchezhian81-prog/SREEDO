@@ -13,6 +13,7 @@ import {
 import { generateBase32Secret, otpauthUrl, verifyTotp } from "../../utils/totp";
 import { hashPassword, verifyPassword } from "../../utils/password";
 import { assertInstitutionActiveForLogin } from "../../middleware/institution-status";
+import { isPlatformFeatureEnabledForTenant } from "../platform/feature-flag-runtime";
 import type { UserRole } from "../../types";
 
 interface UserRow {
@@ -383,6 +384,13 @@ export async function getProfile(userId: string) {
   if (!user) {
     throw ApiError.notFound("User not found");
   }
+  // PR-UI2: server-derived effective boolean for the `ui_v2` skin flag, resolved
+  // from the audited platform_feature_flags registry using ONLY the caller's own
+  // institution id. Fail-safe to false. No raw flag / allowed_tenants / settings
+  // is ever exposed — only this boolean.
+  const uiV2Enabled = user.institution_id
+    ? await isPlatformFeatureEnabledForTenant(user.institution_id, "ui_v2").catch(() => false)
+    : false;
   return {
     id: user.id,
     email: user.email,
@@ -393,6 +401,7 @@ export async function getProfile(userId: string) {
     institutionType: user.institution_type ?? null,
     enabledModules: normalizeEnabledModules(user.enabled_modules),
     twoFactorEnabled: user.totp_enabled,
+    uiV2Enabled,
   };
 }
 
