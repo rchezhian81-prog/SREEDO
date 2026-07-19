@@ -1,36 +1,44 @@
 # Self-hosted fonts (PR-UI1)
 
 The `.ui-v2` modern skin uses two self-hosted, open-source typefaces, declared via
-`@font-face` in `src/app/globals.css`. **No external font host is ever requested**
-(the CSP/offline posture requires everything local), and the app shell
-(`layout.tsx`) is intentionally **not** modified — the families apply only under the
-dormant `.ui-v2` scope.
+`@font-face` in `src/app/globals.css`. **No external font host is ever requested**,
+and the app shell (`layout.tsx`) is **not** modified — the families apply only under
+the dormant `.ui-v2` scope.
 
-## Files this folder must contain
+## Committed files
 
-| File | Family | Axis / weights | License |
-|------|--------|----------------|---------|
-| `manrope-variable.woff2` | `Manrope` | variable, wght 300–800 | SIL OFL 1.1 |
-| `noto-sans-tamil-variable.woff2` | `Noto Sans Tamil` | variable, wght 300–800 | SIL OFL 1.1 |
+| File | Family | Subset / axis | Bytes | Source | License |
+|------|--------|---------------|-------|--------|---------|
+| `manrope-variable.woff2` | Manrope | latin, wght 300–800 (variable) | 24,836 | `@fontsource-variable/manrope@5.3.0` | SIL OFL 1.1 |
+| `noto-sans-tamil-variable.woff2` | Noto Sans Tamil | tamil, wght 300–800 (variable) | 50,468 | `@fontsource-variable/noto-sans-tamil@5.3.0` | SIL OFL 1.1 |
 
-Both are the **variable** woff2 builds. `@font-face` declares `font-weight: 300 800`
-and `font-display: swap`, so a single file covers every weight and text stays visible
-during load. The Tamil face carries a `unicode-range` so it is fetched only for Tamil
-(and ₹) glyphs.
+Both are the official upstream builds redistributed by **Fontsource** under OFL-1.1
+(see `OFL.txt` for attribution and Reserved Font Names). Subsets chosen for this
+product: **Manrope latin** (English UI + digits) and **Noto Sans Tamil tamil** —
+whose Google subset range (`U+0964-0965, U+0B82-0BFA, U+200C-200D, U+20B9, U+25CC`)
+includes the Rupee sign **₹ (U+20B9)**, so currency renders in the Tamil face.
+`@font-face` declares `font-weight: 300 800` + `font-display: swap`, so one variable
+file per family covers every weight and text stays visible while loading.
 
-## Sourcing (add the binaries before activating `.ui-v2`)
+## Coverage & fallbacks
 
-- **Manrope** — https://github.com/sharanda/manrope (SIL OFL 1.1). Use the variable
-  `Manrope[wght].woff2`, rename to `manrope-variable.woff2`.
-- **Noto Sans Tamil** — https://github.com/notofonts/tamil / Google Fonts (SIL OFL 1.1).
-  Use the variable `NotoSansTamil[wght].woff2`, rename to `noto-sans-tamil-variable.woff2`.
+- **English / Latin** → Manrope, else the system UI sans stack.
+- **Tamil** → Noto Sans Tamil (forced for `:lang(ta)`), else `Latha → Nirmala UI →
+  sans-serif` — so Tamil always renders.
+- **₹** → Noto Sans Tamil / system, both of which include the glyph.
 
-> These binaries are **not committed in PR-UI1** (this environment has no outbound
-> access to fetch them). Because `.ui-v2` is dormant, nothing requests them at runtime,
-> so the missing files have **zero production effect**. Dropping in the two properly
-> licensed woff2 files is the only remaining asset step before the skin is ever
-> activated. Keep the license text (`OFL.txt`) alongside them.
+Additional subsets (Manrope `latin-ext`, Cyrillic, Greek, Vietnamese; Noto Tamil
+`latin`) can be added later as extra `@font-face` blocks with a `unicode-range` if
+needed — not required for English + Tamil.
 
-Until the binaries are present, Latin text falls back to the system UI sans and Tamil
-falls back to `Noto Sans Tamil → Latha → Nirmala UI → sans-serif`, so **Tamil always
-renders**.
+## Regenerating / updating
+
+```
+npm i -D @fontsource-variable/manrope @fontsource-variable/noto-sans-tamil
+cp node_modules/@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2 \
+   frontend/public/fonts/manrope-variable.woff2
+cp node_modules/@fontsource-variable/noto-sans-tamil/files/noto-sans-tamil-tamil-wght-normal.woff2 \
+   frontend/public/fonts/noto-sans-tamil-variable.woff2
+```
+
+Keep `OFL.txt` alongside the binaries.

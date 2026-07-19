@@ -107,6 +107,14 @@ describe("PR-UI1 typography — self-hosted, no shell change", () => {
   it("forces receipts/print to a light scheme under the skin", () => {
     expect(css).toMatch(/@media print[\s\S]*:root\.ui-v2[\s\S]*color-scheme: light/);
   });
+
+  it("ships the two self-hosted WOFF2 binaries (valid magic, non-empty)", () => {
+    for (const f of ["manrope-variable.woff2", "noto-sans-tamil-variable.woff2"]) {
+      const buf = readFileSync(new URL(`../../public/fonts/${f}`, import.meta.url));
+      expect(buf.length).toBeGreaterThan(5000);
+      expect(buf.subarray(0, 4).toString("latin1")).toBe("wOF2"); // WOFF2 signature
+    }
+  });
 });
 
 describe("PR-UI1 flag — reserved and OFF by default", () => {

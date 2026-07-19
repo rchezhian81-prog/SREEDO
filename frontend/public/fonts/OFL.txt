@@ -6,6 +6,9 @@ SIL Open Font License, Version 1.1.
 
   License identifier : OFL-1.1
   Full license text  : https://openfontlicense.org  (SPDX: OFL-1.1)
+  Provenance         : official upstream builds redistributed by Fontsource
+                       (@fontsource-variable/manrope 5.3.0,
+                        @fontsource-variable/noto-sans-tamil 5.3.0)
 
 The complete OFL-1.1 text is distributed by SIL and ships inside each upstream
 font package; keep that upstream LICENSE/OFL.txt file alongside the woff2 binaries
