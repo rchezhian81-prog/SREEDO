@@ -24,11 +24,11 @@ export const Button = forwardRef<
 >(function Button({ variant = "primary", className, ...props }, ref) {
   const styles = {
     primary:
-      "bg-brand-600 text-white shadow-[0_8px_18px_rgb(37_99_235_/_0.32)] hover:bg-brand-700 disabled:bg-brand-600/50 disabled:shadow-none",
+      "bg-brand-600 text-white shadow-[var(--shadow-accent)] hover:bg-brand-700 disabled:bg-brand-600/50 disabled:shadow-none",
     secondary:
       "border border-line bg-surface text-ink hover:bg-hover",
     danger:
-      "bg-red-600 text-white shadow-[0_8px_18px_rgb(239_68_68_/_0.3)] hover:bg-red-700",
+      "bg-red-600 text-white shadow-[var(--shadow-danger)] hover:bg-red-700",
     ghost: "text-muted hover:bg-hover hover:text-ink",
   }[variant];
   return (
@@ -487,7 +487,7 @@ export function ErrorNote({ message }: { message: string | null }) {
   return (
     <p
       role="alert"
-      className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400"
+      className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-danger"
     >
       {message}
     </p>

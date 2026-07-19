@@ -112,12 +112,41 @@ export function scan() {
         if (RAW_PALETTE.test(ln)) (swept ? lock : warnings).push({ rule: "raw-palette", ...at });
       });
   }
-  return { hard, lock, warnings };
+
+  // PR-UI1 — token-system guards.
+  //  glass-allowlist: the `.glass-panel` frost utility is reserved for navigation,
+  //    dashboards, AI and analytics; it must never land on a form or table page.
+  //    (Modal/Drawer overlays use `backdrop-blur-sm`, not `.glass-panel`, so they
+  //    are unaffected.)
+  //  ui-v2-dormant: nothing may write the `ui-v2` class into the DOM — the token
+  //    scope stays completely inert until the (later) theme-engine PR ships.
+  const glass = [];
+  const dormancy = [];
+  const GLASS_ALLOW = /(layout\.tsx|sidebar|dashboard|_overview|\/overview|copilot|analytics|command)/i;
+  for (const abs of walk(
+    SRC,
+    (f) => (f.endsWith(".ts") || f.endsWith(".tsx")) && !f.includes(".test.")
+  )) {
+    const rel = relative(ROOT, abs);
+    readFileSync(abs, "utf8")
+      .split("\n")
+      .forEach((ln, i) => {
+        const at = { file: rel, line: i + 1, snippet: ln.trim() };
+        if (/\bglass-panel\b/.test(ln) && !GLASS_ALLOW.test(rel))
+          glass.push({ rule: "glass-allowlist", ...at });
+        // Only DOM application counts — `ui-v2` carried by a className / classList /
+        // class= attribute. Prose mentions (comments, docstrings) are fine.
+        if (/\bui-v2\b/.test(ln) && /(className|classList|class\s*=)/.test(ln))
+          dormancy.push({ rule: "ui-v2-dormant", ...at });
+      });
+  }
+
+  return { hard, lock, warnings, glass, dormancy };
 }
 
 // CLI entry — only when invoked directly, not when imported by the test.
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  const { hard, lock, warnings } = scan();
+  const { hard, lock, warnings, glass, dormancy } = scan();
 
   if (warnings.length) {
     const grouped = warnings.reduce((m, w) => ((m[w.file] = (m[w.file] || 0) + 1), m), {});
@@ -128,12 +157,18 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     if (more > 0) console.log(`   … and ${more} more pages`);
   }
 
-  const fail = [...hard, ...lock];
+  const fail = [...hard, ...lock, ...glass, ...dormancy];
   if (fail.length === 0) {
-    console.log(`\n✅ design-guard: 0 hard violations; swept groups [${SWEPT.join(", ")}] locked clean.`);
+    console.log(
+      `\n✅ design-guard: 0 hard violations; swept groups [${SWEPT.join(", ")}] locked clean; ` +
+        `.ui-v2 dormant; glass allow-list clean.`
+    );
     process.exit(0);
   }
-  console.error(`\n❌ design-guard: ${hard.length} hard + ${lock.length} swept-group-lock violation(s):`);
+  console.error(
+    `\n❌ design-guard: ${hard.length} hard + ${lock.length} swept-group-lock + ` +
+      `${glass.length} glass-allowlist + ${dormancy.length} ui-v2-dormancy violation(s):`
+  );
   for (const v of fail) console.error(`   [${v.rule}] ${v.file.replace("src/app/(dashboard)/", "")}:${v.line}  ${v.snippet}`);
   process.exit(1);
 }
