@@ -117,10 +117,10 @@ function NavRow({
         href={item.href}
         onClick={onNavigate}
         className={cx(
-          "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition",
+          "sb-focus flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition",
           onTogglePin && "pr-9",
           active
-            ? "bg-gradient-to-r from-[#3070f7] to-[#2563eb] text-white shadow-[0_8px_18px_rgb(37_99_235_/_0.4)]"
+            ? "sb-nav-active bg-gradient-to-r from-[#3070f7] to-[#2563eb] text-white shadow-[0_8px_18px_rgb(37_99_235_/_0.4)]"
             : "text-[#a8b6dc] hover:bg-white/10 hover:text-white"
         )}
       >
@@ -132,9 +132,9 @@ function NavRow({
           onClick={() => onTogglePin(item.href)}
           aria-label={pinned ? `Unpin ${item.label}` : `Pin ${item.label}`}
           className={cx(
-            "absolute right-1.5 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-md transition",
+            "sb-focus absolute right-1.5 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-md transition",
             pinned
-              ? "text-amber-300"
+              ? "sb-pin text-amber-300"
               : "text-transparent hover:!text-white focus-visible:text-white group-hover/nav:text-white/50"
           )}
         >
@@ -145,7 +145,7 @@ function NavRow({
   );
 }
 
-function SidebarContent({
+export function SidebarContent({
   navGroups,
   pathname,
   subtitle,
@@ -181,7 +181,7 @@ function SidebarContent({
   const branding = useBrandingStore((s) => s.branding);
   return (
     <div
-      className="flex h-full flex-col px-3 pb-4 text-[#a8b6dc]"
+      className="sb-root flex h-full flex-col px-3 pb-4 text-[#a8b6dc]"
       style={{ background: SIDEBAR_BG }}
     >
       <div className="mb-2 flex h-[72px] items-center gap-3 border-b border-white/10 px-1.5">
@@ -288,7 +288,7 @@ function SidebarContent({
               <button
                 onClick={() => onToggleGroup?.(title)}
                 aria-expanded={open}
-                className="flex w-full items-center justify-between rounded-md px-3 pb-0.5 pt-1 text-[10px] font-bold uppercase tracking-wider text-[#6e7fb0] transition hover:text-white"
+                className="sb-focus flex w-full items-center justify-between rounded-md px-3 pb-0.5 pt-1 text-[10px] font-bold uppercase tracking-wider text-[#6e7fb0] transition hover:text-white"
               >
                 <span>{title}</span>
                 <span className="flex items-center gap-1.5">
@@ -311,7 +311,7 @@ function SidebarContent({
                   {foldedCount > 0 && (
                     <button
                       onClick={() => onToggleFold?.(title)}
-                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-[12px] font-semibold text-[#6e7fb0] transition hover:text-white"
+                      className="sb-focus flex w-full items-center gap-3 rounded-xl px-3 py-2 text-[12px] font-semibold text-[#6e7fb0] transition hover:text-white"
                     >
                       <Icon name="chevronDown" className="h-3.5 w-3.5" />
                       Show {foldedCount} more
@@ -322,7 +322,7 @@ function SidebarContent({
                     group.items.length > FOLD_LIMIT && (
                       <button
                         onClick={() => onToggleFold?.(title)}
-                        className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-[12px] font-semibold text-[#6e7fb0] transition hover:text-white"
+                        className="sb-focus flex w-full items-center gap-3 rounded-xl px-3 py-2 text-[12px] font-semibold text-[#6e7fb0] transition hover:text-white"
                       >
                         <Icon name="chevronRight" className="h-3.5 w-3.5" />
                         Show less
@@ -352,16 +352,28 @@ function SidebarContent({
   );
 }
 
-function ThemeToggle() {
+export function ThemeToggle() {
   const { theme, hydrate, toggle } = useThemeStore();
+  // PR-UI3: the a11y state-announcement + restyle apply ONLY inside an eligible
+  // UI-v2 staff shell session (skin active). Legacy / off-flag / super-admin /
+  // portal keep the exact prior markup — static "Toggle theme" label, no
+  // aria-pressed, base classes only — so legacy identity is preserved.
+  const skinActive = useSkinStore((s) => s.active);
   useEffect(() => hydrate(), [hydrate]);
+  const isDark = theme === "dark";
   return (
     <button
       onClick={toggle}
-      aria-label="Toggle theme"
-      className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-line bg-surface text-muted transition hover:bg-hover hover:text-ink"
+      aria-label={
+        skinActive ? (isDark ? "Switch to light mode" : "Switch to dark mode") : "Toggle theme"
+      }
+      aria-pressed={skinActive ? isDark : undefined}
+      className={cx(
+        "grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-line bg-surface text-muted transition hover:bg-hover hover:text-ink",
+        skinActive && "sb-theme-toggle sb-focus"
+      )}
     >
-      <Icon name={theme === "dark" ? "sun" : "moon"} className="h-5 w-5" />
+      <Icon name={isDark ? "sun" : "moon"} className="h-5 w-5" />
     </button>
   );
 }
@@ -509,7 +521,7 @@ function Topbar({
   const role = user?.role?.replace("_", " ");
 
   return (
-    <header className="sticky top-0 z-30 flex h-[72px] items-center gap-3 border-b border-line bg-surface px-4 md:px-6">
+    <header className="sb-header sticky top-0 z-30 flex h-[72px] items-center gap-3 border-b border-line bg-surface px-4 md:px-6">
       <button
         onClick={onMenu}
         aria-label="Open menu"
