@@ -7,8 +7,10 @@ Single source of truth for the phased GoCampus UI/UX modernization.
 | PR | Scope | State |
 |----|-------|-------|
 | PR-UI1 | Design tokens + shared foundations (dormant `.ui-v2`, self-hosted fonts, Tailwind mapping, 4 primitives, guard, tests, docs) | Merged #175 · prod-dormant |
-| **PR-UI2** | Theme engine (two-gate activation, audited Layer-2 tenant flag, `/auth/me.uiV2Enabled`, no-flash render gate, eligible-only light default) — **still ships OFF** | **This PR** |
-| PR-UI3+ | Runtime switch UI, page adoption, StatCard/Table/Tabs consolidation, mobile nav | Deferred |
+| PR-UI2 | Theme engine (two-gate activation, audited Layer-2 tenant flag, `/auth/me.uiV2Enabled`, no-flash render gate, eligible-only light default) | Merged #176 · prod-stable, dormant |
+| **PR-UI3** | Staff shell & navigation (Option B light / Option C dark, `sb-*` hooks, eligible-only theme-toggle a11y, deterministic Playwright shell visual-regression) — **still ships OFF** | **This PR** |
+| PR-UI4+ | Page adoption, StatCard/Table/Tabs consolidation | Deferred |
+| PR-UI8 | Role-aware mobile-navigation redesign | Deferred |
 
 ## Dormancy / safety posture (PR-UI1)
 
@@ -49,6 +51,29 @@ does **not** create or target the `ui_v2` platform flag. Effective activation ne
   scope class — the guard's `ui-v2-dormant` rule now also catches the `UI_V2_CLASS`
   constant, so no other file can bypass it.
 - No migration, no RBAC change, no business-logic change, no production activation.
+
+## Staff-shell safety posture (PR-UI3)
+
+PR-UI3 restyles the authenticated **tenant staff** shell (Option B light / Option
+C dark) but **still ships OFF** — it rides the PR-UI2 engine and adds no flag,
+tenant targeting, or activation. Full detail: `UI-SHELL.md` +
+`UI-VISUAL-REGRESSION.md`.
+
+- **`.ui-v2`-scoped only.** Every shell rule hangs off inert `sb-*` hooks under
+  `.ui-v2` in `globals.css`; a test parses the CSS and proves **no** shell rule
+  escapes `.ui-v2` scope. Off-flag / super-admin / portal render unchanged.
+- **Frozen surfaces.** Super-admin (shares `layout.tsx`, never gets `.ui-v2`),
+  the student/parent portal (separate layout, no engine), and shared `ui.tsx` /
+  `PageHeader` base styles are untouched. The command palette restyles via the
+  token cascade with no file edit.
+- **Theme toggle** kept + restyled; the `aria-pressed` a11y enhancement is
+  eligible-session-only, legacy markup byte-identical.
+- **Deterministic Playwright shell visual-regression** in CI (pinned
+  `mcr.microsoft.com/playwright:v1.51.1-noble`): UI-v2 light/dark + legacy across
+  desktop/tablet + mobile no-regression, all network mocked, no personal data,
+  committed baselines, fails on material drift.
+- No backend/API/DB/RBAC/migration change; no breadcrumb; no `PageHeader`
+  restyle; no mobile-nav redesign (PR-UI8); no production activation.
 
 ## Dark-override baseline
 

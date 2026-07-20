@@ -323,6 +323,56 @@ body {
   }
 }
 
+/* ---- PR-UI3: UI-v2 authenticated staff shell -----------------------------
+ * Option B (light) Modern Soft Premium + Option C (dark) Intelligent Glass.
+ * Every rule is scoped under `.ui-v2` and hangs off inert `sb-*` hook classes
+ * added in the dashboard shell. With `.ui-v2` absent — which includes EVERY
+ * super-admin and portal session, since the skin engine never applies the class
+ * there — all of this is inert and the legacy shell renders identically. Glass
+ * frosting is applied ONLY to the sticky header + mobile drawer (surfaces with
+ * content behind them); the sidebar is solid deep navy/indigo, and page content
+ * / forms / tables stay solid. Motion honours the reduced-motion block above. */
+
+/* Deep navy/indigo sidebar surface (overrides the legacy inline gradient — the
+ * one `!important` is the sanctioned way to beat an inline style; off-flag the
+ * rule never matches, so the legacy inline gradient is untouched). */
+.ui-v2 { --shell-sidebar-bg: linear-gradient(193deg, #241a52 0%, #191142 55%, #100b2e 100%); }
+.ui-v2.dark { --shell-sidebar-bg: linear-gradient(193deg, #191540 0%, #120e33 55%, #0a0722 100%); }
+.ui-v2 .sb-root { background: var(--shell-sidebar-bg) !important; }
+
+/* Active nav item — violet/indigo gradient in place of the legacy blue. */
+.ui-v2 .sb-nav-active {
+  background-image: linear-gradient(to right, rgb(var(--c-accent)), rgb(var(--c-accent-strong)));
+  box-shadow: 0 8px 18px rgb(var(--c-accent) / 0.4);
+}
+/* Pins/stars — restrained gold in place of amber. */
+.ui-v2 .sb-pin { color: rgb(var(--c-gold)); }
+
+/* Sticky header — soft-premium surface in light, Intelligent Glass in dark. */
+.ui-v2 .sb-header { background: rgb(var(--c-surface)); border-color: rgb(var(--c-line)); }
+.ui-v2.dark .sb-header {
+  background: rgb(var(--glass-bg) / 0.72);
+  border-bottom: var(--border-thin) solid rgb(var(--glass-border) / 0.6);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+}
+@media (prefers-reduced-transparency: reduce) {
+  .ui-v2.dark .sb-header {
+    background: rgb(var(--c-surface));
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+/* Restyled theme-toggle chrome (eligible sessions only). */
+.ui-v2 .sb-theme-toggle { background: rgb(var(--c-surface)); border-color: rgb(var(--c-line)); }
+
+/* Visible focus ring on every restyled shell control (nav rows, pins, group
+ * headers, fold, palette trigger, theme toggle) — legible over navy + glass. */
+.ui-v2 .sb-focus:focus-visible {
+  outline: var(--focus-ring) solid rgb(var(--c-accent));
+  outline-offset: var(--focus-offset);
+}
+
 /* ---- Print / receipts forced light (only under `.ui-v2`; off-flag print is
  * unchanged). Receipts and printed reports must never carry the dark/glass skin. */
 @media print {
@@ -339,7 +389,8 @@ body {
     --c-accent: 37 99 235;
     color-scheme: light;
   }
-  .ui-v2 .glass-panel {
+  .ui-v2 .glass-panel,
+  .ui-v2 .sb-header {
     background: #fff !important;
     border-color: #e2e8f0 !important;
     backdrop-filter: none !important;

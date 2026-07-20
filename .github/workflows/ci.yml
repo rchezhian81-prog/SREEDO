@@ -121,6 +121,34 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  visual:
+    name: Visual (shell)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Pinned to the SAME Playwright image the baselines were generated in, so
+    # rendering (browser + OS + fonts) matches byte-for-byte. Browsers are
+    # pre-installed in the image — no `playwright install` needed.
+    container:
+      image: mcr.microsoft.com/playwright:v1.51.1-noble
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci
+      # Builds the app with the UI-v2 master switch ON, serves it, and compares
+      # the staff shell (UI-v2 light/dark + legacy, desktop/tablet + mobile
+      # no-regression) against the committed baselines. Fails on material drift.
+      - name: Shell visual regression
+        run: npm run test:visual
+      - name: Upload visual diff on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shell-visual-diff
+          path: frontend/test-results
+          retention-days: 7
+
   docker:
     name: Docker images build
     runs-on: ubuntu-latest
