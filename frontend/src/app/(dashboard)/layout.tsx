@@ -9,6 +9,8 @@ import { useBrandingStore, type Branding } from "@/stores/branding-store";
 import { cx, Spinner, SkipLink } from "@/components/ui";
 import { Icon, type IconName } from "@/components/icons";
 import { useThemeStore } from "@/stores/theme-store";
+import { useSkinStore, resolveSkin } from "@/stores/skin-store";
+import { isModernSkinRequested } from "@/lib/ui-flag";
 import { useModeStore } from "@/stores/mode-store";
 import { useTerms } from "@/lib/terms";
 import { useI18n } from "@/i18n/I18nProvider";
@@ -637,6 +639,10 @@ export default function DashboardLayout({
   const { user, accessToken, refreshToken, logout, support } = useAuthStore();
   const mode = useModeStore((s) => s.mode);
   const setMode = useModeStore((s) => s.setMode);
+  // PR-UI2 skin engine: `resolved` gates first paint (no legacy↔modern flash);
+  // `resolveLegacySkin` is the failure-safe path (no tenant / super admin / off).
+  const skinResolved = useSkinStore((s) => s.resolved);
+  const resolveLegacySkin = useSkinStore((s) => s.resolveLegacy);
   // Effective-permission gate for the super-admin nav (owners hold every key, so
   // they keep every item; non-owner platform sub-roles are correctly limited).
   const { can: canNav } = usePermissions();
@@ -708,6 +714,27 @@ export default function DashboardLayout({
       })
       .catch((err) => console.error("profile/mode load failed:", err));
   }, [hydrated, accessToken, user, setMode]);
+
+  // PR-UI2 — resolve the modern token skin for this session. Two gates decide it:
+  // the build-time master switch (isModernSkinRequested) AND the tenant's audited,
+  // server-derived `uiV2Enabled` flag. Master OFF => return immediately and change
+  // nothing (legacy render path, byte-for-byte). Master ON but no tenant context
+  // (unauthenticated / super admin) => resolve to legacy so the render gate lifts.
+  // Otherwise look up the tenant flag and apply the result, failing safe to legacy
+  // on any error or timeout. The render gate below holds a spinner until this
+  // latches `resolved`, so the first paint is already the correct skin.
+  useEffect(() => {
+    if (!isModernSkinRequested()) return;
+    if (!hydrated) return;
+    if (!accessToken || user?.role === "super_admin") {
+      resolveLegacySkin();
+      return;
+    }
+    void resolveSkin({
+      fetchTenantEnabled: () =>
+        api.get<{ uiV2Enabled?: boolean }>("/auth/me").then((m) => m.uiV2Enabled === true),
+    });
+  }, [hydrated, accessToken, user, resolveLegacySkin]);
 
   // Shell chrome: real current academic year + unread messages + alert count.
   // Each degrades gracefully (a failure or missing permission leaves the pill
@@ -842,6 +869,11 @@ export default function DashboardLayout({
   // with the super-admin sidebar), so don't block it as an out-of-area redirect.
   if (!hydrated || !accessToken) return <Spinner />;
   if (isSuper !== inSuperArea && !(isSuper && pathname === "/security")) return <Spinner />;
+  // PR-UI2: with the modern-skin master switch ON, hold the shell until the skin
+  // decision has latched, so the first paint is already the correct skin (no
+  // legacy→modern flash). Master OFF => isModernSkinRequested() is false and this
+  // gate is inert, so the legacy render path is unchanged.
+  if (isModernSkinRequested() && !skinResolved) return <Spinner />;
 
   const handleLogout = async () => {
     if (refreshToken) {

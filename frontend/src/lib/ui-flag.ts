@@ -23,3 +23,15 @@ export const MODERN_SKIN_ENV = "NEXT_PUBLIC_UI_V2";
 export function isModernSkinRequested(): boolean {
   return process.env.NEXT_PUBLIC_UI_V2 === "true";
 }
+
+/** The dormant token-scope class. Applied to <html> ONLY by the skin engine. */
+export const UI_V2_CLASS = "ui-v2";
+
+/**
+ * Effective activation requires BOTH gates: the build-time master switch
+ * (`NEXT_PUBLIC_UI_V2`) AND the authenticated tenant's `uiV2Enabled` flag. Either
+ * one false/missing => legacy UI.
+ */
+export function shouldApplyUiV2(tenantEnabled: boolean): boolean {
+  return isModernSkinRequested() && tenantEnabled === true;
+}
