@@ -373,6 +373,87 @@ body {
   outline-offset: var(--focus-offset);
 }
 
+/* ---- PR-UI5: UI-v2 tenant staff Dashboard --------------------------------
+ * Option B (light) Modern Soft Premium + Option C (dark) Intelligent Glass,
+ * scoped under `.ui-v2` and hung off inert `db-*` hooks added ONLY on the tenant
+ * staff Dashboard page. With `.ui-v2` absent — every super-admin and portal
+ * session, and all off-flag tenants — these are inert and the legacy Dashboard
+ * renders identically. Glass frosting is applied ONLY to the institution
+ * snapshot + needs-attention band (dark mode); stat/KPI cards, finance cells,
+ * announcements, quick actions and every data-heavy surface stay solid for
+ * readability. Gold is a small pinned-announcement accent only — never a
+ * business-status colour; success/warn/danger keep their semantic tokens. Motion
+ * honours the reduced-motion block above; the frosted band has a
+ * reduced-transparency solid fallback. The shared PageHeader is never edited. */
+
+/* Page header — a restrained violet→indigo accent band above the shared
+ * PageHeader, drawn on the page-local wrapper only (the component is untouched,
+ * so legacy + every other PageHeader stays byte-identical). */
+.ui-v2 .db-header::before {
+  content: "";
+  display: block;
+  width: 48px;
+  height: 4px;
+  margin-bottom: var(--space-3);
+  border-radius: var(--radius-pill);
+  background: linear-gradient(to right, rgb(var(--c-accent)), rgb(var(--c-indigo)));
+}
+
+/* KPI / stat cards — solid premium surface, soft elevation + hover lift. */
+.ui-v2 .db-stat {
+  border-color: rgb(var(--c-line));
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--elevation-1);
+  transition: box-shadow var(--motion-base) var(--motion-ease),
+    transform var(--motion-base) var(--motion-ease);
+}
+.ui-v2 a.db-stat:hover {
+  box-shadow: var(--elevation-2);
+  transform: translateY(-2px);
+}
+
+/* Panels (fees / announcements / needs-attention) — solid premium surface. */
+.ui-v2 .db-panel {
+  border-color: rgb(var(--c-line));
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--elevation-1);
+}
+
+/* Finance cells — always solid: money must stay maximally readable. */
+.ui-v2 .db-finance-cell {
+  background: rgb(var(--c-surface));
+}
+
+/* Institution snapshot — solid premium in light. */
+.ui-v2 .db-snapshot {
+  border-color: rgb(var(--c-line));
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--elevation-1);
+}
+/* The ONLY two surfaces that frost in dark: the snapshot + the needs-attention
+ * band. Every other dark surface keeps its solid `bg-surface`. */
+.ui-v2.dark .db-snapshot,
+.ui-v2.dark .db-attention .db-panel {
+  background: rgb(var(--glass-bg) / 0.72);
+  border: var(--border-thin) solid rgb(var(--glass-border) / 0.6);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+}
+@media (prefers-reduced-transparency: reduce) {
+  .ui-v2.dark .db-snapshot,
+  .ui-v2.dark .db-attention .db-panel {
+    background: rgb(var(--c-surface));
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+/* Pinned announcement — a small restrained gold accent (decorative only, not a
+ * status colour). No pinned row ⇒ the hook is absent ⇒ no gold. */
+.ui-v2 .db-ann--pinned {
+  box-shadow: inset 3px 0 0 rgb(var(--c-gold));
+}
+
 /* ---- Print / receipts forced light (only under `.ui-v2`; off-flag print is
  * unchanged). Receipts and printed reports must never carry the dark/glass skin. */
 @media print {
@@ -390,7 +471,9 @@ body {
     color-scheme: light;
   }
   .ui-v2 .glass-panel,
-  .ui-v2 .sb-header {
+  .ui-v2 .sb-header,
+  .ui-v2 .db-snapshot,
+  .ui-v2 .db-attention .db-panel {
     background: #fff !important;
     border-color: #e2e8f0 !important;
     backdrop-filter: none !important;

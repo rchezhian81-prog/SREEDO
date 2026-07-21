@@ -66,7 +66,10 @@ function StatCard({
         </div>
         <div className="min-w-0">
           <div className="text-[12.5px] font-semibold text-muted">{label}</div>
-          <div className="mt-0.5 text-[26px] font-extrabold leading-none tracking-tight text-ink">
+          <div
+            data-numeric
+            className="mt-0.5 text-[26px] font-extrabold leading-none tracking-tight text-ink"
+          >
             {value}
           </div>
         </div>
@@ -74,7 +77,9 @@ function StatCard({
       {hint && <div className="mt-3 text-[12.5px] font-medium text-muted">{hint}</div>}
     </>
   );
-  const cls = "block rounded-2xl border border-line bg-surface p-5 shadow-card";
+  // `db-stat` is an inert page-local UI-v2 hook (styled only under `.ui-v2`);
+  // off-flag it carries no rules, so the legacy card is byte-identical.
+  const cls = "db-stat block rounded-2xl border border-line bg-surface p-5 shadow-card";
   return href ? (
     <Link href={href} className={cx(cls, "transition hover:bg-surface-2")}>
       {inner}
@@ -94,7 +99,7 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
+    <div className="db-panel overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
       <div className="flex items-center justify-between border-b border-line px-5 py-4">
         <h3 className="text-[15px] font-bold text-ink">{title}</h3>
         {action}
@@ -151,43 +156,51 @@ export default function DashboardPage() {
 
   return (
     <>
-      <PageHeader
-        title="Dashboard"
-        subtitle={`Welcome back, ${firstName}! Here's your institution at a glance.`}
-      />
+      {/* Page-local UI-v2 header accent wrapper. The shared PageHeader is NOT
+          edited or restyled globally; a violet→indigo accent band is drawn by a
+          `.ui-v2 .db-header::before` pseudo-element. Off-flag the wrapper is a
+          bare div, so legacy + every other PageHeader stays pixel-identical. */}
+      <div className="db-header">
+        <PageHeader
+          title="Dashboard"
+          subtitle={`Welcome back, ${firstName}! Here's your institution at a glance.`}
+        />
+      </div>
 
       <div className="space-y-5">
         {/* Needs attention */}
         {summary.needsAttention.length > 0 && (
-          <Panel title="Needs attention">
-            <ul className="divide-y divide-line">
-              {summary.needsAttention.map((a) => {
-                const meta = ATTENTION[a.key];
-                if (!meta) return null;
-                const tone = SEVERITY_TONE[a.severity] ?? "blue";
-                return (
-                  <li key={a.key}>
-                    <Link
-                      href={meta.href}
-                      className="flex items-center gap-3 px-5 py-3.5 transition hover:bg-surface-2"
-                    >
-                      <span className={cx("grid h-9 w-9 shrink-0 place-items-center rounded-xl", TONES[tone])}>
-                        <Icon name={meta.icon} className="h-[18px] w-[18px]" />
-                      </span>
-                      <span className="flex-1 text-sm font-semibold text-ink">
-                        {meta.label(term, a.count)}
-                      </span>
-                      <Icon name="chevronRight" className="h-[17px] w-[17px] text-faint" />
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </Panel>
+          <div className="db-attention">
+            <Panel title="Needs attention">
+              <ul className="divide-y divide-line">
+                {summary.needsAttention.map((a) => {
+                  const meta = ATTENTION[a.key];
+                  if (!meta) return null;
+                  const tone = SEVERITY_TONE[a.severity] ?? "blue";
+                  return (
+                    <li key={a.key}>
+                      <Link
+                        href={meta.href}
+                        className="flex items-center gap-3 px-5 py-3.5 transition hover:bg-surface-2"
+                      >
+                        <span className={cx("grid h-9 w-9 shrink-0 place-items-center rounded-xl", TONES[tone])}>
+                          <Icon name={meta.icon} className="h-[18px] w-[18px]" />
+                        </span>
+                        <span className="flex-1 text-sm font-semibold text-ink">
+                          {meta.label(term, a.count)}
+                        </span>
+                        <Icon name="chevronRight" className="h-[17px] w-[17px] text-faint" />
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </Panel>
+          </div>
         )}
 
         {/* Institution snapshot */}
-        <div className="rounded-2xl border border-line bg-surface p-5 shadow-card">
+        <div className="db-snapshot rounded-2xl border border-line bg-surface p-5 shadow-card">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3.5">
               <div className={cx("grid h-[52px] w-[52px] shrink-0 place-items-center rounded-2xl", isCollege ? TONES.violet : TONES.blue)}>
@@ -283,7 +296,13 @@ export default function DashboardPage() {
             ) : (
               <ul>
                 {communication.recentAnnouncements.map((a) => (
-                  <li key={a.id} className="flex items-start gap-3 border-b border-line px-5 py-3.5 last:border-0">
+                  <li
+                    key={a.id}
+                    className={cx(
+                      "flex items-start gap-3 border-b border-line px-5 py-3.5 last:border-0",
+                      a.isPinned && "db-ann--pinned"
+                    )}
+                  >
                     <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand-500/12 text-brand-600 dark:text-brand-300">
                       <Icon name="megaphone" className="h-[17px] w-[17px]" />
                     </div>
@@ -292,7 +311,7 @@ export default function DashboardPage() {
                         <h4 className="truncate text-sm font-bold text-ink">{a.title}</h4>
                         {a.isPinned && <Badge tone="amber">Pinned</Badge>}
                       </div>
-                      <p className="mt-0.5 text-[11px] text-faint">
+                      <p className="db-ann-date mt-0.5 text-[11px] text-faint">
                         {new Date(a.publishedAt).toLocaleDateString()}
                       </p>
                     </div>
@@ -330,9 +349,9 @@ function FinanceCell({
       ? "text-red-600 dark:text-red-400"
       : "text-ink";
   return (
-    <div className="bg-surface p-5">
+    <div className="db-finance-cell bg-surface p-5">
       <div className="text-[12px] font-semibold text-muted">{label}</div>
-      <div className={cx("mt-1 text-[20px] font-extrabold tracking-tight", toneCls)}>{value}</div>
+      <div data-numeric className={cx("mt-1 text-[20px] font-extrabold tracking-tight", toneCls)}>{value}</div>
     </div>
   );
 }
