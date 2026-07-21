@@ -33,6 +33,7 @@ import { StudentPerformanceModal } from "@/components/StudentPerformanceModal";
 import { PromoteStudentsModal } from "@/components/PromoteStudentsModal";
 import { useTerms } from "@/lib/terms";
 import { useModeStore } from "@/stores/mode-store";
+import { useSkinStore } from "@/stores/skin-store";
 
 const studentSchema = z.object({
   firstName: z.string().min(1, "Required"),
@@ -100,6 +101,9 @@ export default function StudentsPage() {
   const term = useTerms();
   const mode = useModeStore((s) => s.mode);
   const isCollege = mode === "college";
+  // Eligible UI-v2 session? Gate the a11y-only markup enhancements on it so the
+  // legacy / off-flag DOM stays byte-identical (PR-UI6, Decision 4).
+  const skinActive = useSkinStore((s) => s.active);
   const [students, setStudents] = useState<Student[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -306,6 +310,7 @@ export default function StudentsPage() {
       <div className="mb-4 max-w-xs">
         <Input
           placeholder={`Search by name or ${term.admissionNo.toLowerCase()}…`}
+          aria-label={skinActive ? "Search students" : undefined}
           value={search}
           onChange={(event) => {
             setSearch(event.target.value);
@@ -319,16 +324,17 @@ export default function StudentsPage() {
       ) : students.length === 0 ? (
         <EmptyState message="No students found" />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-line bg-surface">
+        <div className="st-table overflow-x-auto rounded-xl border border-line bg-surface">
           <table className="w-full text-left text-sm">
+            {skinActive && <caption className="sr-only">Students list</caption>}
             <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
               <tr>
-                <th className="px-4 py-3">{term.admissionNo}</th>
-                <th className="px-4 py-3">Name</th>
-                <th className="px-4 py-3">{term.klass}</th>
-                <th className="px-4 py-3">Guardian</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3" />
+                <th scope={skinActive ? "col" : undefined} className="px-4 py-3">{term.admissionNo}</th>
+                <th scope={skinActive ? "col" : undefined} className="px-4 py-3">Name</th>
+                <th scope={skinActive ? "col" : undefined} className="px-4 py-3">{term.klass}</th>
+                <th scope={skinActive ? "col" : undefined} className="px-4 py-3">Guardian</th>
+                <th scope={skinActive ? "col" : undefined} className="px-4 py-3">Status</th>
+                <th scope={skinActive ? "col" : undefined} className="px-4 py-3" />
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
@@ -371,33 +377,38 @@ export default function StudentsPage() {
                     </Badge>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <div className="flex justify-end gap-3">
+                    <div className="st-actions flex justify-end gap-3">
                       <button
                         onClick={() => setPerfFor(student)}
+                        aria-label={skinActive ? `Insights for ${student.firstName} ${student.lastName}` : undefined}
                         className="text-xs font-medium text-brand-600 hover:text-brand-600 dark:text-brand-300"
                       >
                         Insights
                       </button>
                       <button
                         onClick={() => setGuardiansFor(student)}
+                        aria-label={skinActive ? `Guardians for ${student.firstName} ${student.lastName}` : undefined}
                         className="text-xs font-medium text-brand-600 hover:text-brand-600 dark:text-brand-300"
                       >
                         Guardians
                       </button>
                       <button
                         onClick={() => setCertFor(student)}
+                        aria-label={skinActive ? `Certificate for ${student.firstName} ${student.lastName}` : undefined}
                         className="text-xs font-medium text-brand-600 hover:text-brand-600 dark:text-brand-300"
                       >
                         Certificate
                       </button>
                       <button
                         onClick={() => openEdit(student)}
+                        aria-label={skinActive ? `Edit ${student.firstName} ${student.lastName}` : undefined}
                         className="text-xs font-medium text-brand-600 hover:text-brand-600 dark:text-brand-300"
                       >
                         Edit
                       </button>
                       <button
                         onClick={() => removeStudent(student)}
+                        aria-label={skinActive ? `Delete ${student.firstName} ${student.lastName}` : undefined}
                         className="text-xs font-medium text-red-600 hover:text-red-700"
                       >
                         Delete

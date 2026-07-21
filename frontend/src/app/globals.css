@@ -454,6 +454,43 @@ body {
   box-shadow: inset 3px 0 0 rgb(var(--c-gold));
 }
 
+/* ---- PR-UI6: UI-v2 tenant staff Students -----------------------------------
+ * Option B (list + page-local Add/Edit modal) under UI-v2 — Modern Soft Premium
+ * (light) and a FULLY SOLID dark (owner decision: NO glass and NO gold on this
+ * data-dense page). Scoped under `.ui-v2` and hung off inert `st-*` hooks added
+ * ONLY on the tenant staff Students page. With `.ui-v2` absent — every
+ * super-admin and portal session and all off-flag tenants — these are inert and
+ * the legacy Students page renders identically. The table, toolbar, modal, form
+ * and every data surface stay solid for readability; the shared Modal, primitives
+ * and modal components recolour via the token cascade with no edits. */
+
+/* List table — premium solid surface, refined header, calm row hover. */
+.ui-v2 .st-table {
+  border-color: rgb(var(--c-line));
+  border-radius: var(--radius-xl);
+  box-shadow: var(--elevation-1);
+}
+.ui-v2 .st-table thead th {
+  background: rgb(var(--c-surface-2));
+  color: rgb(var(--c-muted));
+  border-color: rgb(var(--c-line));
+}
+.ui-v2 .st-table tbody tr {
+  transition: background-color var(--motion-fast) var(--motion-ease);
+}
+.ui-v2 .st-table tbody tr:hover {
+  background: rgb(var(--c-hover));
+}
+
+/* Row action links — restrained violet/indigo emphasis; Delete keeps its danger
+ * red (semantic status colour, unchanged). */
+.ui-v2 .st-actions button {
+  font-weight: 600;
+}
+.ui-v2 .st-actions button:hover {
+  text-decoration: underline;
+}
+
 /* ---- Print / receipts forced light (only under `.ui-v2`; off-flag print is
  * unchanged). Receipts and printed reports must never carry the dark/glass skin. */
 @media print {

@@ -10,8 +10,9 @@ Single source of truth for the phased GoCampus UI/UX modernization.
 | PR-UI2 | Theme engine (two-gate activation, audited Layer-2 tenant flag, `/auth/me.uiV2Enabled`, no-flash render gate, eligible-only light default) | Merged #176 · prod-stable, dormant |
 | PR-UI3 | Staff shell & navigation (Option B light / Option C dark, `sb-*` hooks, eligible-only theme-toggle a11y, deterministic Playwright shell visual-regression) | Merged #177 · prod-stable, dormant |
 | PR-UI4 | Authentication experience | **Deferred — trusted pre-auth tenant context required** (no branch/PR/flag created) |
-| **PR-UI5** | Tenant staff Dashboard (Option B light / Option C dark, page-local `db-*` hooks, glass only on snapshot/needs-attention band, gold pinned-announcement accent, deterministic Playwright Dashboard visual-regression) — **still ships OFF** | **This PR** |
-| PR-UI6+ | Further page adoption, StatCard/Table/Tabs consolidation | Deferred |
+| PR-UI5 | Tenant staff Dashboard (Option B light / Option C dark, page-local `db-*` hooks, glass only on snapshot/needs-attention band, gold pinned-announcement accent, deterministic Playwright Dashboard visual-regression) | Merged #178 · prod-stable, dormant |
+| **PR-UI6** | Tenant staff Students (Option B: list + page-local Add/Edit modal, page-local `st-*` hooks, **fully solid** dark, **no glass / no gold**, eligible-only a11y, 33-baseline privacy-safe Playwright visual-regression) — **still ships OFF** | **This PR** |
+| PR-UI7+ | Further page adoption, StatCard/Table/Tabs consolidation | Deferred |
 | PR-UI8 | Role-aware mobile-navigation redesign | Deferred |
 
 ## Dormancy / safety posture (PR-UI1)
@@ -107,6 +108,35 @@ the PR-UI2 engine and adds no flag, tenant targeting, or activation. Full detail
 - No backend/API/DB/RBAC/migration change; no KPI/calculation change; no new
   KPI/chart/widget/alert/quick-action; no shell/nav change; no production
   activation.
+
+## Students safety posture (PR-UI6)
+
+PR-UI6 restyles the authenticated **tenant staff Students** page (`/students`)
+under UI-v2 (Option B: list + page-local Add/Edit modal) but **still ships OFF** —
+it rides the PR-UI2 engine and adds no flag, tenant targeting, or activation. Full
+detail: `UI-STUDENTS.md`.
+
+- **`.ui-v2`-scoped, page-local `st-*` hooks only.** A test parses the CSS and
+  proves **no** `st-` rule escapes `.ui-v2`, uses **no glass** (`backdrop-filter`)
+  and **no gold** (`--c-gold`). Off-flag / super-admin / portal render unchanged.
+- **Fully solid** in both themes (owner decision): table, toolbar, modal, form and
+  every data surface stay solid for dense-data readability. The inline table is
+  page-local; the shared `ui.tsx` primitives and the five shared modal components
+  recolour via the token cascade with **no edits**.
+- **No behaviour change.** APIs/query params, search/sort/pagination, RBAC,
+  tenant isolation, teacher row-scope, terminology and Add/Edit/Delete/Import/
+  Promote all preserved. `ENFORCE_TEACHER_SCOPE` untouched. `usePermissions` not
+  added — server-side authorization stays authoritative.
+- **Eligible-only a11y** (gated on `useSkinStore().active`): `th scope`, `sr-only`
+  caption, row-action + search `aria-label`; **off-flag markup byte-identical**.
+  Modal focus containment/restoration provided by the unchanged shared `Modal`.
+- **Deterministic, privacy-safe Playwright visual-regression** in CI (pinned
+  `mcr.microsoft.com/playwright:v1.51.1-noble`): **33** baselines — main
+  {school-admin, college-admin, school-empty} × {light, dark, legacy} × 3
+  viewports = 27, plus Add-modal (desktop) {school, college} × {light, dark,
+  legacy} = 6. Synthetic data only; no real student PII in any artifact.
+- **Deferred (separate scope):** improved client-side control visibility
+  (hide/disable unauthorized actions) — a behaviour change, not in PR-UI6.
 
 ## Dark-override baseline
 
