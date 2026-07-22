@@ -31,6 +31,7 @@ import type {
   Student,
 } from "@/types";
 import { useI18n } from "@/i18n/I18nProvider";
+import { useSkinStore } from "@/stores/skin-store";
 
 const ADJ_STATUS_TONES: Record<string, "slate" | "green" | "amber" | "red"> = {
   applied: "green",
@@ -95,6 +96,9 @@ const STATUS_TONES: Record<Invoice["status"], "green" | "amber" | "red" | "slate
 export default function FeesPage() {
   const { t } = useI18n();
   const { can } = usePermissions();
+  // Eligible UI-v2 session? Gate the a11y-only markup so the legacy / off-flag
+  // DOM stays byte-identical (PR-UI7, Decision 6).
+  const skinActive = useSkinStore((s) => s.active);
   const canApplyFine = can("fee_fines:apply");
   const canWaiveFine = can("fee_fines:waive");
   const canApplyDiscount = can("fee_discounts:apply");
@@ -359,7 +363,7 @@ export default function FeesPage() {
         }
       />
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-3">
+      <div className="fe-summary mb-6 grid gap-4 sm:grid-cols-3">
         <Card>
           <p className="text-sm text-muted">Total invoiced</p>
           <p className="mt-1 text-2xl font-semibold">
@@ -380,8 +384,9 @@ export default function FeesPage() {
         </Card>
       </div>
 
-      <div className="mb-4 w-48">
+      <div className="fe-filter mb-4 w-48">
         <Select
+          aria-label={skinActive ? "Filter invoices by status" : undefined}
           value={statusFilter}
           onChange={(event) => setStatusFilter(event.target.value)}
         >
@@ -398,17 +403,18 @@ export default function FeesPage() {
       ) : invoices.length === 0 ? (
         <EmptyState message="No invoices found" />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-line bg-surface">
+        <div className="fe-table overflow-x-auto rounded-xl border border-line bg-surface">
           <table className="w-full text-left text-sm">
+            {skinActive && <caption className="sr-only">Invoices</caption>}
             <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
               <tr>
-                <th className="px-4 py-3">Invoice</th>
-                <th className="px-4 py-3">Student</th>
-                <th className="px-4 py-3">Description</th>
-                <th className="px-4 py-3 text-right">Due</th>
-                <th className="px-4 py-3 text-right">Paid</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3" />
+                <th scope={skinActive ? "col" : undefined} className="px-4 py-3">Invoice</th>
+                <th scope={skinActive ? "col" : undefined} className="px-4 py-3">Student</th>
+                <th scope={skinActive ? "col" : undefined} className="px-4 py-3">Description</th>
+                <th scope={skinActive ? "col" : undefined} className="px-4 py-3 text-right">Due</th>
+                <th scope={skinActive ? "col" : undefined} className="px-4 py-3 text-right">Paid</th>
+                <th scope={skinActive ? "col" : undefined} className="px-4 py-3">Status</th>
+                <th scope={skinActive ? "col" : undefined} className="px-4 py-3" />
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
@@ -433,9 +439,10 @@ export default function FeesPage() {
                     </Badge>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <div className="flex justify-end gap-3">
+                    <div className="fe-actions flex justify-end gap-3">
                       <button
                         onClick={() => viewPayments(invoice)}
+                        aria-label={skinActive ? `View payments — ${invoice.invoiceNo}` : undefined}
                         className="text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-300"
                       >
                         View payments
@@ -444,6 +451,7 @@ export default function FeesPage() {
                         invoice.status !== "cancelled" && (
                           <button
                             onClick={() => setPayingInvoice(invoice)}
+                            aria-label={skinActive ? `Record payment — ${invoice.invoiceNo}` : undefined}
                             className="text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-300"
                           >
                             Record payment
@@ -480,7 +488,7 @@ export default function FeesPage() {
                 <ErrorNote message={breakdownError} />
               ) : breakdown ? (
                 <>
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div className="fe-breakdown grid grid-cols-2 gap-3 sm:grid-cols-4">
                     <div className="rounded-lg border border-line p-3">
                       <p className="text-xs text-muted">Base</p>
                       <p className="mt-1 text-base font-semibold text-ink">
@@ -511,14 +519,15 @@ export default function FeesPage() {
 
                   {/* Fines list */}
                   {breakdown.fines.length > 0 && (
-                    <div className="overflow-x-auto rounded-xl border border-line">
+                    <div className="fe-subtable overflow-x-auto rounded-xl border border-line">
                       <table className="w-full text-left text-sm">
+                        {skinActive && <caption className="sr-only">Fines</caption>}
                         <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
                           <tr>
-                            <th className="px-4 py-2">Fine</th>
-                            <th className="px-4 py-2 text-right">Amount</th>
-                            <th className="px-4 py-2">Status</th>
-                            {canWaiveFine && <th className="px-4 py-2" />}
+                            <th scope={skinActive ? "col" : undefined} className="px-4 py-2">Fine</th>
+                            <th scope={skinActive ? "col" : undefined} className="px-4 py-2 text-right">Amount</th>
+                            <th scope={skinActive ? "col" : undefined} className="px-4 py-2">Status</th>
+                            {canWaiveFine && <th scope={skinActive ? "col" : undefined} className="px-4 py-2" />}
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-line">
@@ -549,6 +558,7 @@ export default function FeesPage() {
                                     <button
                                       onClick={() => waiveFine(fine.id)}
                                       disabled={adjBusy}
+                                      aria-label={skinActive ? "Waive fine" : undefined}
                                       className="text-xs font-medium text-brand-600 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
                                     >
                                       Waive
@@ -565,14 +575,15 @@ export default function FeesPage() {
 
                   {/* Discounts list */}
                   {breakdown.discounts.length > 0 && (
-                    <div className="overflow-x-auto rounded-xl border border-line">
+                    <div className="fe-subtable overflow-x-auto rounded-xl border border-line">
                       <table className="w-full text-left text-sm">
+                        {skinActive && <caption className="sr-only">Discounts</caption>}
                         <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
                           <tr>
-                            <th className="px-4 py-2">Discount</th>
-                            <th className="px-4 py-2 text-right">Amount</th>
-                            <th className="px-4 py-2">Status</th>
-                            {canApproveDiscount && <th className="px-4 py-2" />}
+                            <th scope={skinActive ? "col" : undefined} className="px-4 py-2">Discount</th>
+                            <th scope={skinActive ? "col" : undefined} className="px-4 py-2 text-right">Amount</th>
+                            <th scope={skinActive ? "col" : undefined} className="px-4 py-2">Status</th>
+                            {canApproveDiscount && <th scope={skinActive ? "col" : undefined} className="px-4 py-2" />}
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-line">
@@ -599,6 +610,7 @@ export default function FeesPage() {
                                     <button
                                       onClick={() => approveDiscount(discount.id)}
                                       disabled={adjBusy}
+                                      aria-label={skinActive ? "Approve discount" : undefined}
                                       className="text-xs font-medium text-brand-600 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
                                     >
                                       Approve
@@ -693,15 +705,16 @@ export default function FeesPage() {
               <h3 className="text-sm font-semibold text-ink">Payments</h3>
               <ErrorNote message={receiptError} />
               {paymentsInvoice && paymentsInvoice.payments.length > 0 ? (
-                <div className="overflow-x-auto rounded-xl border border-line">
+                <div className="fe-subtable overflow-x-auto rounded-xl border border-line">
                   <table className="w-full text-left text-sm">
+                    {skinActive && <caption className="sr-only">Payments</caption>}
                     <thead className="border-b border-line bg-surface-2 text-xs uppercase text-muted">
                       <tr>
-                        <th className="px-4 py-3 text-right">Amount</th>
-                        <th className="px-4 py-3">Method</th>
-                        <th className="px-4 py-3">Reference</th>
-                        <th className="px-4 py-3">Paid</th>
-                        <th className="px-4 py-3" />
+                        <th scope={skinActive ? "col" : undefined} className="px-4 py-3 text-right">Amount</th>
+                        <th scope={skinActive ? "col" : undefined} className="px-4 py-3">Method</th>
+                        <th scope={skinActive ? "col" : undefined} className="px-4 py-3">Reference</th>
+                        <th scope={skinActive ? "col" : undefined} className="px-4 py-3">Paid</th>
+                        <th scope={skinActive ? "col" : undefined} className="px-4 py-3" />
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-line">
@@ -716,12 +729,13 @@ export default function FeesPage() {
                           <td className="px-4 py-3 text-muted">
                             {payment.reference ?? "—"}
                           </td>
-                          <td className="px-4 py-3 text-muted">
+                          <td className="fe-paid-date px-4 py-3 text-muted">
                             {new Date(payment.paidAt).toLocaleDateString()}
                           </td>
                           <td className="px-4 py-3 text-right">
                             <button
                               onClick={() => downloadReceipt(payment.id)}
+                              aria-label={skinActive ? "Download receipt" : undefined}
                               className="text-xs font-medium text-brand-600 hover:text-brand-700"
                             >
                               Receipt
