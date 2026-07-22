@@ -11,8 +11,9 @@ Single source of truth for the phased GoCampus UI/UX modernization.
 | PR-UI3 | Staff shell & navigation (Option B light / Option C dark, `sb-*` hooks, eligible-only theme-toggle a11y, deterministic Playwright shell visual-regression) | Merged #177 · prod-stable, dormant |
 | PR-UI4 | Authentication experience | **Deferred — trusted pre-auth tenant context required** (no branch/PR/flag created) |
 | PR-UI5 | Tenant staff Dashboard (Option B light / Option C dark, page-local `db-*` hooks, glass only on snapshot/needs-attention band, gold pinned-announcement accent, deterministic Playwright Dashboard visual-regression) | Merged #178 · prod-stable, dormant |
-| **PR-UI6** | Tenant staff Students (Option B: list + page-local Add/Edit modal, page-local `st-*` hooks, **fully solid** dark, **no glass / no gold**, eligible-only a11y, 33-baseline privacy-safe Playwright visual-regression) — **still ships OFF** | **This PR** |
-| PR-UI7+ | Further page adoption, StatCard/Table/Tabs consolidation | Deferred |
+| PR-UI6 | Tenant staff Students (Option B: list + page-local Add/Edit modal, page-local `st-*` hooks, **fully solid** dark, **no glass / no gold**, eligible-only a11y, 33-baseline privacy-safe Playwright visual-regression) | Merged #179 · prod-stable, dormant |
+| **PR-UI7** | Manual Fees (Option B: list + 3 page-local financial modals, page-local `fe-*` hooks, **fully solid** dark, **no glass / no gold**, eligible-only a11y, receipt/PDF/print untouched, 39-baseline privacy-safe Playwright visual-regression) — **still ships OFF** | **This PR** |
+| PR-UI8+ | Further page adoption (fees setup/refunds, other modules), StatCard/Table/Tabs consolidation | Deferred |
 | PR-UI8 | Role-aware mobile-navigation redesign | Deferred |
 
 ## Dormancy / safety posture (PR-UI1)
@@ -137,6 +138,39 @@ detail: `UI-STUDENTS.md`.
   legacy} = 6. Synthetic data only; no real student PII in any artifact.
 - **Deferred (separate scope):** improved client-side control visibility
   (hide/disable unauthorized actions) — a behaviour change, not in PR-UI6.
+
+## Manual Fees safety posture (PR-UI7)
+
+PR-UI7 adopts the authenticated **Manual Fees** page (`/fees`, list + three
+page-local financial modals) into UI-v2 but **still ships OFF** — it rides the
+PR-UI2 engine and adds no flag, tenant targeting, or activation. Full detail:
+`UI-FEES.md`. GoCampus stays **offline/manual fees only** — no payment gateway,
+online/partial payment, refund, settlement, GST or accounting change.
+
+- **`.ui-v2`-scoped, page-local `fe-*` hooks only.** A test proves **no** `fe-`
+  rule escapes `.ui-v2`, uses **no glass** (`backdrop-filter`) and **no gold**
+  (`--c-gold`). Off-flag / super-admin / portal render unchanged.
+- **Fully solid** in both themes (owner decision): invoice table, adjustment
+  sub-tables, summary/breakdown cards, forms and modals stay solid for financial
+  readability. The four tables are page-local; shared `Card`/`Modal`/primitives
+  recolour via the token cascade — **no shared-component edit** (proven).
+- **No behaviour change.** APIs/query params, calculations, monetary values,
+  status/adjustment flows, tenant/academic-year scoping, RBAC and the **existing**
+  client gating all preserved. `usePermissions` visibility unchanged.
+- **Receipt/PDF/print untouched** — server-generated receipt PDF and the `@media
+  print` forced-light block are not edited; a test asserts the print block has no
+  `.fe-`.
+- **Eligible-only a11y** (gated on `useSkinStore().active`): `th scope` + `sr-only`
+  captions on the invoice/fines/discounts/payments tables + action/filter
+  `aria-label`s; **off-flag markup byte-identical**.
+- **Deterministic, privacy-safe Playwright visual-regression** in CI (pinned
+  container): **39** baselines — main {school-admin, college-admin, empty} ×
+  {light, dark, legacy} × 3 viewports = 27, plus Add-modal desktop {Payments
+  full-perm, Payments RBAC-restricted, New-invoice, Record-payment} × {light,
+  dark, legacy} = 12. Synthetic data only; `paidAt` masked; no financial PII in
+  any artifact.
+- **Deferred (separate scope):** client-side control visibility for
+  New-invoice/Record-payment; `fees/setup/*` + `fees/refunds` adoption.
 
 ## Dark-override baseline
 

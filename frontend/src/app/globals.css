@@ -491,6 +491,50 @@ body {
   text-decoration: underline;
 }
 
+/* ---- PR-UI7: UI-v2 tenant staff Manual Fees --------------------------------
+ * Option B (list + three page-local financial modals) under UI-v2 — Modern Soft
+ * Premium (light) and a FULLY SOLID dark (owner decision: NO glass and NO gold
+ * on this dense financial page — financial readability and consistency take
+ * priority). Scoped under `.ui-v2` and hung off inert `fe-*` hooks added ONLY on
+ * the Manual Fees page. With `.ui-v2` absent — every super-admin and portal
+ * session and all off-flag tenants — these are inert and the legacy Fees page
+ * renders identically. The invoice table, adjustment sub-tables, summary /
+ * breakdown cards, forms and modals all stay solid. Semantic money colours
+ * (Collected green, Outstanding/overdue red) are preserved via the existing
+ * token classes. The receipt PDF and the `@media print` block are untouched, so
+ * printed output stays forced-light and byte-identical. */
+
+/* Invoice list table + modal sub-tables (fines / discounts / payments) —
+ * premium solid surface, refined header, calm row hover. */
+.ui-v2 .fe-table,
+.ui-v2 .fe-subtable {
+  border-color: rgb(var(--c-line));
+  border-radius: var(--radius-xl);
+  box-shadow: var(--elevation-1);
+}
+.ui-v2 .fe-table thead th,
+.ui-v2 .fe-subtable thead th {
+  background: rgb(var(--c-surface-2));
+  color: rgb(var(--c-muted));
+  border-color: rgb(var(--c-line));
+}
+.ui-v2 .fe-table tbody tr,
+.ui-v2 .fe-subtable tbody tr {
+  transition: background-color var(--motion-fast) var(--motion-ease);
+}
+.ui-v2 .fe-table tbody tr:hover {
+  background: rgb(var(--c-hover));
+}
+
+/* Row action links — restrained violet/indigo emphasis; semantic status/danger
+ * colours stay on their existing token classes. */
+.ui-v2 .fe-actions button {
+  font-weight: 600;
+}
+.ui-v2 .fe-actions button:hover {
+  text-decoration: underline;
+}
+
 /* ---- Print / receipts forced light (only under `.ui-v2`; off-flag print is
  * unchanged). Receipts and printed reports must never carry the dark/glass skin. */
 @media print {
